@@ -2380,45 +2380,9 @@ export class Game {
   }
 
   private drawBiomeVignette() {
-    const g = this.biomeGfx;
-    g.clear();
-    const biome = this.map.getBiome(this.player.pos.x, this.player.pos.y);
-    if (biome === 'open') return;
-
-    const vw = this.app.screen.width;
-    const vh = this.app.screen.height;
-    const cx = vw / 2;
-    const cy = vh / 2;
-
-    if (biome === 'cave') {
-      // Dark vignette with a hole of visibility cut at screen center
-      const visR = 220;
-      const outerR = Math.sqrt(cx * cx + cy * cy) * 1.5;
-      // Layer 1 — deep darkness beyond visible radius
-      g.rect(0, 0, vw, vh).circle(cx, cy, outerR).cut().fill({ color: 0x000000, alpha: 0.72 });
-      // Layer 2 — graduated fade ring
-      for (let i = 0; i < 10; i++) {
-        const r = visR + i * 28;
-        g.rect(0, 0, vw, vh).circle(cx, cy, r).cut().fill({ color: 0x000000, alpha: 0.055 });
-      }
-    } else if (biome === 'river_bank') {
-      // Subtle blue vignette at screen edges only — fill rect first, then cut circle as hole
-      const steps = 5;
-      for (let i = 0; i < steps; i++) {
-        const r = Math.sqrt(cx * cx + cy * cy) * (0.75 + i * 0.07);
-        g.rect(0, 0, vw, vh).fill({ color: 0x001155, alpha: 0.03 });
-        g.circle(cx, cy, r).cut();
-      }
-    } else if (biome === 'void_pool') {
-      // Dark purple vignette
-      const steps = 8;
-      for (let i = 0; i < steps; i++) {
-        const r = Math.sqrt(cx * cx + cy * cy) * (0.35 + i * 0.1);
-        g.rect(0, 0, vw, vh).circle(cx, cy, r).cut().fill({ color: 0x220033, alpha: 0.06 });
-      }
-      // Overall purple tint
-      g.rect(0, 0, vw, vh).fill({ color: 0x110020, alpha: 0.18 });
-    }
+    // Disabled: vignette rendering was blacking out the entire screen.
+    // TODO: fix fill-then-cut layering before re-enabling.
+    this.biomeGfx.clear();
   }
 
   private drawEntities() {
