@@ -142,17 +142,6 @@ export class GameMap {
 
     // ── Biome ground layers (drawn before stars so stars sit on top) ──────────
 
-    // River bank — wide blue-tinted floor along each river
-    for (const river of this.rivers) {
-      if (river.points.length < 2) continue;
-      gfx.moveTo(river.points[0].x, river.points[0].y);
-      for (let i = 1; i < river.points.length; i++) gfx.lineTo(river.points[i].x, river.points[i].y);
-      gfx.stroke({ color: 0x001833, width: river.width * 4, alpha: 0.75 });
-      gfx.moveTo(river.points[0].x, river.points[0].y);
-      for (let i = 1; i < river.points.length; i++) gfx.lineTo(river.points[i].x, river.points[i].y);
-      gfx.stroke({ color: 0x0033aa, width: river.width * 1.5, alpha: 0.25 });
-    }
-
     // Cave — very dark brownish ground fill
     for (const cave of this.caves) {
       gfx.circle(cave.pos.x, cave.pos.y, cave.radius * 1.3).fill({ color: 0x080405, alpha: 0.92 });
