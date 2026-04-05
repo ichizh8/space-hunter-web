@@ -1072,10 +1072,33 @@ export class Game {
       for (const enemy of this.enemies.enemies) {
         const dmg = this.weapons.checkHit(bullet, enemy.id, enemy.pos, enemy.radius);
         if (dmg > 0) {
-          enemy.hp -= dmg;
+          // Execute threshold (sniper clean)
+          if (this.weapons.executeThreshold > 0 && enemy.hp > 0 && (enemy.hp / enemy.maxHp) <= this.weapons.executeThreshold) {
+            enemy.hp = 0;
+          } else {
+            enemy.hp -= dmg;
+          }
           enemy.hitFlash = 0.1;
           enemy.isAggroed = true;
           this.damageDealt += dmg;
+          // Cryo stun (flamethrower clean)
+          if (this.weapons.cryoStun) enemy.stunTimer = 2.0;
+          // Slow on hit (chain rifle void)
+          if (this.weapons.slowOnHit && CREATURE_DEFS[enemy.name]) {
+            enemy.speed = Math.max(20, CREATURE_DEFS[enemy.name].speed * 0.7);
+          }
+          // Lifesteal (baton void)
+          if (this.weapons.lifesteal) {
+            this.player.hp = Math.min(this.player.hp + 1, this.player.maxHp);
+          }
+          // Singularity on hit (lance void)
+          if (this.weapons.singularityOnHit) {
+            this.gravityWells.push({ x: bullet.pos.x, y: bullet.pos.y, radius: 200, life: 2, maxLife: 2, pullSpeed: 120 });
+          }
+          // Corruption on fire (flamethrower void)
+          if (this.weapons.corruptionOnFire) {
+            this.player.corruption = Math.min(100, this.player.corruption + 0.5);
+          }
           // Spawn explosion visual for AOE bullets (grenade)
           if (bullet.aoeRadius > 0 && !bullet.hitSet.has(-999)) {
             bullet.hitSet.add(-999); // prevent duplicate explosions
@@ -2057,17 +2080,88 @@ export class Game {
       case 'mutation': {
         this.player.mutated = card.mutationType ?? 'clean';
         const mut = WEAPON_MUTATIONS[this.player.weaponId]?.[this.player.mutated];
-        // Apply mutation stat changes
-        if (this.player.weaponId === 'sidearm' && this.player.mutated === 'clean') {
+        const wid = this.player.weaponId;
+        const path = this.player.mutated;
+
+        // Apply mutation stat changes per weapon
+        if (wid === 'sidearm' && path === 'clean') {
           // Marksman Rifle: fire rate halved, damage x3, +50% range
-          this.weapons.fireRateBonus = (this.weapons.fireRateBonus ?? 0) + 0.225;
-          this.weapons.bonusDamage = (this.weapons.bonusDamage ?? 0) + 4; // ~x3
-          this.weapons.rangeBonus = (this.weapons.rangeBonus ?? 0) + 110;
-        } else if (this.player.weaponId === 'sidearm' && this.player.mutated === 'void') {
+          this.weapons.fireRateBonus += 0.225;
+          this.weapons.bonusDamage += 4;
+          this.weapons.rangeBonus += 110;
+        } else if (wid === 'sidearm' && path === 'void') {
           // Entropy Gun: fragments on hit
           this.weapons.fragmentOnHit = true;
+        } else if (wid === 'scatter' && path === 'clean') {
+          // Flechette: tighter spread, pierce 2
+          this.weapons.piercingCount += 2;
+          this.weapons.bonusDamage += 1;
+        } else if (wid === 'scatter' && path === 'void') {
+          // Chaos Spray: extra pellets, slight homing
+          this.weapons.extraPellets += 3;
+        } else if (wid === 'lance' && path === 'clean') {
+          // Null Spear: 2x fire rate, slow field on land
+          this.weapons.fireRateBonus -= 0.8; // faster
+          this.weapons.slowFieldOnLand = true;
+        } else if (wid === 'lance' && path === 'void') {
+          // Singularity: gravity on hit
+          this.weapons.singularityOnHit = true;
+        } else if (wid === 'baton' && path === 'clean') {
+          // Arc Blade: wider cone, slow fields
+          this.weapons.radiusBonus += 20;
+          this.weapons.slowFieldOnLand = true;
+        } else if (wid === 'baton' && path === 'void') {
+          // Consuming Vortex: lifesteal
+          this.weapons.lifesteal = true;
+        } else if (wid === 'dart' && path === 'clean') {
+          // Smart Missile: big slow missile, massive damage
+          this.weapons.bonusDamage += 6;
+          this.weapons.fireRateBonus += 1.0; // slower
+          this.weapons.bulletSpeedBonus -= 60; // slower missile
+        } else if (wid === 'dart' && path === 'void') {
+          // Parasite Swarm: DOT on hit
+          this.weapons.parasiteOnHit = true;
+        } else if (wid === 'flamethrower' && path === 'clean') {
+          // Cryo Flamer: stun instead of damage
+          this.weapons.cryoStun = true;
+        } else if (wid === 'flamethrower' && path === 'void') {
+          // Corruption Spray: triple damage, player gains corruption
+          this.weapons.bonusDamage += 2;
+          this.weapons.corruptionOnFire = true;
+        } else if (wid === 'grenade_launcher' && path === 'clean') {
+          // Airburst: always explode at max range, bigger radius
+          this.weapons.radiusBonus += 20;
+          this.weapons.airburstOnExpiry = true;
+        } else if (wid === 'grenade_launcher' && path === 'void') {
+          // Void Grenade: leaves corruption zone
+          this.weapons.corruptionZoneOnExplode = true;
+        } else if (wid === 'entropy_cannon' && path === 'clean') {
+          // Stabilized: flat 3x damage
+          this.weapons.bonusDamage += 6;
+        } else if (wid === 'entropy_cannon' && path === 'void') {
+          // Resonance: corruption scaling triple
+          this.weapons.corruptionScaling = true;
+        } else if (wid === 'pulse_cannon' && path === 'clean') {
+          // Overclock: +50% fire rate
+          this.weapons.fireRateBonus -= 0.5;
+        } else if (wid === 'pulse_cannon' && path === 'void') {
+          // Void Chain: bounces add corruption to enemies
+          this.weapons.voidBounce = true;
+        } else if (wid === 'sniper_carbine' && path === 'clean') {
+          // Killshot: execute enemies under 20% HP
+          this.weapons.executeThreshold = 0.2;
+        } else if (wid === 'sniper_carbine' && path === 'void') {
+          // Void Slug: penetrates all, corruption trail
+          this.weapons.piercingCount += 99;
+        } else if (wid === 'chain_rifle' && path === 'clean') {
+          // Precision Mode: fire rate halved, 4x damage
+          this.weapons.fireRateBonus += 0.05; // slower
+          this.weapons.bonusDamage += 3;
+        } else if (wid === 'chain_rifle' && path === 'void') {
+          // Suppressor: slow stacking on hit
+          this.weapons.slowOnHit = true;
         }
-        // Other mutation effects stored as flags for weapon system
+
         this.activeModifiers.push(card.id);
         this.hud.showMessage(`MUTATION: ${mut?.name ?? card.label}`, 3);
         break;

@@ -35,6 +35,20 @@ export class WeaponSystem {
   knockback = false;
   fragmentOnHit = false;
 
+  // Mutation flags
+  slowFieldOnLand = false;
+  singularityOnHit = false;
+  lifesteal = false;
+  parasiteOnHit = false;
+  cryoStun = false;
+  corruptionOnFire = false;
+  airburstOnExpiry = false;
+  corruptionZoneOnExplode = false;
+  corruptionScaling = false;
+  voidBounce = false;
+  executeThreshold = 0;
+  slowOnHit = false;
+
   fire(player: Player): Bullet[] {
     const def = WEAPON_DEFS[player.weaponId];
     if (!def) return [];
