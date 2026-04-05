@@ -157,15 +157,14 @@ export class Game {
   // Familiar state (familiar_kit)
   familiarActive = false;
   familiarPos = v2(0, 0);
+  familiarAttackTimer = 0;
   familiarState: 'idle' | 'hunting' | 'biting' | 'returning' | 'delivering' = 'idle';
   familiarTarget: Enemy | null = null;
-  familiarBuff = '';
-  familiarBuffColor = 0x9933ff;
-  familiarCooldown = 0;
-  familiarSpeedTimer = 0;
-  familiarDmgMult = 1.0;
-  familiarDmgTimer = 0;
-  familiarBiteTimer = 0;
+  familiarBuffToken = '';        // behavior of bitten enemy
+  familiarGlowColor = 0x9933ff; // glow color during 'returning'
+  familiarCooldown = 0;          // cooldown between hunts
+  familiarSpeedTimer = 0;        // pack buff: +30% speed for 4s
+  familiarDmgTimer = 0;          // flank/strafe buff: +25% dmg for 5s
 
   // Void surge state
   voidSurgeActive = false;
@@ -996,13 +995,10 @@ export class Game {
         this.droneInterceptTimer = 0;
         break;
       case 'familiar_kit':
-        // Persistent familiar fetch companion
+        // Persistent familiar that orbits and rams
         this.familiarActive = true;
         this.familiarPos = { x: this.player.pos.x + 60, y: this.player.pos.y };
-        this.familiarState = 'idle';
-        this.familiarTarget = null;
-        this.familiarBuff = '';
-        this.familiarCooldown = 0;
+        this.familiarAttackTimer = 0;
         break;
       case 'pack_kit': {
         // T2: spawn 4 allies instead of 2
@@ -1123,7 +1119,7 @@ export class Game {
     let speedMult = 1.0;
     if (this.voidSurgeActive) speedMult *= 1.8;
     if (this.stimSpeedTimer > 0) { speedMult *= 1.2; this.stimSpeedTimer -= dt; }
-    if (this.familiarSpeedTimer > 0) { speedMult *= 1.3; this.familiarSpeedTimer -= dt; }
+    if (this.familiarSpeedTimer > 0) speedMult *= 1.3;
     this.player.externalSpeedMult = speedMult;
 
     // Frenzy Aura perk: nearby allies increase fire rate
@@ -1352,8 +1348,6 @@ export class Game {
         }
         if (dmg > 0) {
           let finalDmg = dmg;
-          // Familiar damage buff
-          if (this.familiarDmgTimer > 0) { this.familiarDmgTimer -= dt; finalDmg = Math.round(finalDmg * this.familiarDmgMult); }
           // Marked damage bonus
           if (enemy.markedTimer > 0) finalDmg = Math.floor(finalDmg * enemy.markedDmgBonus);
           // Affix: armored halves ranged damage
@@ -1773,20 +1767,23 @@ export class Game {
       }
     }
 
-    // Update familiar (fetch-companion state machine)
+    // Update familiar (fetch dog state machine)
     if (this.familiarActive) {
       const famTier = this.runKitTiers['familiar_kit'] || 1;
       const famT3 = this.kitT3Choices['familiar_kit'] || '';
-      const huntRange = (famTier >= 2 && famT3 === 'clean') ? 250 : 200;
-      const huntCooldown = (famTier >= 2 && famT3 === 'clean') ? 1.5 : 2.0;
-      const huntSpeed = 250;
-      const returnSpeed = 300;
+      const huntRange    = (famTier >= 2 && famT3 === 'clean') ? 250 : 200;
+      const cooldownTime = (famTier >= 2 && famT3 === 'clean') ? 1.5 : 2.0;
+      const biteDmgMult  = (famTier >= 2 && famT3 === 'void')  ? 2.0 : 1.0;
+      const durationMult = (famTier >= 2 && famT3 === 'void')  ? 1.5 : 1.0;
+      if (this.familiarCooldown > 0) this.familiarCooldown -= dt;
+      if (this.familiarSpeedTimer > 0) this.familiarSpeedTimer -= dt;
+      if (this.familiarDmgTimer > 0) this.familiarDmgTimer -= dt;
 
       switch (this.familiarState) {
         case 'idle': {
           const famOrbit = (this.elapsed * 1.5 + Math.PI) % (Math.PI * 2);
           this.familiarPos = { x: this.player.pos.x + Math.cos(famOrbit) * 50, y: this.player.pos.y + Math.sin(famOrbit) * 50 };
-          // Spotter perk: mark highest-HP nearby enemy for +30% damage
+          // Spotter perk: mark highest-HP enemy for +30% damage
           if (this.hasPerk('spotter')) {
             let spotBestHp = 0; let spotBestEnemy: Enemy | null = null;
             for (const e of this.enemies.enemies) {
@@ -1796,111 +1793,69 @@ export class Game {
             }
             if (spotBestEnemy) { spotBestEnemy.markedTimer = 0.5; spotBestEnemy.markedDmgBonus = 1.3; }
           }
-          if (this.familiarCooldown > 0) {
-            this.familiarCooldown -= dt;
-          } else {
-            let bestDist = huntRange; let bestEnemy: Enemy | null = null;
-            for (const e of this.enemies.enemies) {
-              if (e.hp <= 0 || e.isAlly) continue;
-              const d = v2dist(this.familiarPos, e.pos);
-              if (d < bestDist) { bestDist = d; bestEnemy = e; }
-            }
-            if (bestEnemy) { this.familiarTarget = bestEnemy; this.familiarState = 'hunting'; }
-          }
+          if (this.familiarCooldown <= 0) this.familiarState = 'hunting';
           break;
         }
         case 'hunting': {
-          if (!this.familiarTarget || this.familiarTarget.hp <= 0) {
-            this.familiarState = 'idle'; this.familiarTarget = null; break;
+          // Find nearest live enemy within hunt range
+          let bestDist = huntRange; let bestEnemy: Enemy | null = null;
+          for (const e of this.enemies.enemies) {
+            if (e.hp <= 0 || e.isAlly) continue;
+            const d = v2dist(this.familiarPos, e.pos);
+            if (d < bestDist) { bestDist = d; bestEnemy = e; }
           }
-          const htDir = v2norm(v2sub(this.familiarTarget.pos, this.familiarPos));
-          this.familiarPos.x += htDir.x * huntSpeed * dt;
-          this.familiarPos.y += htDir.y * huntSpeed * dt;
-          if (v2dist(this.familiarPos, this.familiarTarget.pos) < 15) {
-            this.familiarState = 'biting'; this.familiarBiteTimer = 0.15;
+          if (!bestEnemy) {
+            // No target in range — orbit while waiting
+            const famOrbit = (this.elapsed * 1.5 + Math.PI) % (Math.PI * 2);
+            this.familiarPos = { x: this.player.pos.x + Math.cos(famOrbit) * 50, y: this.player.pos.y + Math.sin(famOrbit) * 50 };
+            break;
+          }
+          this.familiarTarget = bestEnemy;
+          const toTarget = v2sub(bestEnemy.pos, this.familiarPos);
+          const distToTarget = v2len(toTarget);
+          if (distToTarget < bestEnemy.radius + 8) {
+            this.familiarState = 'biting';
+          } else {
+            const dir = v2norm(toTarget);
+            this.familiarPos.x += dir.x * 250 * dt;
+            this.familiarPos.y += dir.y * 250 * dt;
           }
           break;
         }
         case 'biting': {
-          this.familiarBiteTimer -= dt;
-          if (this.familiarBiteTimer <= 0) {
-            const tgt = this.familiarTarget!;
-            const wepDef = WEAPON_DEFS[this.player.weaponId];
-            const baseWepDmg = (wepDef?.damage ?? 4) + this.weapons.bonusDamage;
-            let biteDmg = Math.max(1, Math.round(baseWepDmg * 0.5));
-            if (famTier >= 2 && famT3 === 'void') biteDmg *= 2;
-            tgt.hp -= biteDmg; tgt.hitFlash = 0.25;
-            // T3 void: bite AOE
-            if (famTier >= 3 && famT3 === 'void') {
-              this.explosions.push({ x: this.familiarPos.x, y: this.familiarPos.y, radius: 0, maxRadius: 60, life: 0.3, maxLife: 0.3 });
-              for (const e of this.enemies.enemies) {
-                if (e === tgt || e.hp <= 0 || e.isAlly) continue;
-                if (v2dist(this.familiarPos, e.pos) < 60) { e.hp -= Math.ceil(biteDmg * 0.5); e.hitFlash = 0.2; if (e.hp <= 0) this.onEnemyKilled(e); }
-              }
-            } else {
-              this.explosions.push({ x: this.familiarPos.x, y: this.familiarPos.y, radius: 0, maxRadius: 20, life: 0.15, maxLife: 0.15 });
-            }
+          const tgt = this.familiarTarget;
+          if (tgt && tgt.hp > 0) {
+            const wdef = WEAPON_DEFS[this.player.weaponId];
+            const baseDmg = (wdef ? wdef.damage : 2) + this.weapons.bonusDamage;
+            const biteDmg = baseDmg * 0.5 * biteDmgMult;
+            tgt.hp -= biteDmg;
+            tgt.hitFlash = 0.15;
+            this.familiarBuffToken = tgt.isElite ? 'elite' : (tgt.behavior || 'default');
             if (tgt.hp <= 0) this.onEnemyKilled(tgt);
-            // Determine buff from enemy behavior
-            const beh = tgt.behavior;
-            const isElite = tgt.isElite;
-            if (isElite) { this.familiarBuff = 'corruption'; this.familiarBuffColor = 0xcc33ff; }
-            else if (beh === 'charge' || beh === 'burst') { this.familiarBuff = 'heal'; this.familiarBuffColor = 0x00ff88; }
-            else if (beh === 'pack') { this.familiarBuff = 'speed'; this.familiarBuffColor = 0xffdd00; }
-            else if (beh === 'flank' || beh === 'strafe') { this.familiarBuff = 'damage'; this.familiarBuffColor = 0xff3333; }
-            else if (beh === 'lurk' || beh === 'lurker') { this.familiarBuff = 'shield'; this.familiarBuffColor = 0x3399ff; }
-            else { this.familiarBuff = 'heal'; this.familiarBuffColor = 0x00ff88; }
-            this.familiarState = 'returning'; this.familiarTarget = null;
+          } else {
+            this.familiarBuffToken = 'default';
           }
+          this.familiarGlowColor = this.getFamiliarBuffColor(this.familiarBuffToken);
+          this.familiarTarget = null;
+          this.familiarState = 'returning';
           break;
         }
         case 'returning': {
-          const rtDir = v2norm(v2sub(this.player.pos, this.familiarPos));
-          this.familiarPos.x += rtDir.x * returnSpeed * dt;
-          this.familiarPos.y += rtDir.y * returnSpeed * dt;
-          if (v2dist(this.familiarPos, this.player.pos) < 20) { this.familiarState = 'delivering'; }
+          const toPlayer = v2sub(this.player.pos, this.familiarPos);
+          const distToPlayer2 = v2len(toPlayer);
+          if (distToPlayer2 < 20) {
+            this.familiarState = 'delivering';
+          } else {
+            const dir = v2norm(toPlayer);
+            this.familiarPos.x += dir.x * 300 * dt;
+            this.familiarPos.y += dir.y * 300 * dt;
+          }
           break;
         }
         case 'delivering': {
-          const buffStrong = famTier >= 3 && famT3 === 'void';
-          const buffDurMult = (famTier >= 2 && famT3 === 'void') ? 1.5 : 1.0;
-          switch (this.familiarBuff) {
-            case 'heal': {
-              const healAmt = buffStrong ? 4 : 2;
-              this.player.hp = Math.min(this.player.maxHp, this.player.hp + healAmt);
-              this.hud.showMessage(`+${healAmt} HP`, 1.2);
-              break;
-            }
-            case 'speed': {
-              this.familiarSpeedTimer = (buffStrong ? 8 : 4) * buffDurMult;
-              this.hud.showMessage('SPEED!', 1.2);
-              break;
-            }
-            case 'damage': {
-              this.familiarDmgMult = buffStrong ? 1.5 : 1.25;
-              this.familiarDmgTimer = (buffStrong ? 10 : 5) * buffDurMult;
-              this.hud.showMessage('DMG+', 1.2);
-              break;
-            }
-            case 'shield': {
-              this.player.absorbNextHit = true;
-              this.hud.showMessage('+SHIELD', 1.2);
-              break;
-            }
-            case 'corruption': {
-              const corrRed = buffStrong ? 30 : 15;
-              this.player.corruption = Math.max(0, this.player.corruption - corrRed);
-              this.hud.showMessage(`-${corrRed} CORR`, 1.2);
-              break;
-            }
-            default: {
-              this.player.hp = Math.min(this.player.maxHp, this.player.hp + 1);
-              this.hud.showMessage('+1 HP', 1.2);
-            }
-          }
-          this.familiarBuff = '';
-          // T3 clean: skip cooldown for immediate next hunt
-          this.familiarCooldown = (famTier >= 3 && famT3 === 'clean') ? 0 : huntCooldown;
+          this.applyFamiliarBuff(this.familiarBuffToken, durationMult);
+          this.familiarGlowColor = 0x9933ff;
+          this.familiarCooldown = cooldownTime;
           this.familiarState = 'idle';
           break;
         }
@@ -2502,57 +2457,49 @@ export class Game {
       g.circle(ax, ay, 4).stroke({ color: 0xff2200, width: 1, alpha: 0.6 });
     }
 
-    // Behavior color map
+    // Behavior-based color map for enemy visual distinction
     const BEHAVIOR_COLORS: Record<string, number> = {
-      charge: 0xff3333,
-      flank: 0xff8800,
-      pack: 0x33ff33,
-      lurker: 0x8800aa,
-      burst: 0xffee00,
-      strafe: 0x00ccff,
-      patrol_river: 0x888888,
+      charge: 0xff3333, flank: 0xff8800, pack: 0x33ff33,
+      lurker: 0x8800aa, burst: 0xffee00, strafe: 0x00ccff, patrol_river: 0x888888,
     };
-
-    // Pack connection lines (draw before enemies so they appear behind)
-    for (const e of this.enemies.enemies) {
-      if (e.behavior !== 'pack') continue;
-      for (const other of this.enemies.enemies) {
-        if (other.id <= e.id || other.behavior !== 'pack') continue;
-        if (v2dist(e.pos, other.pos) < 200) {
-          g.moveTo(e.pos.x, e.pos.y).lineTo(other.pos.x, other.pos.y)
-            .stroke({ color: 0x33ff33, width: 0.8, alpha: 0.3 });
-        }
-      }
-    }
 
     // Enemies
     for (const e of this.enemies.enemies) {
       if (!this.camera.isVisible(e.pos.x, e.pos.y, e.radius * 2)) continue;
       const ex = e.pos.x, ey = e.pos.y;
-      const sizeScale = e.behavior === 'pack' ? 0.8 : e.behavior === 'charge' ? 1.2 : 1.0;
-      const er = e.radius * 1.5 * sizeScale;
-      const behaviorCol = BEHAVIOR_COLORS[e.behavior] ?? e.color;
-      const col = e.hitFlash > 0 ? 0xffffff : behaviorCol;
-      const baseAlpha = (e.behavior === 'lurker' && e.phase === 0) ? 0.4 : 1.0;
+      // Behavior-based radius scaling
+      const erBase = e.radius * 1.5;
+      const er = e.behavior === 'charge' ? erBase * 1.2 : e.behavior === 'pack' ? erBase * 0.85 : erBase;
+      // Behavior-based color override
+      const bColor = BEHAVIOR_COLORS[e.behavior] ?? e.color;
+      const col = e.hitFlash > 0 ? 0xffffff : bColor;
       const isVoid = e.voidType;
       const hasSprite = this.spritePool.has(e.id);
+      // Lurker dormant: 40% opacity when hiding (phase 0)
+      const lurkerDormant = e.behavior === 'lurker' && (e.phase as number) === 0;
+      const sa = lurkerDormant ? 0.4 : 1.0; // shape alpha multiplier
 
       if (e.isAggroed) {
-        g.circle(ex, ey, er * 1.6).stroke({ color: col, width: 0.5, alpha: 0.15 * baseAlpha });
-      }
-
-      if (e.isElite) {
-        const pulse = 0.5 + Math.sin(this.elapsed * 3) * 0.5;
-        g.circle(ex, ey, er * 1.8).stroke({ color: col, width: 3, alpha: 0.3 + pulse * 0.4 });
-        g.circle(ex, ey, er * 2.2).stroke({ color: col, width: 1.5, alpha: 0.1 + pulse * 0.2 });
+        g.circle(ex, ey, er * 1.6).stroke({ color: col, width: 0.5, alpha: 0.15 * sa });
       }
 
       if (!hasSprite) {
-        if (e.behavior === 'charge' || e.behavior === 'pack') {
+        if (e.behavior === 'charge') {
           g.moveTo(ex, ey - er).lineTo(ex + er * 0.87, ey + er * 0.5).lineTo(ex - er * 0.87, ey + er * 0.5).closePath();
-          g.fill({ color: col, alpha: 0.6 * baseAlpha });
+          g.fill({ color: col, alpha: 0.6 * sa });
           g.moveTo(ex, ey - er).lineTo(ex + er * 0.87, ey + er * 0.5).lineTo(ex - er * 0.87, ey + er * 0.5).closePath();
-          g.stroke({ color: col, width: 1.5, alpha: 0.9 * baseAlpha });
+          g.stroke({ color: col, width: 1.5, alpha: 0.9 * sa });
+        } else if (e.behavior === 'pack') {
+          g.moveTo(ex, ey - er).lineTo(ex + er * 0.87, ey + er * 0.5).lineTo(ex - er * 0.87, ey + er * 0.5).closePath();
+          g.fill({ color: col, alpha: 0.6 * sa });
+          g.moveTo(ex, ey - er).lineTo(ex + er * 0.87, ey + er * 0.5).lineTo(ex - er * 0.87, ey + er * 0.5).closePath();
+          g.stroke({ color: col, width: 1.5, alpha: 0.9 * sa });
+          // Draw thin lines to nearby pack members
+          for (const other of this.enemies.enemies) {
+            if (other !== e && other.hp > 0 && other.behavior === 'pack' && v2dist(e.pos, other.pos) < 200) {
+              g.moveTo(ex, ey).lineTo(other.pos.x, other.pos.y).stroke({ color: 0x33ff33, width: 0.5, alpha: 0.3 });
+            }
+          }
         } else if (e.behavior === 'strafe' || e.behavior === 'patrol_river') {
           for (let i = 0; i < 6; i++) {
             const a1 = (i / 6) * Math.PI * 2 - Math.PI / 2;
@@ -2560,25 +2507,32 @@ export class Game {
             if (i === 0) g.moveTo(ex + Math.cos(a1) * er, ey + Math.sin(a1) * er);
             g.lineTo(ex + Math.cos(a2) * er, ey + Math.sin(a2) * er);
           }
-          g.closePath().fill({ color: col, alpha: 0.4 * baseAlpha });
+          g.closePath().fill({ color: col, alpha: 0.4 * sa });
           for (let i = 0; i < 6; i++) {
             const a1 = (i / 6) * Math.PI * 2 - Math.PI / 2;
             const a2 = ((i + 1) / 6) * Math.PI * 2 - Math.PI / 2;
             if (i === 0) g.moveTo(ex + Math.cos(a1) * er, ey + Math.sin(a1) * er);
             g.lineTo(ex + Math.cos(a2) * er, ey + Math.sin(a2) * er);
           }
-          g.closePath().stroke({ color: col, width: 1.5, alpha: 0.8 * baseAlpha });
+          g.closePath().stroke({ color: col, width: 1.5, alpha: 0.8 * sa });
         } else if (e.behavior === 'lurker') {
-          g.moveTo(ex - er, ey - er).lineTo(ex + er, ey + er).stroke({ color: col, width: 3, alpha: 0.7 * baseAlpha });
-          g.moveTo(ex + er, ey - er).lineTo(ex - er, ey + er).stroke({ color: col, width: 3, alpha: 0.7 * baseAlpha });
+          g.moveTo(ex - er, ey - er).lineTo(ex + er, ey + er).stroke({ color: col, width: 3, alpha: 0.7 * sa });
+          g.moveTo(ex + er, ey - er).lineTo(ex - er, ey + er).stroke({ color: col, width: 3, alpha: 0.7 * sa });
         } else {
-          g.rect(ex - er * 0.7, ey - er * 0.7, er * 1.4, er * 1.4).fill({ color: col, alpha: 0.5 * baseAlpha });
-          g.rect(ex - er * 0.7, ey - er * 0.7, er * 1.4, er * 1.4).stroke({ color: col, width: 1.5, alpha: 0.8 * baseAlpha });
+          g.rect(ex - er * 0.7, ey - er * 0.7, er * 1.4, er * 1.4).fill({ color: col, alpha: 0.5 * sa });
+          g.rect(ex - er * 0.7, ey - er * 0.7, er * 1.4, er * 1.4).stroke({ color: col, width: 1.5, alpha: 0.8 * sa });
         }
       }
 
       if (isVoid) {
         g.circle(ex, ey, er * 0.4).fill({ color: 0xff2200, alpha: 0.5 + Math.sin(this.elapsed * 4) * 0.2 });
+      }
+
+      // Pack member link lines already drawn above in shape block
+      // Elite: pulsing glow ring using original creature color
+      if (e.isElite) {
+        const pulseAlpha = 0.3 + Math.sin(this.elapsed * 3) * 0.2;
+        g.circle(ex, ey, er * 1.8).stroke({ color: e.color, width: 2, alpha: pulseAlpha });
       }
 
       if (e.hp < e.maxHp) {
@@ -2688,12 +2642,14 @@ export class Game {
 
     // Draw familiar
     if (this.familiarActive) {
-      const fc = this.familiarState === 'idle' ? 0x9933ff
-               : this.familiarState === 'hunting' ? 0xff6600
-               : this.familiarState === 'biting' ? 0xffffff
-               : this.familiarBuffColor;
-      g.circle(this.familiarPos.x, this.familiarPos.y, 8).fill({ color: fc, alpha: 0.85 });
-      g.circle(this.familiarPos.x, this.familiarPos.y, 8).stroke({ color: 0xffffff, width: 1.5, alpha: 0.4 });
+      const famColor = this.familiarState === 'returning' ? this.familiarGlowColor : 0x9933ff;
+      const famAlpha = this.familiarState === 'returning' ? 0.6 + Math.sin(this.elapsed * 8) * 0.2 : 0.7;
+      g.circle(this.familiarPos.x, this.familiarPos.y, 8).fill({ color: famColor, alpha: famAlpha });
+      g.circle(this.familiarPos.x, this.familiarPos.y, 8).stroke({ color: famColor, width: 2, alpha: 0.8 });
+      if (this.familiarState === 'returning') {
+        const outerAlpha = 0.35 + Math.sin(this.elapsed * 6) * 0.15;
+        g.circle(this.familiarPos.x, this.familiarPos.y, 14).stroke({ color: this.familiarGlowColor, width: 2, alpha: outerAlpha });
+      }
     }
 
     // Draw explosions
@@ -2988,6 +2944,7 @@ export class Game {
     if (enemy.markedTimer && enemy.markedTimer > 0 && enemy.markedDmgBonus) {
       mult *= enemy.markedDmgBonus;
     }
+    if (this.familiarDmgTimer > 0) mult *= 1.25;
     if (this.hasMod('elite_dmg') && enemy.isElite) mult *= 1.3;
     if (this.hasMod('stalker') && !enemy.targetingPlayer) mult *= 1.4;
     if (this.hasMod('pack_hunter')) {
@@ -3001,6 +2958,45 @@ export class Game {
   }
 
   /** Get speed multiplier from active modifiers */
+  private getFamiliarBuffColor(behavior: string): number {
+    switch (behavior) {
+      case 'charge': case 'burst': return 0x00ff44;   // green - heal
+      case 'pack': return 0xffee00;                    // yellow - speed
+      case 'flank': case 'strafe': return 0xff3333;   // red - damage
+      case 'lurker': return 0x3366ff;                  // blue - shield
+      case 'elite': return 0xaa33ff;                   // purple - corruption
+      default: return 0x00ff44;                        // green - default heal
+    }
+  }
+
+  private applyFamiliarBuff(behavior: string, durationMult: number) {
+    switch (behavior) {
+      case 'charge': case 'burst':
+        this.player.heal(2);
+        this.hud.showMessage('+2 HP', 1.5);
+        break;
+      case 'pack':
+        this.familiarSpeedTimer = 4 * durationMult;
+        this.hud.showMessage('+SPEED 4s', 1.5);
+        break;
+      case 'flank': case 'strafe':
+        this.familiarDmgTimer = 5 * durationMult;
+        this.hud.showMessage('+25% DMG 5s', 1.5);
+        break;
+      case 'lurker':
+        this.player.shieldHits = 3;
+        this.hud.showMessage('SHIELD x3', 1.5);
+        break;
+      case 'elite':
+        this.player.corruption = Math.max(0, this.player.corruption - 15);
+        this.hud.showMessage('-15 CORRUPTION', 1.5);
+        break;
+      default:
+        this.player.heal(1);
+        this.hud.showMessage('+1 HP', 1.5);
+    }
+  }
+
   getModSpeedMult(): number {
     let mult = 1;
     if (this.hasMod('last_stand') && this.player.hp < 3) mult *= 1.3;
