@@ -14,6 +14,7 @@ import { CREATURE_DEFS } from '../data/creatures';
 import { type ModifierDef } from '../data/modifiers';
 import { WEAPON_DEFS, WEAPON_LEVEL_PERKS, WEAPON_MUTATIONS } from '../data/weapons';
 import { KIT_DEFS } from '../data/kits';
+import { ELITE_TYPES, ELITE_OVERRIDES, ELITE_EPITHETS, rollAffixes } from '../data/elites';
 import { type UpgradeCard, type ProgressionState, generateUpgrades } from '../data/upgrades';
 import {
   halSay,
@@ -219,6 +220,10 @@ export class Game {
   apexSpawned = false; // boss_hunt: has the apex target been spawned?
   apexId = -1;         // boss_hunt: enemy id of the apex
 
+  // Elite spawning
+  eliteTimer = 0;
+  eliteSpawnedCount = 0;
+
   // Active modifiers
   activeModifiers: string[] = [];
   modifierPickPending = false;
@@ -274,6 +279,10 @@ export class Game {
       this.kitCooldowns[kit] = 0;
       this.runKitTiers[kit] = 1;
     }
+
+    // First elite spawn: 90-150s (scaled by difficulty)
+    const depth = Math.min(3, Math.ceil(targetTotal / 10));
+    this.eliteTimer = 90 - depth * 15 + Math.random() * 60;
 
     // Contract-specific init
     if (contractExtras?.holdTime) {
@@ -452,6 +461,73 @@ export class Game {
     this.hud.showMessage('APEX TARGET DETECTED', 2.5);
     if (this.halCooldown <= 0) {
       setTimeout(() => this.hud.showHalMessage(halSay(HAL_ELITE_SPAWNED), 4), 1500);
+      this.halCooldown = 6;
+    }
+  }
+
+  private spawnElite() {
+    this.eliteSpawnedCount++;
+    // Cycle through elite types, 30% chance random instead
+    let eliteIdx = (this.eliteSpawnedCount - 1) % ELITE_TYPES.length;
+    if (Math.random() < 0.3) eliteIdx = Math.floor(Math.random() * ELITE_TYPES.length);
+    const eliteType = ELITE_TYPES[eliteIdx];
+    const epithet = ELITE_EPITHETS[Math.floor(Math.random() * ELITE_EPITHETS.length)];
+    const displayName = `${eliteType} ${epithet}`;
+
+    // Spawn away from player
+    let pos: { x: number; y: number };
+    let attempts = 0;
+    do {
+      pos = { x: randRange(200, WORLD_W - 200), y: randRange(200, WORLD_H - 200) };
+      attempts++;
+    } while (v2dist(pos, this.player.pos) < 600 && attempts < 30);
+
+    // Base stats scaled by time
+    const depth = Math.min(3, Math.ceil(this.targetTotal / 10));
+    const hpScale = 1.0 + (depth - 1) * 0.5 + this.eliteSpawnedCount * 0.2;
+    const overrides = ELITE_OVERRIDES[eliteType] || {};
+    const baseHp = Math.floor((overrides.hp || 20) * hpScale);
+    const baseSpeed = overrides.speed ?? (55 + depth * 10);
+    const baseRadius = overrides.radius ?? 20;
+    const baseDmg = overrides.meleeDmg ?? (2 + depth);
+
+    const elite = createEnemy('Void Leech', pos, true); // base creature template
+    elite.name = eliteType;
+    elite.hp = baseHp;
+    elite.maxHp = baseHp;
+    elite.speed = baseSpeed;
+    elite.radius = baseRadius;
+    elite.meleeDmg = baseDmg;
+    elite.color = overrides.color ?? 0xffdd11;
+    elite.detection = 500;
+    elite.leash = 1200;
+    elite.isElite = true;
+    elite.behavior = baseSpeed === 0 ? 'lurker' : 'charge';
+
+    // Roll affixes
+    let affixCount = 1;
+    if (this.elapsed > 600) affixCount = 2 + Math.floor(Math.random() * 2); // 2-3
+    else if (this.elapsed > 300) affixCount = 1 + Math.floor(Math.random() * 2); // 1-2
+    const affixes = rollAffixes(affixCount);
+    elite.affixes = affixes;
+
+    // Apply affix stat modifications
+    for (const affix of affixes) {
+      switch (affix) {
+        case 'extra_fast': elite.speed *= 1.5; break;
+        case 'shielded': elite.shieldHp = Math.floor(elite.maxHp * 0.3); break;
+        case 'teleporter': elite.tpTimer = 8; break;
+        case 'magnetic': elite.magneticTimer = 5; break;
+        case 'armored': break; // checked on damage
+        case 'berserker': break; // checked on update
+        default: break;
+      }
+    }
+
+    this.enemies.enemies.push(elite);
+    this.hud.showMessage(`ELITE: ${displayName}`, 2.5);
+    if (this.halCooldown <= 0) {
+      setTimeout(() => this.hud.showHalMessage(halSay(HAL_ELITE_SPAWNED), 4), 1000);
       this.halCooldown = 6;
     }
   }
@@ -1041,6 +1117,39 @@ export class Game {
     // Enemies update
     this.enemies.update(dt, this.player, this.map, this.decoys.map(d => ({ x: d.x, y: d.y })));
 
+    // Elite affix runtime behavior
+    for (const e of this.enemies.enemies) {
+      if (e.hp <= 0 || e.affixes.length === 0) continue;
+      // Marked timer decay
+      if (e.markedTimer > 0) e.markedTimer -= dt;
+      // Teleporter: blink toward player every 8s
+      if (e.affixes.includes('teleporter')) {
+        e.tpTimer -= dt;
+        if (e.tpTimer <= 0) {
+          e.tpTimer = 8;
+          const dir = v2norm(v2sub(this.player.pos, e.pos));
+          e.pos.x = this.player.pos.x - dir.x * 100;
+          e.pos.y = this.player.pos.y - dir.y * 100;
+          this.explosions.push({ x: e.pos.x, y: e.pos.y, radius: 0, maxRadius: 30, life: 0.2, maxLife: 0.2 });
+        }
+      }
+      // Magnetic: pull player toward elite
+      if (e.affixes.includes('magnetic')) {
+        const md = v2dist(this.player.pos, e.pos);
+        if (md < 300 && md > 5) {
+          const pullDir = v2norm(v2sub(e.pos, this.player.pos));
+          this.player.pos.x += pullDir.x * 30 * dt;
+          this.player.pos.y += pullDir.y * 30 * dt;
+        }
+      }
+      // Berserker: +50% speed and damage below 30% HP
+      if (e.affixes.includes('berserker') && e.hp / e.maxHp < 0.3) {
+        if (CREATURE_DEFS[e.name]) {
+          e.speed = Math.max(e.speed, (CREATURE_DEFS[e.name]?.speed ?? e.speed) * 1.5);
+        }
+      }
+    }
+
     // Ã¢ÂÂÃ¢ÂÂ Payload escort: enemies damage pod Ã¢ÂÂÃ¢ÂÂ
     if (this.contractType === 'payload_escort' && this.podHp > 0) {
       const podX = WORLD_W * this.podProgress;
@@ -1072,11 +1181,21 @@ export class Game {
       for (const enemy of this.enemies.enemies) {
         const dmg = this.weapons.checkHit(bullet, enemy.id, enemy.pos, enemy.radius);
         if (dmg > 0) {
+          let finalDmg = dmg;
+          // Marked damage bonus
+          if (enemy.markedTimer > 0) finalDmg = Math.floor(finalDmg * enemy.markedDmgBonus);
+          // Affix: armored halves ranged damage
+          if (enemy.affixes.includes('armored')) finalDmg = Math.max(1, Math.floor(finalDmg * 0.5));
+          // Affix: shielded absorbs damage
+          if (enemy.affixes.includes('shielded') && enemy.shieldHp > 0) {
+            if (enemy.shieldHp >= finalDmg) { enemy.shieldHp -= finalDmg; finalDmg = 0; }
+            else { finalDmg -= enemy.shieldHp; enemy.shieldHp = 0; }
+          }
           // Execute threshold (sniper clean)
           if (this.weapons.executeThreshold > 0 && enemy.hp > 0 && (enemy.hp / enemy.maxHp) <= this.weapons.executeThreshold) {
             enemy.hp = 0;
           } else {
-            enemy.hp -= dmg;
+            enemy.hp -= finalDmg;
           }
           enemy.hitFlash = 0.1;
           enemy.isAggroed = true;
@@ -1371,6 +1490,13 @@ export class Game {
       this.spawnApex();
     }
 
+    // Elite spawn timer
+    this.eliteTimer -= dt;
+    if (this.eliteTimer <= 0 && !this.modifierPickPending) {
+      this.spawnElite();
+      this.eliteTimer = 45 + Math.random() * 25; // 45-70s between subsequent elites
+    }
+
     // Waves
     this.waveTimer -= dt;
     if (this.waveTimer <= 0 && this.enemies.enemies.length < 50 && !this.modifierPickPending) {
@@ -1516,6 +1642,25 @@ export class Game {
   }
 
   private onEnemyKilled(enemy: Enemy) {
+    // Multiplier affix: spawn 2 copies at 30% HP
+    if (enemy.affixes.includes('multiplier') && !enemy.name.startsWith('Copy:')) {
+      for (let mc = 0; mc < 2; mc++) {
+        const copy = createEnemy('Void Leech', {
+          x: enemy.pos.x + (Math.random() - 0.5) * 60,
+          y: enemy.pos.y + (Math.random() - 0.5) * 60,
+        }, true);
+        copy.name = `Copy: ${enemy.name}`;
+        copy.hp = Math.floor(enemy.maxHp * 0.3);
+        copy.maxHp = copy.hp;
+        copy.speed = enemy.speed;
+        copy.radius = enemy.radius * 0.8;
+        copy.color = enemy.color;
+        copy.meleeDmg = enemy.meleeDmg;
+        copy.isElite = false;
+        this.enemies.enemies.push(copy);
+      }
+    }
+
     this.totalKills++;
     this.targetCount++;
     this.player.essenceCollected++;

@@ -38,6 +38,14 @@ export interface Enemy {
   meleeCooldown: number;
   stunTimer: number;
   isAlly: boolean;
+  // Elite affix fields
+  affixes: string[];
+  shieldHp: number;
+  tpTimer: number;
+  magneticTimer: number;
+  // Marked (for kit perks / chain T3)
+  markedTimer: number;
+  markedDmgBonus: number;
 }
 
 let nextEnemyId = 1;
@@ -78,6 +86,12 @@ export function createEnemy(name: string, pos: Vec2, aggroed = false): Enemy {
     meleeCooldown: 0,
     stunTimer: 0,
     isAlly: false,
+    affixes: [],
+    shieldHp: 0,
+    tpTimer: 0,
+    magneticTimer: 0,
+    markedTimer: 0,
+    markedDmgBonus: 1,
   };
 }
 
