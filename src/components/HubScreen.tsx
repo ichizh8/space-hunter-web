@@ -126,8 +126,9 @@ function SectionHeader({ text, color = 'var(--color-accent-cyan)' }: { text: str
 function ShipTab({ save, huntResult, onContracts }: {
   save: ReturnType<typeof useSaveStore.getState>;
   huntResult: ReturnType<typeof useGameStore.getState>['huntResult'];
-  onContracts: () => void
+  onContracts: () => void;
 }) {
+  const devGiveResources = useSaveStore(s => s.devGiveResources);
   const halMsg = useMemo(() => {
     if (save.contractsCompleted === 0 && !huntResult) return halSay(HAL_FIRST_VISIT);
     if (huntResult) {
@@ -155,6 +156,14 @@ function ShipTab({ save, huntResult, onContracts }: {
 
       <button className="pixel-btn pixel-btn-primary w-full text-lg py-5" onClick={onContracts}>
         CONTRACT BOARD
+      </button>
+
+      <button
+        className="pixel-btn w-full text-sm py-3"
+        style={{ borderColor: '#f5a623', color: '#f5a623', background: 'rgba(245,166,35,0.08)' }}
+        onClick={devGiveResources}
+      >
+        DEV: Give Resources (+5000cr · 99 ingredients · max rep · all weapons)
       </button>
 
       <SectionHeader text="PANTRY" color="var(--color-accent-orange)" />
