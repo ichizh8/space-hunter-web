@@ -2402,11 +2402,12 @@ export class Game {
         g.rect(0, 0, vw, vh).circle(cx, cy, r).cut().fill({ color: 0x000000, alpha: 0.055 });
       }
     } else if (biome === 'river_bank') {
-      // Subtle blue screen tint + slight vignette
-      const steps = 6;
+      // Subtle blue vignette at screen edges only — fill rect first, then cut circle as hole
+      const steps = 5;
       for (let i = 0; i < steps; i++) {
-        const r = Math.sqrt(cx * cx + cy * cy) * (0.5 + i * 0.12);
-        g.rect(0, 0, vw, vh).circle(cx, cy, r).cut().fill({ color: 0x001144, alpha: 0.04 });
+        const r = Math.sqrt(cx * cx + cy * cy) * (0.75 + i * 0.07);
+        g.rect(0, 0, vw, vh).fill({ color: 0x001155, alpha: 0.03 });
+        g.circle(cx, cy, r).cut();
       }
     } else if (biome === 'void_pool') {
       // Dark purple vignette
