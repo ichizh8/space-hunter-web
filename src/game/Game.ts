@@ -506,16 +506,12 @@ export class Game {
     const epithet = ELITE_EPITHETS[Math.floor(Math.random() * ELITE_EPITHETS.length)];
     const displayName = `${eliteType} ${epithet}`;
 
-    // Spawn near player with entrance effect
-    let pos: { x: number; y: number };
-    do {
-      pos = { x: randRange(200, WORLD_W - 200), y: randRange(200, WORLD_H - 200) };
-    } while (false); // always use first position
-    const eAngle = Math.random() * Math.PI * 2;
-    const eDist = randRange(160, 220);
-    pos = {
-      x: Math.max(80, Math.min(WORLD_W - 80, this.player.pos.x + Math.cos(eAngle) * eDist)),
-      y: Math.max(80, Math.min(WORLD_H - 80, this.player.pos.y + Math.sin(eAngle) * eDist)),
+    // Teleport entrance: pick a spot 130-220px from player for the warning silhouette
+    const tpAngle = Math.random() * Math.PI * 2;
+    const tpDist = 130 + Math.random() * 90;
+    const pos = {
+      x: Math.max(100, Math.min(WORLD_W - 100, this.player.pos.x + Math.cos(tpAngle) * tpDist)),
+      y: Math.max(100, Math.min(WORLD_H - 100, this.player.pos.y + Math.sin(tpAngle) * tpDist)),
     };
 
     // Base stats scaled by time
@@ -527,7 +523,8 @@ export class Game {
     const baseRadius = overrides.radius ?? 20;
     const baseDmg = overrides.meleeDmg ?? (2 + depth);
 
-    const elite = createEnemy('Void Leech', pos, true); // base creature template
+    // Elite starts offscreen — will teleport to pos after 1s warning
+    const elite = createEnemy('Void Leech', v2(-9999, -9999), true);
     elite.name = eliteType;
     elite.hp = baseHp;
     elite.maxHp = baseHp;
@@ -535,26 +532,13 @@ export class Game {
     elite.radius = baseRadius;
     elite.meleeDmg = baseDmg;
     elite.color = overrides.color ?? 0xffdd11;
-    elite.detection = 500;
-    elite.isElite = true;
-    elite.speed = baseSpeed * 1.35;          // 35% faster
-    elite.radius = baseRadius * 1.4;         // 40% larger
+    elite.detection = 9999;
     elite.leash = 99999;
-    elite.isAggroed = true;
-    elite.eliteEntrance = 1.0;               // 1s entrance flicker
-    elite.eliteAttackTimer = 3.5;            // first attack after 3.5s
-    // Give each elite type a distinct behavior pattern
-    const eliteBehaviorMap: Record<string, string> = {
-      'Void Hulk':       'charge',    // slow + telegraphed charges
-      'Phase Hunter':    'burst',     // blink-dash attacks
-      'Brood Mother':    'pack',      // moves with minion swarm logic
-      'Rift Colossus':   'charge',    // massive knockback charge
-      'Null Wraith':     'lurker',    // stalks then pounces
-      'Stone Sentinel':  'lurker',    // stationary ambush
-      'Tide Reaper':     'strafe',    // orbits and rains ranged fire
-      'Current Stalker': 'flank',     // circles then rushes from blind spots
-    };
-    elite.behavior = eliteBehaviorMap[eliteType] ?? 'charge';
+    elite.isElite = true;
+    elite.behavior = 'elite';
+    elite.aggroOrigin = v2(pos.x, pos.y); // teleport destination
+    elite.eliteTeleportTimer = 1.0;
+    elite.eliteAttackTimer = 99; // set to real value after teleport arrives
 
     // Roll affixes
     let affixCount = 1;
@@ -1392,125 +1376,7 @@ export class Game {
       }
     }
 
-    // ── Elite special attacks ──
-    for (const e of this.enemies.enemies) {
-      if (!e.isElite || e.hp <= 0 || e.eliteEntrance > 0) continue;
-
-      if (e.eliteAttackPhase === 0) {
-        // Idle: count down to next attack
-        e.eliteAttackTimer -= dt;
-        if (e.eliteAttackTimer <= 0) {
-          const dist = v2dist(e.pos, this.player.pos);
-          const r = Math.random();
-          if (r < 0.28 && dist < 130) {
-            // AOE Slam
-            e.eliteAttackPhase = 1;
-            e.eliteAttackWindup = 0.8;
-            e.stunTimer = 0.8;
-          } else if (r < 0.55) {
-            // Dash Attack
-            e.eliteAttackPhase = 2;
-            e.eliteAttackWindup = 0.5;
-            e.stunTimer = 0.5;
-            e.lockAngle = Math.atan2(this.player.pos.y - e.pos.y, this.player.pos.x - e.pos.x);
-          } else if (r < 0.80) {
-            // Projectile Burst (fires immediately after short pause)
-            e.eliteAttackPhase = 3;
-            e.eliteAttackWindup = 0.3;
-            e.stunTimer = 0.3;
-          } else {
-            // Summon
-            e.eliteAttackPhase = 4;
-            e.eliteAttackWindup = 0.5;
-            e.stunTimer = 0.5;
-          }
-        }
-      } else {
-        // Active attack phase: count down the windup timer in Game.ts
-        // (stunTimer in Enemies.ts handles movement freeze)
-        e.eliteAttackWindup -= dt;
-
-        if (e.eliteAttackPhase === 1 && e.eliteAttackWindup <= 0) {
-          // AOE Slam: damage player if in range
-          const slamRadius = 130;
-          if (v2dist(this.player.pos, e.pos) < slamRadius) {
-            this.player.takeDamage(e.meleeDmg * 1.8);
-          }
-          this.explosions.push({ x: e.pos.x, y: e.pos.y, radius: 0, maxRadius: slamRadius, life: 0.5, maxLife: 0.5 });
-          e.eliteAttackPhase = 0;
-          e.eliteAttackTimer = randRange(3, 6);
-
-        } else if (e.eliteAttackPhase === 2 && e.eliteAttackWindup <= 0) {
-          // Dash: launch at locked angle for 0.35s
-          e.eliteAttackPhase = 22;
-          e.eliteAttackWindup = 0.35;
-          e.stunTimer = 0; // unfreeze so we can control movement in phase 22
-
-        } else if (e.eliteAttackPhase === 22) {
-          // Dash active: manually move elite + deal contact damage
-          const dashSpeed = e.speed * 4;
-          const dashDx = Math.cos(e.lockAngle) * dashSpeed * dt;
-          const dashDy = Math.sin(e.lockAngle) * dashSpeed * dt;
-          const enx = e.pos.x + dashDx;
-          const eny = e.pos.y + dashDy;
-          if (!this.map.isBlocked(enx, e.pos.y, e.radius)) e.pos.x = enx;
-          if (!this.map.isBlocked(e.pos.x, eny, e.radius)) e.pos.y = eny;
-          e.pos.x = Math.max(e.radius, Math.min(WORLD_W - e.radius, e.pos.x));
-          e.pos.y = Math.max(e.radius, Math.min(WORLD_H - e.radius, e.pos.y));
-          // Freeze normal movement during dash
-          e.stunTimer = Math.max(e.stunTimer, dt + 0.02);
-          // Contact damage
-          if (v2dist(this.player.pos, e.pos) < e.radius + this.player.radius + 8 && e.meleeCooldown <= 0) {
-            this.player.takeDamage(e.meleeDmg * 2);
-            e.meleeCooldown = 1.5;
-          }
-          // Emit dash particles
-          if (this.particles.length < 600) {
-            this.particles.push({ x: e.pos.x, y: e.pos.y, vx: -Math.cos(e.lockAngle)*60 + (Math.random()-0.5)*30, vy: -Math.sin(e.lockAngle)*60 + (Math.random()-0.5)*30, life: 0.3, maxLife: 0.3, color: e.color || 0xffdd11, radius: 5 });
-          }
-          if (e.eliteAttackWindup <= 0) {
-            e.eliteAttackPhase = 0;
-            e.eliteAttackTimer = randRange(2, 5);
-            e.stunTimer = 0;
-          }
-
-        } else if (e.eliteAttackPhase === 3 && e.eliteAttackWindup <= 0) {
-          // Projectile Burst: 6-8 projectiles spread toward player
-          const count = 6 + Math.floor(Math.random() * 3);
-          const baseAngle = Math.atan2(this.player.pos.y - e.pos.y, this.player.pos.x - e.pos.x);
-          const spreadTotal = Math.PI / 3;
-          for (let i = 0; i < count; i++) {
-            const angle = baseAngle - spreadTotal / 2 + (i / (count - 1)) * spreadTotal;
-            this.enemies.enemyBullets.push({
-              pos: v2(e.pos.x, e.pos.y),
-              vel: v2fromAngle(angle, 185),
-              radius: 5,
-              damage: e.meleeDmg,
-              life: 2.5,
-              color: e.color || 0xffdd11,
-            });
-          }
-          e.eliteAttackPhase = 0;
-          e.eliteAttackTimer = randRange(3, 6);
-
-        } else if (e.eliteAttackPhase === 4 && e.eliteAttackWindup <= 0) {
-          // Summon: 2-3 minions
-          const sumCount = 2 + Math.floor(Math.random() * 2);
-          const minionPool = ['Void Leech', 'Shadow Crawler', 'Abyss Worm'];
-          const behaviorPool = ['charge', 'flank', 'pack'];
-          for (let i = 0; i < sumCount; i++) {
-            const angle = (i / sumCount) * Math.PI * 2 + Math.random() * 0.5;
-            const spawnPos = v2(e.pos.x + Math.cos(angle) * 65, e.pos.y + Math.sin(angle) * 65);
-            const minion = createEnemy(minionPool[Math.floor(Math.random() * minionPool.length)], spawnPos, true);
-            minion.behavior = behaviorPool[Math.floor(Math.random() * behaviorPool.length)];
-            this.enemies.enemies.push(minion);
-          }
-          this.hud.showMessage('MINIONS SUMMONED', 1.5);
-          e.eliteAttackPhase = 0;
-          e.eliteAttackTimer = randRange(6, 10);
-        }
-      }
-    }
+    // Elite special attacks handled inside 'elite' behavior case in Enemies.ts
 
     // Ã¢ÂÂÃ¢ÂÂ Payload escort: enemies damage pod Ã¢ÂÂÃ¢ÂÂ
     if (this.contractType === 'payload_escort' && this.podHp > 0) {
@@ -2693,6 +2559,21 @@ export class Game {
       g.circle(ax, ay, 4).stroke({ color: 0xff2200, width: 1, alpha: 0.6 });
     }
 
+    // Elite teleport warning silhouettes (drawn before enemy loop, at aggroOrigin)
+    for (const e of this.enemies.enemies) {
+      if (!e.isElite || e.eliteTeleportTimer <= 0) continue;
+      const wx = e.aggroOrigin.x, wy = e.aggroOrigin.y;
+      if (!this.camera.isVisible(wx, wy, e.radius * 4)) continue;
+      const er = e.radius * 1.5;
+      const flicker = Math.sin(this.elapsed * 18) > 0 ? 0.55 : 0.1;
+      // Flickering outline silhouette
+      g.circle(wx, wy, er).stroke({ color: e.color, width: 3, alpha: flicker });
+      g.circle(wx, wy, er * 1.8).stroke({ color: e.color, width: 1.5, alpha: flicker * 0.5 });
+      // Warning cross-hairs
+      g.moveTo(wx - er * 1.4, wy).lineTo(wx + er * 1.4, wy).stroke({ color: 0xff2200, width: 1, alpha: flicker * 0.8 });
+      g.moveTo(wx, wy - er * 1.4).lineTo(wx, wy + er * 1.4).stroke({ color: 0xff2200, width: 1, alpha: flicker * 0.8 });
+    }
+
     // Enemies
     for (const e of this.enemies.enemies) {
       if (!this.camera.isVisible(e.pos.x, e.pos.y, e.radius * 2)) continue;
@@ -2779,26 +2660,36 @@ export class Game {
         const pulseAlpha = 0.3 + Math.sin(this.elapsed * 3) * 0.2;
         g.circle(ex, ey, er * 2.0).stroke({ color: e.color, width: 3, alpha: pulseAlpha });
         g.circle(ex, ey, er * 2.4).stroke({ color: e.color, width: 1, alpha: pulseAlpha * 0.4 });
-      }
-      // Elite entrance flicker: draw semi-transparent flickering silhouette
-      if (e.isElite && (e as any).eliteEntrance > 0) {
-        const flickerAlpha = Math.abs(Math.sin(this.elapsed * 25)) * 0.6;
-        g.circle(ex, ey, er * 2.2).fill({ color: e.color, alpha: flickerAlpha * 0.3 });
-        g.circle(ex, ey, er * 2.2).stroke({ color: e.color, width: 3, alpha: flickerAlpha });
-      }
-      // Elite AOE windup ring
-      if (e.isElite && (e as any).eliteAttackPhase === 1) {
-        const windupFrac = 1 - (e as any).eliteAttackWindup / 0.8;
-        const slamR = 130 * windupFrac;
-        g.circle(ex, ey, slamR).stroke({ color: 0xff6600, width: 3, alpha: 0.7 });
-        g.circle(ex, ey, 130).stroke({ color: 0xff3300, width: 1, alpha: 0.25 });
-      }
-      // Elite dash preview line
-      if (e.isElite && (e as any).eliteAttackPhase === 2) {
-        const dashEndX = ex + Math.cos((e as any).lockAngle) * 250;
-        const dashEndY = ey + Math.sin((e as any).lockAngle) * 250;
-        g.moveTo(ex, ey).lineTo(dashEndX, dashEndY).stroke({ color: 0xffdd11, width: 3, alpha: 0.6 });
-        g.circle(dashEndX, dashEndY, 10).stroke({ color: 0xffdd11, width: 2, alpha: 0.4 });
+
+        // AOE Slam charge-up: expanding pulse ring
+        if (e.phase === 10) {
+          const chargeRatio = Math.max(0, 1 - e.phaseTimer / 0.8);
+          const aoeR = chargeRatio * 120 + er;
+          const pA = 0.35 + Math.sin(this.elapsed * 20) * 0.2;
+          g.circle(ex, ey, aoeR).stroke({ color: 0xff6600, width: 3, alpha: pA });
+          g.circle(ex, ey, aoeR * 0.5).fill({ color: 0xff6600, alpha: 0.12 * chargeRatio });
+        }
+        // AOE detonation flash
+        if (e.phase === 11) {
+          const flashA = e.phaseTimer / 0.2;
+          g.circle(ex, ey, 120 + er).fill({ color: 0xff8800, alpha: 0.25 * flashA });
+          g.circle(ex, ey, 120 + er).stroke({ color: 0xff6600, width: 4, alpha: 0.9 * flashA });
+        }
+        // Dash charge: preview trail line
+        if (e.phase === 20) {
+          const trailLen = 280;
+          const tx = ex + Math.cos(e.lockAngle) * trailLen;
+          const ty = ey + Math.sin(e.lockAngle) * trailLen;
+          const ta = 0.2 + Math.sin(this.elapsed * 14) * 0.12;
+          g.moveTo(ex, ey).lineTo(tx, ty).stroke({ color: 0xff3300, width: 4, alpha: ta });
+          g.circle(tx, ty, 10).stroke({ color: 0xff3300, width: 2, alpha: ta + 0.15 });
+        }
+        // Dashing: speed trail
+        if (e.phase === 21) {
+          const trailBack = v2fromAngle(e.lockAngle + Math.PI, er * 3);
+          g.moveTo(ex, ey).lineTo(ex + trailBack.x, ey + trailBack.y)
+            .stroke({ color: 0xff6600, width: er * 2, alpha: 0.3 });
+        }
       }
 
       if (e.hp < e.maxHp) {
