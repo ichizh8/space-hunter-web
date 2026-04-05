@@ -140,6 +140,36 @@ export class GameMap {
     // Deep space background
     gfx.rect(0, 0, WORLD_W, WORLD_H).fill(0x020208);
 
+    // ── Biome ground layers (drawn before stars so stars sit on top) ──────────
+
+    // River bank — wide blue-tinted floor along each river
+    for (const river of this.rivers) {
+      if (river.points.length < 2) continue;
+      gfx.moveTo(river.points[0].x, river.points[0].y);
+      for (let i = 1; i < river.points.length; i++) gfx.lineTo(river.points[i].x, river.points[i].y);
+      gfx.stroke({ color: 0x001833, width: river.width * 4, alpha: 0.75 });
+      gfx.moveTo(river.points[0].x, river.points[0].y);
+      for (let i = 1; i < river.points.length; i++) gfx.lineTo(river.points[i].x, river.points[i].y);
+      gfx.stroke({ color: 0x0033aa, width: river.width * 1.5, alpha: 0.25 });
+    }
+
+    // Cave — very dark brownish ground fill
+    for (const cave of this.caves) {
+      gfx.circle(cave.pos.x, cave.pos.y, cave.radius * 1.3).fill({ color: 0x080405, alpha: 0.92 });
+      // Subtle rocky floor dots
+      for (let d = 0; d < 18; d++) {
+        const a = (d / 18) * Math.PI * 2;
+        const r = cave.radius * (0.2 + (d % 5) * 0.14);
+        gfx.circle(cave.pos.x + Math.cos(a) * r, cave.pos.y + Math.sin(a) * r, 2 + (d % 3)).fill({ color: 0x1a1015, alpha: 0.7 });
+      }
+    }
+
+    // Void pool — dark purple ground extending beyond the active pool
+    for (const vp of this.voidPools) {
+      gfx.circle(vp.pos.x, vp.pos.y, vp.radius * 2.8).fill({ color: 0x0d0015, alpha: 0.8 });
+      gfx.circle(vp.pos.x, vp.pos.y, vp.radius * 1.8).fill({ color: 0x180025, alpha: 0.5 });
+    }
+
     // Stars
     for (const star of this.stars) {
       gfx.circle(star.x, star.y, star.size).fill({ color: 0xffffff, alpha: star.brightness * 0.6 });
@@ -200,9 +230,83 @@ export class GameMap {
     gfx.rect(4, 4, WORLD_W - 8, WORLD_H - 8).stroke({ color: 0xcc2200, width: 1, alpha: 0.15 });
   }
 
-  /** Draw dynamic elements — void pools pulsing + twinkling stars */
-  drawDynamic(gfx: Graphics, time: number) {
+  /** Draw dynamic elements — void pools pulsing + twinkling stars + biome particles */
+  drawDynamic(gfx: Graphics, time: number, _px = 0, _py = 0) {
     gfx.clear();
+
+    // ── Biome particles ───────────────────────────────────────────────────────
+
+    // OPEN — dust motes drifting slowly (deterministic virtual particles)
+    for (let i = 0; i < 240; i++) {
+      const bx = (i * 157.31 + 80) % WORLD_W;
+      const by = (i * 211.73 + 80) % WORLD_H;
+      if (this.getBiome(bx, by) !== 'open') continue;
+      const ox = Math.sin(time * 0.4 + i * 2.71) * 10;
+      const oy = Math.cos(time * 0.35 + i * 1.41) * 10;
+      const alpha = 0.12 + Math.sin(time * 1.8 + i * 0.9) * 0.08;
+      gfx.circle(bx + ox, by + oy, 0.8 + (i % 3) * 0.35).fill({ color: 0xb8b8d8, alpha });
+    }
+
+    // RIVER BANK — animated wavy horizontal lines + blue mist particles
+    for (const river of this.rivers) {
+      if (river.points.length < 2) continue;
+      // 3 wavy overlay lines per river, shifting with time
+      for (let w = 0; w < 3; w++) {
+        const sideOffset = (w - 1) * river.width * 0.28;
+        const phase = time * (0.9 + w * 0.25) + w * 1.3;
+        gfx.moveTo(river.points[0].x + sideOffset + Math.sin(phase) * 5, river.points[0].y);
+        for (let j = 1; j < river.points.length; j++) {
+          const t = j / (river.points.length - 1);
+          const wx = river.points[j].x + sideOffset + Math.sin(phase + t * Math.PI * 3.5) * 9;
+          gfx.lineTo(wx, river.points[j].y);
+        }
+        gfx.stroke({ color: 0x3388ff, width: 1.5, alpha: 0.15 + w * 0.06 });
+      }
+      // Blue mist particles drifting along river
+      for (let m = 0; m < 18; m++) {
+        const t = (m / 18 + time * 0.018) % 1;
+        const si = Math.floor(t * (river.points.length - 1));
+        const st = t * (river.points.length - 1) - si;
+        const ra = river.points[si], rb = river.points[Math.min(si + 1, river.points.length - 1)];
+        const mx = ra.x + (rb.x - ra.x) * st + Math.sin(time * 1.8 + m * 1.7) * river.width * 0.38;
+        const my = ra.y + (rb.y - ra.y) * st + Math.cos(time * 1.3 + m * 2.1) * river.width * 0.28;
+        const ma = 0.2 + Math.sin(time * 2.5 + m) * 0.12;
+        gfx.circle(mx, my, 2 + (m % 4) * 0.7).fill({ color: 0x55bbff, alpha: ma });
+      }
+    }
+
+    // CAVE — crystal sparkle particles
+    for (const cave of this.caves) {
+      for (let c = 0; c < 16; c++) {
+        const angle = (c / 16) * Math.PI * 2 + c * 0.3;
+        const r = cave.radius * (0.25 + (c % 5) * 0.12);
+        const cx = cave.pos.x + Math.cos(angle) * r;
+        const cy = cave.pos.y + Math.sin(angle) * r;
+        const sparkle = 0.5 + Math.sin(time * (1.8 + c * 0.6) + c * 1.7) * 0.5;
+        if (sparkle < 0.45) continue;
+        const sz = 1 + sparkle * 1.8;
+        gfx.circle(cx, cy, sz).fill({ color: 0x99ddff, alpha: sparkle * 0.55 });
+        gfx.moveTo(cx - sz * 2.5, cy).lineTo(cx + sz * 2.5, cy)
+          .stroke({ color: 0xbbeeff, width: 0.5, alpha: sparkle * 0.35 });
+        gfx.moveTo(cx, cy - sz * 2.5).lineTo(cx, cy + sz * 2.5)
+          .stroke({ color: 0xbbeeff, width: 0.5, alpha: sparkle * 0.35 });
+      }
+    }
+
+    // VOID POOL — purple corruption particles floating upward
+    for (const vp of this.voidPools) {
+      for (let p = 0; p < 22; p++) {
+        const angle = (p / 22) * Math.PI * 2 + p * 0.19;
+        const baseR = (p % 5 + 1) * (vp.radius * 0.17);
+        // Upward drift: each particle cycles from bottom to top of the pool
+        const upCycle = ((time * (8 + p * 2.5) + p * 13.7) % (vp.radius * 2)) - vp.radius;
+        const vx = vp.pos.x + Math.cos(angle) * baseR + Math.sin(time * 1.2 + p * 0.8) * 6;
+        const vy = vp.pos.y + Math.sin(angle) * baseR * 0.5 - upCycle * 0.55;
+        if (Math.hypot(vx - vp.pos.x, vy - vp.pos.y) > vp.radius * 1.15) continue;
+        const pa = 0.28 + Math.sin(time * 2.2 + p * 1.1) * 0.18;
+        gfx.circle(vx, vy, 1.5 + (p % 3) * 0.8).fill({ color: 0x9933ff, alpha: pa });
+      }
+    }
 
     // Void pools — pulsing red/purple singularities (HAL's eye)
     for (const vp of this.voidPools) {
