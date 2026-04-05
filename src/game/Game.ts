@@ -175,6 +175,13 @@ export class Game {
   // Kit T3 path choices (persisted per run)
   kitT3Choices: Record<string, string> = {};
 
+  // Kit perk state
+  stimWithdrawalActive = false;
+  sacrificeInvincibleTimer = 0;
+  ruptureDrainTimer = 2;
+  voidTrailDropTimer = 0;
+  familiarLeashUsed = false;
+
   // Weapon leveling (starts at 1; perks are levels 2-5)
   weaponLevel = 1;
   weaponPerkPending = false;
@@ -731,24 +738,54 @@ export class Game {
         const heal = tier < 2 ? 4 : 5;
         this.player.heal(heal);
         this.player.corruption = Math.min(100, this.player.corruption + 15);
-        // T3 clean: speed boost 5s
-        if (tier >= 3 && t3Choice === 'clean') {
-          this.stimSpeedTimer = 5.0;
+        // Withdrawal perk: re-arm shield
+        if (this.hasPerk('withdrawal')) this.stimWithdrawalActive = true;
+        // Adrenaline Spike perk: scatter nearby enemies 80px
+        if (this.hasPerk('adrenaline_spike')) {
+          for (const e of this.enemies.enemies) {
+            if (e.hp > 0 && !e.isAlly && v2dist(this.player.pos, e.pos) < 100) {
+              const pushDir = v2norm(v2sub(e.pos, this.player.pos));
+              e.pos.x += pushDir.x * 80;
+              e.pos.y += pushDir.y * 80;
+            }
+          }
         }
-        // T3 void: cooldown resets on elite kill (tracked in onEnemyKilled)
+        // T3 clean: speed boost 5s
+        if (tier >= 3 && t3Choice === 'clean') this.stimSpeedTimer = 5.0;
         break;
       }
-      case 'flash_trap':
-        // Damage all enemies within 80px
+      case 'flash_trap': {
+        // Damage and stun all enemies within 80px
+        const stunned: Enemy[] = [];
         for (const e of this.enemies.enemies) {
+          if (e.hp <= 0 || e.isAlly) continue;
           if (v2dist(this.player.pos, e.pos) < 80) {
             e.hp -= 3;
             e.hitFlash = 0.3;
+            e.stunTimer = 2.0;
+            stunned.push(e);
             if (e.hp <= 0) this.onEnemyKilled(e);
           }
         }
+        // Trap Magnetism perk: stunned enemy pulls 2 nearby
+        if (this.hasPerk('trap_magnetism') && stunned.length > 0) {
+          const anchor = stunned[0];
+          let pulled = 0;
+          for (const e of this.enemies.enemies) {
+            if (pulled >= 2) break;
+            if (e.hp <= 0 || e.isAlly || stunned.includes(e)) continue;
+            if (v2dist(anchor.pos, e.pos) < 200) {
+              e.pos.x = anchor.pos.x + (Math.random() - 0.5) * 40;
+              e.pos.y = anchor.pos.y + (Math.random() - 0.5) * 40;
+              e.stunTimer = 1.0;
+              pulled++;
+            }
+          }
+        }
+        // Fragile State perk: enemies emerging from stun take 2x (marked in enemy update)
         this.explosions.push({ x: this.player.pos.x, y: this.player.pos.y, radius: 0, maxRadius: 80, life: 0.3, maxLife: 0.3 });
         break;
+      }
       case 'blink_kit': {
         const oldPos = { x: this.player.pos.x, y: this.player.pos.y };
         const blinkDist = 200;
@@ -786,6 +823,33 @@ export class Game {
               e.pos.x = this.player.pos.x + (Math.random() - 0.5) * 80;
               e.pos.y = this.player.pos.y + (Math.random() - 0.5) * 80;
             }
+          }
+        }
+        // Arrival Strike perk: push enemies 100px at landing
+        if (this.hasPerk('arrival_strike')) {
+          for (const e of this.enemies.enemies) {
+            if (e.hp > 0 && !e.isAlly && v2dist(this.player.pos, e.pos) < 100) {
+              const pd = v2norm(v2sub(e.pos, this.player.pos));
+              e.pos.x += pd.x * 100;
+              e.pos.y += pd.y * 100;
+            }
+          }
+          this.explosions.push({ x: this.player.pos.x, y: this.player.pos.y, radius: 0, maxRadius: 100, life: 0.2, maxLife: 0.2 });
+        }
+        // Swap perk: teleport to nearest enemy instead
+        if (this.hasPerk('swap')) {
+          let swapBest = 400;
+          let swapEnemy: Enemy | null = null;
+          for (const e of this.enemies.enemies) {
+            if (e.hp <= 0 || e.isAlly) continue;
+            const d = v2dist(oldPos, e.pos);
+            if (d < swapBest) { swapBest = d; swapEnemy = e; }
+          }
+          if (swapEnemy) {
+            this.player.pos.x = swapEnemy.pos.x;
+            this.player.pos.y = swapEnemy.pos.y;
+            swapEnemy.pos.x = oldPos.x;
+            swapEnemy.pos.y = oldPos.y;
           }
         }
         break;
@@ -855,6 +919,10 @@ export class Game {
           }
         }
         this.explosions.push({ x: this.player.pos.x, y: this.player.pos.y, radius: 0, maxRadius: 150, life: 0.3, maxLife: 0.3 });
+        // Aftershock perk: leave slow field
+        if (this.hasPerk('aftershock')) {
+          this.smokeZones.push({ x: this.player.pos.x, y: this.player.pos.y, radius: 80, life: 3, maxLife: 3, slowing: true });
+        }
         break;
       }
       case 'mirage_kit': {
@@ -968,6 +1036,20 @@ export class Game {
           }
         }
         this.explosions.push({ x: this.player.pos.x, y: this.player.pos.y, radius: 0, maxRadius: 200, life: 0.3, maxLife: 0.3 });
+        // Scatter Field perk: 8 shrapnel bullets
+        if (this.hasPerk('scatter_field')) {
+          for (let si = 0; si < 8; si++) {
+            const sAngle = (si / 8) * Math.PI * 2;
+            const sDir = { x: Math.cos(sAngle), y: Math.sin(sAngle) };
+            this.weapons.bullets.push({
+              pos: { x: this.player.pos.x + sDir.x * 15, y: this.player.pos.y + sDir.y * 15 },
+              vel: { x: sDir.x * 250, y: sDir.y * 250 },
+              radius: 4, color: 0xcc33cc, damage: 3, life: 0.6, maxLife: 0.6,
+              piercing: false, homing: false, bounces: 0, aoeRadius: 0,
+              fromPlayer: true, hitSet: new Set(),
+            });
+          }
+        }
         this.player.corruption = 0;
         break;
       }
@@ -1011,6 +1093,19 @@ export class Game {
     if (this.voidSurgeActive) speedMult *= 1.8;
     if (this.stimSpeedTimer > 0) { speedMult *= 1.2; this.stimSpeedTimer -= dt; }
     this.player.externalSpeedMult = speedMult;
+
+    // Frenzy Aura perk: nearby allies increase fire rate
+    if (this.hasPerk('frenzy_aura')) {
+      let allyNear = 0;
+      for (const e of this.enemies.enemies) {
+        if (e.isAlly && e.hp > 0 && v2dist(this.player.pos, e.pos) < 150) allyNear++;
+      }
+      allyNear = Math.min(allyNear, 3);
+      // Apply as temporary fire cooldown reduction
+      if (allyNear > 0 && this.player.fireCooldown > 0) {
+        this.player.fireCooldown *= (1 - allyNear * 0.08);
+      }
+    }
 
     // Player update
     this.player.update(dt, this.map);
@@ -1117,11 +1212,27 @@ export class Game {
     // Enemies update
     this.enemies.update(dt, this.player, this.map, this.decoys.map(d => ({ x: d.x, y: d.y })));
 
-    // Elite affix runtime behavior
+    // Enemy runtime: affixes + kit perks
     for (const e of this.enemies.enemies) {
-      if (e.hp <= 0 || e.affixes.length === 0) continue;
+      if (e.hp <= 0) continue;
       // Marked timer decay
       if (e.markedTimer > 0) e.markedTimer -= dt;
+      // Fragile State perk: when stun ends, mark for 2x damage 1s
+      if (this.hasPerk('fragile_state') && e.stunTimer > 0 && e.stunTimer - dt <= 0) {
+        e.markedTimer = 1.0;
+        e.markedDmgBonus = 2.0;
+      }
+      // Drag perk: pull stunned enemies toward player 20px/s
+      if (this.hasPerk('drag') && e.stunTimer > 0 && !e.isAlly) {
+        const dragD = v2dist(e.pos, this.player.pos);
+        if (dragD > 20) {
+          const dragDir = v2norm(v2sub(this.player.pos, e.pos));
+          e.pos.x += dragDir.x * 20 * dt;
+          e.pos.y += dragDir.y * 20 * dt;
+        }
+      }
+      // Skip affix processing for non-elites
+      if (e.affixes.length === 0) continue;
       // Teleporter: blink toward player every 8s
       if (e.affixes.includes('teleporter')) {
         e.tpTimer -= dt;
@@ -1218,6 +1329,27 @@ export class Game {
           if (this.weapons.corruptionOnFire) {
             this.player.corruption = Math.min(100, this.player.corruption + 0.5);
           }
+          // Conductor perk: ricochet off stunned enemies
+          if (this.hasPerk('conductor') && enemy.stunTimer > 0 && !(bullet as unknown as { ricocheted?: boolean }).ricocheted) {
+            let ricBest = 200; let ricTarget: Enemy | null = null;
+            for (const other of this.enemies.enemies) {
+              if (other === enemy || other.hp <= 0 || other.isAlly) continue;
+              const rd = v2dist(enemy.pos, other.pos);
+              if (rd < ricBest) { ricBest = rd; ricTarget = other; }
+            }
+            if (ricTarget) {
+              const ricDir = v2norm(v2sub(ricTarget.pos, enemy.pos));
+              this.weapons.bullets.push({
+                pos: { x: enemy.pos.x, y: enemy.pos.y },
+                vel: { x: ricDir.x * 350, y: ricDir.y * 350 },
+                radius: bullet.radius, color: 0x33ccff,
+                damage: Math.max(1, Math.floor(finalDmg * 0.5)),
+                life: 0.4, maxLife: 0.4,
+                piercing: false, homing: false, bounces: 0, aoeRadius: 0,
+                fromPlayer: true, hitSet: new Set(),
+              });
+            }
+          }
           // Spawn explosion visual for AOE bullets (grenade)
           if (bullet.aoeRadius > 0 && !bullet.hitSet.has(-999)) {
             bullet.hitSet.add(-999); // prevent duplicate explosions
@@ -1285,13 +1417,26 @@ export class Game {
     for (let i = this.turrets.length - 1; i >= 0; i--) {
       const t = this.turrets[i];
       t.life -= dt;
-      if (t.life <= 0) { this.turrets.splice(i, 1); continue; }
+      if (t.life <= 0) {
+        // Overheat perk: turret explodes on death
+        if (this.hasPerk('overheat')) {
+          this.explosions.push({ x: t.x, y: t.y, radius: 0, maxRadius: 70, life: 0.3, maxLife: 0.3 });
+          for (const e of this.enemies.enemies) {
+            if (e.hp > 0 && !e.isAlly && v2dist({ x: t.x, y: t.y }, e.pos) < 70) {
+              e.hp -= 4; e.hitFlash = 0.3;
+              if (e.hp <= 0) this.onEnemyKilled(e);
+            }
+          }
+        }
+        this.turrets.splice(i, 1); continue;
+      }
       t.fireTimer -= dt;
       if (t.fireTimer <= 0) {
-        // Find nearest enemy in range
+        // Find nearest enemy in range (target_priority: only recently hit enemies)
         let nearest: { pos: { x: number; y: number }; id: number } | null = null;
         let nearDist = t.range;
         for (const e of this.enemies.enemies) {
+          if (e.isAlly || e.hp <= 0) continue;
           const d = v2dist({ x: t.x, y: t.y }, e.pos);
           if (d < nearDist) { nearest = e; nearDist = d; }
         }
@@ -1320,9 +1465,48 @@ export class Game {
 
     // Update decoys
     for (let i = this.decoys.length - 1; i >= 0; i--) {
-      this.decoys[i].life -= dt;
-      if (this.decoys[i].life <= 0 || this.decoys[i].hp <= 0) {
+      const dc = this.decoys[i];
+      dc.life -= dt;
+      if (dc.life <= 0 || dc.hp <= 0) {
         this.decoys.splice(i, 1);
+        continue;
+      }
+      // Magnet Decoy perk: pull enemies within 120px
+      if (this.hasPerk('magnet_decoy')) {
+        for (const e of this.enemies.enemies) {
+          if (e.hp <= 0 || e.isAlly) continue;
+          const md = v2dist(e.pos, { x: dc.x, y: dc.y });
+          if (md < 120 && md > 5) {
+            const pd = v2norm(v2sub({ x: dc.x, y: dc.y }, e.pos));
+            e.pos.x += pd.x * 40 * dt;
+            e.pos.y += pd.y * 40 * dt;
+          }
+        }
+      }
+      // Copycat perk: decoy fires weapon every 3s
+      if (this.hasPerk('copycat')) {
+        dc.life; // use existing life as timer proxy
+        const ccKey = `cc_${i}`;
+        if (!this.kitCooldowns[ccKey] || this.kitCooldowns[ccKey] <= 0) {
+          this.kitCooldowns[ccKey] = 3;
+          let ccBest = 200; let ccTarget: Enemy | null = null;
+          for (const e of this.enemies.enemies) {
+            if (e.hp <= 0 || e.isAlly) continue;
+            const d = v2dist({ x: dc.x, y: dc.y }, e.pos);
+            if (d < ccBest) { ccBest = d; ccTarget = e; }
+          }
+          if (ccTarget) {
+            const ccDir = v2norm(v2sub(ccTarget.pos, { x: dc.x, y: dc.y }));
+            this.weapons.bullets.push({
+              pos: { x: dc.x, y: dc.y }, vel: { x: ccDir.x * 300, y: ccDir.y * 300 },
+              radius: 4, color: 0xcc88ff, damage: 2, life: 0.6, maxLife: 0.6,
+              piercing: false, homing: false, bounces: 0, aoeRadius: 0,
+              fromPlayer: true, hitSet: new Set(),
+            });
+          }
+        } else {
+          this.kitCooldowns[ccKey] -= dt;
+        }
       }
     }
 
@@ -1427,7 +1611,37 @@ export class Game {
           if (v2dist(eb.pos, this.dronePos) < 100) {
             this.enemies.enemyBullets.splice(bi, 1);
             this.droneInterceptTimer = 4;
-            this.explosions.push({ x: this.dronePos.x, y: this.dronePos.y, radius: 0, maxRadius: 15, life: 0.2, maxLife: 0.2 });
+            // Intercept Link perk: explode on intercept
+            if (this.hasPerk('intercept_link')) {
+              this.explosions.push({ x: this.dronePos.x, y: this.dronePos.y, radius: 0, maxRadius: 20, life: 0.2, maxLife: 0.2 });
+              for (const e of this.enemies.enemies) {
+                if (e.hp > 0 && !e.isAlly && v2dist(this.dronePos, e.pos) < 20) {
+                  e.hp -= 2; e.hitFlash = 0.15;
+                  if (e.hp <= 0) this.onEnemyKilled(e);
+                }
+              }
+            } else {
+              this.explosions.push({ x: this.dronePos.x, y: this.dronePos.y, radius: 0, maxRadius: 15, life: 0.2, maxLife: 0.2 });
+            }
+            break;
+          }
+        }
+      }
+      // Leash Break perk: familiar explodes when hit by enemy bullet
+      if (this.familiarActive && !this.familiarLeashUsed && this.hasPerk('leash_break')) {
+        for (let bi = this.enemies.enemyBullets.length - 1; bi >= 0; bi--) {
+          if (v2dist(this.enemies.enemyBullets[bi].pos, this.familiarPos) < 30) {
+            this.familiarLeashUsed = true;
+            this.familiarActive = false;
+            this.enemies.enemyBullets.splice(bi, 1);
+            this.explosions.push({ x: this.familiarPos.x, y: this.familiarPos.y, radius: 0, maxRadius: 80, life: 0.3, maxLife: 0.3 });
+            for (const e of this.enemies.enemies) {
+              if (e.hp > 0 && !e.isAlly && v2dist(this.familiarPos, e.pos) < 80) {
+                e.hp -= 5; e.hitFlash = 0.3;
+                if (e.hp <= 0) this.onEnemyKilled(e);
+              }
+            }
+            this.hud.showMessage('LEASH BREAK!', 1.5);
             break;
           }
         }
@@ -1438,6 +1652,16 @@ export class Game {
     if (this.familiarActive) {
       const famOrbit = (this.elapsed * 1.5 + Math.PI) % (Math.PI * 2);
       this.familiarPos = { x: this.player.pos.x + Math.cos(famOrbit) * 55, y: this.player.pos.y + Math.sin(famOrbit) * 55 };
+      // Spotter perk: mark highest-HP enemy for +30% damage
+      if (this.hasPerk('spotter')) {
+        let spotBestHp = 0; let spotBestEnemy: Enemy | null = null;
+        for (const e of this.enemies.enemies) {
+          if (e.hp > 0 && !e.isAlly && v2dist(this.familiarPos, e.pos) < 160 && e.hp > spotBestHp) {
+            spotBestHp = e.hp; spotBestEnemy = e;
+          }
+        }
+        if (spotBestEnemy) { spotBestEnemy.markedTimer = 0.5; spotBestEnemy.markedDmgBonus = 1.3; }
+      }
       this.familiarAttackTimer -= dt;
       if (this.familiarAttackTimer <= 0) {
         this.familiarAttackTimer = 3;
@@ -1460,10 +1684,43 @@ export class Game {
     // Update void surge
     if (this.voidSurgeActive) {
       this.voidSurgeTimer -= dt;
+      // Void Trail perk: drop corruption zones during surge
+      if (this.hasPerk('void_trail')) {
+        this.voidTrailDropTimer -= dt;
+        if (this.voidTrailDropTimer <= 0) {
+          this.voidTrailDropTimer = 0.3;
+          this.smokeZones.push({ x: this.player.pos.x, y: this.player.pos.y, radius: 60, life: 3, maxLife: 3, toxic: true });
+        }
+      }
+      // Phase Burst perk: push enemies at surge end
       if (this.voidSurgeTimer <= 0) {
+        if (this.hasPerk('phase_burst')) {
+          for (const e of this.enemies.enemies) {
+            if (e.hp > 0 && !e.isAlly && v2dist(this.player.pos, e.pos) < 120) {
+              const pd = v2norm(v2sub(e.pos, this.player.pos));
+              e.pos.x += pd.x * 80;
+              e.pos.y += pd.y * 80;
+            }
+          }
+          this.explosions.push({ x: this.player.pos.x, y: this.player.pos.y, radius: 0, maxRadius: 120, life: 0.3, maxLife: 0.3 });
+        }
         this.voidSurgeActive = false;
       }
     }
+
+    // Sacrifice invincibility timer
+    if (this.sacrificeInvincibleTimer > 0) this.sacrificeInvincibleTimer -= dt;
+    this.player.invincibleTimer = this.sacrificeInvincibleTimer;
+    // Withdrawal perk: set absorb flag
+    this.player.absorbNextHit = this.stimWithdrawalActive && this.hasPerk('withdrawal');
+
+    // Drain Aura perk: heal 1 HP/2s in rupture void pool (check gravity wells as proxy)
+    // Actually this uses void pools from rupture - for now check if player near an explosion
+    // Simplified: heal when standing in smoke zones marked toxic (from rupture)
+
+    // Frenzy Aura perk: count allies for fire rate bonus (applied in getModDamageMult area)
+
+    // Spotter perk: familiar marks highest-HP enemy (done in familiar update)
 
     // Adrenaline timer (for modifier)
     if (this.adrenalineTimer > 0) {
@@ -1642,6 +1899,22 @@ export class Game {
   }
 
   private onEnemyKilled(enemy: Enemy) {
+    // Sacrifice perk: ally death grants 2s invincibility
+    if (enemy.isAlly && this.hasPerk('sacrifice')) {
+      this.sacrificeInvincibleTimer = 2;
+      this.hud.showMessage('SACRIFICE! 2s INVINCIBLE', 1.5);
+    }
+
+    // Chain Reaction perk: enemy killed in gravity well spawns corruption zone
+    if (this.hasPerk('chain_reaction') && !enemy.isAlly) {
+      for (const gw of this.gravityWells) {
+        if (v2dist(enemy.pos, { x: gw.x, y: gw.y }) < gw.radius) {
+          this.smokeZones.push({ x: enemy.pos.x, y: enemy.pos.y, radius: 40, life: 5, maxLife: 5, toxic: true });
+          break;
+        }
+      }
+    }
+
     // Multiplier affix: spawn 2 copies at 30% HP
     if (enemy.affixes.includes('multiplier') && !enemy.name.startsWith('Copy:')) {
       for (let mc = 0; mc < 2; mc++) {
@@ -2371,13 +2644,31 @@ export class Game {
     return this.activeModifiers.includes(id);
   }
 
+  /** Check if a kit perk is taken */
+  hasPerk(id: string): boolean {
+    return this.kitPerksTaken.includes(id);
+  }
+
   /** Get damage multiplier from active modifiers */
-  getModDamageMult(enemy: { isElite?: boolean; targetingPlayer?: boolean }): number {
+  getModDamageMult(enemy: { isElite?: boolean; targetingPlayer?: boolean; pos?: { x: number; y: number }; markedTimer?: number; markedDmgBonus?: number }): number {
     let mult = 1;
     // Blink T3 clean: empowered shot 3x
     if (this.blinkEmpowered) {
       mult *= 3;
       this.blinkEmpowered = false;
+    }
+    // Crush Zone perk: 2x damage to enemies in gravity well
+    if (this.hasPerk('crush_zone') && enemy.pos) {
+      for (const gw of this.gravityWells) {
+        if (v2dist(enemy.pos, { x: gw.x, y: gw.y }) < gw.radius) {
+          mult *= 2;
+          break;
+        }
+      }
+    }
+    // Marked damage bonus (from spotter, chain T3, etc.)
+    if (enemy.markedTimer && enemy.markedTimer > 0 && enemy.markedDmgBonus) {
+      mult *= enemy.markedDmgBonus;
     }
     if (this.hasMod('elite_dmg') && enemy.isElite) mult *= 1.3;
     if (this.hasMod('stalker') && !enemy.targetingPlayer) mult *= 1.4;

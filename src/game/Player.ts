@@ -128,10 +128,22 @@ export class Player {
   /** corruptionResist multiplier (0.75 when modifier active) */
   corruptionResistMult = 1.0;
 
+  // External damage absorption (set by Game for withdrawal/sacrifice perks)
+  absorbNextHit = false;
+  invincibleTimer = 0;
+
   takeDamage(amount: number): boolean {
     if (this.iFrames > 0) return false;
     // Dodge check
     if (this.dodgeChance > 0 && Math.random() < this.dodgeChance) return false;
+    // Sacrifice invincibility
+    if (this.invincibleTimer > 0) return false;
+    // Withdrawal absorption
+    if (this.absorbNextHit) {
+      this.absorbNextHit = false;
+      this.iFrames = 0.3;
+      return false;
+    }
     this.hp -= amount;
     this.iFrames = 0.3;
     this.hitFlash = 0.15;
