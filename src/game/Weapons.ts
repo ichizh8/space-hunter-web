@@ -19,7 +19,7 @@ export interface Bullet {
   hitSet: Set<number>; // enemy IDs already hit
   tag?: string;       // optional identifier for special bullet types
   aimAngle?: number;  // aim angle at fire time (used for arc filtering)
-  lineStart?: Vec2;   // line-slash endpoints (baton_slash)
+  lineStart?: Vec2;   // line-slash endpoints (plasma_slash)
   lineEnd?: Vec2;
 }
 
@@ -53,6 +53,7 @@ export class WeaponSystem {
   executeThreshold = 0;
   slowOnHit = false;
   burnOnHit = false;
+  deflect = false;
 
   // Runtime state (updated each frame by Game)
   corruptionLevel = 0;
@@ -123,25 +124,22 @@ export class WeaponSystem {
         return [makeBullet(angle, { piercing: true })];
 
       case 'melee_aoe': {
-        // Line-slash hitbox: a segment perpendicular to aim direction, ~110px wide, 55px ahead
-        const offsetDist = 55;
-        const halfLen = 55;
-        const cx = pos.x + Math.cos(angle) * offsetDist;
-        const cy = pos.y + Math.sin(angle) * offsetDist;
-        // Perpendicular direction
-        const px = -Math.sin(angle);
-        const py = Math.cos(angle);
-        const lineStart = v2(cx - px * halfLen, cy - py * halfLen);
-        const lineEnd   = v2(cx + px * halfLen, cy + py * halfLen);
+        // Plasma Sword: blade extends from player center, sweeps from aimAngle-70° to aimAngle+70°
+        const DEG70 = 70 * Math.PI / 180;
+        const sweepStartAngle = angle - DEG70;
+        const innerDist = 15;
+        const outerDist = 110 + this.radiusBonus;
+        const lineStart = v2(pos.x + Math.cos(sweepStartAngle) * innerDist, pos.y + Math.sin(sweepStartAngle) * innerDist);
+        const lineEnd   = v2(pos.x + Math.cos(sweepStartAngle) * outerDist, pos.y + Math.sin(sweepStartAngle) * outerDist);
         return [makeBullet(angle, {
-          pos: v2(cx, cy),
+          pos: v2(pos.x, pos.y),
           vel: v2(0, 0),
           radius: 4, // not used for collision; kept small
           life: 0.25,
           maxLife: 0.25,
           piercing: true,
           hitSet: new Set(),
-          tag: 'baton_slash',
+          tag: 'plasma_slash',
           aimAngle: angle,
           lineStart,
           lineEnd,

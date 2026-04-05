@@ -5,7 +5,7 @@ import { Player } from './Player';
 import { WeaponSystem } from './Weapons';
 import { EnemySystem, type Enemy, createEnemy } from './Enemies';
 import { HUD } from './HUD';
-import { v2dist, v2, v2sub, v2norm, v2mul, randRange, lineSegHitsCircle } from '../lib/math';
+import { v2dist, v2, v2sub, v2norm, v2mul, v2len, v2fromAngle, randRange, lineSegHitsCircle } from '../lib/math';
 import {
   PLAYER_BASE_HP, PLAYER_BASE_SPEED, WORLD_W, WORLD_H,
   PLAYER_COLOR, XP_PER_LEVEL, MAX_LEVEL, POST_CAP_XP
@@ -1309,13 +1309,25 @@ export class Game {
     // Player bullets update
     this.weapons.update(dt, this.enemies.enemies.map(e => ({ pos: e.pos, id: e.id })));
 
+    // Plasma Sword: update sweep angle each frame (aimAngle-70° → aimAngle+70° over lifetime)
+    const _PLASMA_DEG70 = 70 * Math.PI / 180;
+    for (const b of this.weapons.bullets) {
+      if (b.tag === 'plasma_slash' && b.aimAngle !== undefined) {
+        const progress = 1 - (b.life / b.maxLife);
+        const sweepAngle = b.aimAngle - _PLASMA_DEG70 + progress * (_PLASMA_DEG70 * 2);
+        const outerDist = 110 + this.weapons.radiusBonus;
+        b.lineStart = v2(b.pos.x + Math.cos(sweepAngle) * 15, b.pos.y + Math.sin(sweepAngle) * 15);
+        b.lineEnd   = v2(b.pos.x + Math.cos(sweepAngle) * outerDist, b.pos.y + Math.sin(sweepAngle) * outerDist);
+      }
+    }
+
     // Bullet-enemy collision
     for (const bullet of this.weapons.bullets) {
       if (!bullet.fromPlayer) continue;
       for (const enemy of this.enemies.enemies) {
-        // Baton line-slash: line-segment vs circle, bypass normal circle checkHit
+        // Plasma Sword line-slash: line-segment vs circle, bypass normal circle checkHit
         let dmg: number;
-        if (bullet.tag === 'baton_slash') {
+        if (bullet.tag === 'plasma_slash') {
           if (bullet.hitSet.has(enemy.id)) continue;
           if (!lineSegHitsCircle(bullet.lineStart!, bullet.lineEnd!, enemy.pos, enemy.radius + 8)) continue;
           bullet.hitSet.add(enemy.id);
@@ -1422,6 +1434,42 @@ export class Game {
           }
           if (enemy.hp <= 0) {
             this.onEnemyKilled(enemy);
+          }
+        }
+      }
+    }
+
+    // Plasma Sword Deflect: blade arc destroys enemy projectiles and reflects them at enemies
+    if (this.weapons.deflect) {
+      for (const pb of this.weapons.bullets) {
+        if (pb.tag !== 'plasma_slash' || !pb.lineStart || !pb.lineEnd) continue;
+        for (let bi = this.enemies.enemyBullets.length - 1; bi >= 0; bi--) {
+          const eb = this.enemies.enemyBullets[bi];
+          if (!lineSegHitsCircle(pb.lineStart, pb.lineEnd, eb.pos, eb.radius + 6)) continue;
+          const ebPos = v2(eb.pos.x, eb.pos.y);
+          this.enemies.enemyBullets.splice(bi, 1);
+          // Reflect toward nearest enemy
+          let nearestEnemy: Enemy | null = null;
+          let nearestDist = Infinity;
+          for (const e of this.enemies.enemies) {
+            if (e.hp <= 0 || e.isAlly) continue;
+            const d = v2dist(ebPos, e.pos);
+            if (d < nearestDist) { nearestDist = d; nearestEnemy = e; }
+          }
+          if (nearestEnemy) {
+            const dir = v2norm(v2sub(nearestEnemy.pos, ebPos));
+            const spd = Math.max(v2len(eb.vel), 300) * 1.5;
+            this.weapons.bullets.push({
+              pos: ebPos,
+              vel: v2mul(dir, spd),
+              radius: eb.radius,
+              color: 0x00eeff,
+              damage: eb.damage * 2,
+              life: 2.0, maxLife: 2.0,
+              piercing: false, homing: false, bounces: 0, aoeRadius: 0,
+              fromPlayer: true, hitSet: new Set(),
+              tag: 'deflected',
+            });
           }
         }
       }
@@ -2400,21 +2448,34 @@ export class Game {
 
     for (const b of this.weapons.bullets) {
       if (!this.camera.isVisible(b.pos.x, b.pos.y, b.radius * 3)) continue;
-      if (b.tag === 'baton_slash' && b.lineStart && b.lineEnd) {
-        // Line slash: bright fading stroke perpendicular to aim direction
+      if (b.tag === 'plasma_slash' && b.lineStart && b.lineEnd && b.aimAngle !== undefined) {
         const frac = b.life / b.maxLife; // 1→0 as it expires
-        // Outer glow
+        const progress = 1 - frac;
+        const DEG70 = 70 * Math.PI / 180;
+        const outerDist = 110 + this.weapons.radiusBonus;
+        // Trail: ghost slashes at past sweep positions
+        for (let t = 1; t <= 4; t++) {
+          const ghostProgress = Math.max(0, progress - t * 0.12);
+          const ghostAngle = b.aimAngle - DEG70 + ghostProgress * DEG70 * 2;
+          const gx1 = b.pos.x + Math.cos(ghostAngle) * 15;
+          const gy1 = b.pos.y + Math.sin(ghostAngle) * 15;
+          const gx2 = b.pos.x + Math.cos(ghostAngle) * outerDist;
+          const gy2 = b.pos.y + Math.sin(ghostAngle) * outerDist;
+          const trailAlpha = frac * (0.22 - t * 0.04);
+          if (trailAlpha > 0) {
+            g.moveTo(gx1, gy1).lineTo(gx2, gy2).stroke({ color: 0x00eeff, width: 8, alpha: trailAlpha });
+          }
+        }
+        // Current blade: outer glow, mid, white core
         g.moveTo(b.lineStart.x, b.lineStart.y)
           .lineTo(b.lineEnd.x, b.lineEnd.y)
-          .stroke({ color: b.color, width: 14, alpha: frac * 0.2 });
-        // Mid line
+          .stroke({ color: 0x00eeff, width: 18, alpha: frac * 0.2 });
         g.moveTo(b.lineStart.x, b.lineStart.y)
           .lineTo(b.lineEnd.x, b.lineEnd.y)
-          .stroke({ color: b.color, width: 5, alpha: frac * 0.75 });
-        // Core white highlight
+          .stroke({ color: 0x44ddff, width: 6, alpha: frac * 0.85 });
         g.moveTo(b.lineStart.x, b.lineStart.y)
           .lineTo(b.lineEnd.x, b.lineEnd.y)
-          .stroke({ color: 0xffffff, width: 2, alpha: frac * 0.9 });
+          .stroke({ color: 0xffffff, width: 2, alpha: frac });
         continue;
       }
       g.circle(b.pos.x, b.pos.y, b.radius * 3).fill({ color: b.color, alpha: 0.1 });
@@ -2589,6 +2650,8 @@ export class Game {
           this.weapons.knockback = true;
         } else if (card.perkEffect === 'burning') {
           this.weapons.burnOnHit = true;
+        } else if (card.perkEffect === 'deflect') {
+          this.weapons.deflect = true;
         }
         // Boolean perks stored as flags
         this.activeModifiers.push(card.id);

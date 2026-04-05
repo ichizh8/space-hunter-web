@@ -19,7 +19,7 @@ export const WEAPON_DEFS: Record<string, WeaponDef> = {
   sidearm:          { id: 'sidearm',          name: 'Pistol',   desc: 'Balanced semi-auto',        fireRate: 0.45, damage: 2, bulletSpeed: 420, bulletRadius: 4,  color: 0xffcc00, range: 220, pattern: 'single',      magSize: 12, reloadTime: 1.5 },
   scatter:          { id: 'scatter',          name: 'Scatter',  desc: 'Close-range burst',         fireRate: 0.8,  damage: 1, bulletSpeed: 360, bulletRadius: 3,  color: 0xff8844, range: 180, pattern: 'scatter',     magSize: 8,  reloadTime: 1.8 },
   lance:            { id: 'lance',            name: 'Lance',    desc: 'Piercing beam',             fireRate: 1.6,  damage: 5, bulletSpeed: 260, bulletRadius: 5,  color: 0x44ddff, range: 500, pattern: 'piercing',    magSize: 4,  reloadTime: 2.0 },
-  baton:            { id: 'baton',            name: 'Baton',    desc: 'Melee AOE',                 fireRate: 0.75, damage: 4, bulletSpeed: 0,   bulletRadius: 40, color: 0xff4444, range: 115, pattern: 'melee_aoe',   magSize: 999, reloadTime: 0 },
+  baton:            { id: 'baton',            name: 'Plasma Sword', desc: 'Energy blade',          fireRate: 0.75, damage: 4, bulletSpeed: 0,   bulletRadius: 40, color: 0x00eeff, range: 115, pattern: 'melee_aoe',   magSize: 999, reloadTime: 0 },
   dart:             { id: 'dart',             name: 'Dart',     desc: 'Homing shots',              fireRate: 1.1,  damage: 2, bulletSpeed: 180, bulletRadius: 4,  color: 0x44ff66, range: 400, pattern: 'homing',      magSize: 6,  reloadTime: 1.5 },
   flamethrower:     { id: 'flamethrower',     name: 'Flamer',   desc: 'Cone fire — burn DoT core', fireRate: 0.07, damage: 0.5, bulletSpeed: 180, bulletRadius: 9, color: 0xff6622, range: 220, pattern: 'cone_stream', magSize: 60, reloadTime: 2.5 },
   grenade_launcher: { id: 'grenade_launcher', name: 'Grenade',  desc: 'Explosive arc',             fireRate: 2.5,  damage: 8, bulletSpeed: 220, bulletRadius: 8,  color: 0xffaa00, range: 300, pattern: 'arc_aoe',     magSize: 2,  reloadTime: 2.0 },
@@ -44,6 +44,7 @@ export type WeaponPerkEffect =
   | 'bounce_extra' | 'bounce_radius'
   | 'sniper_range'
   | 'chain_slow_boost' | 'chain_autocrit'
+  | 'deflect'
   // Fork effects (level 5 for weapons without named perks at 5)
   | 'flamer_fork' | 'grenade_fork' | 'entropy_fork'
   | 'pulse_fork' | 'sniper_fork' | 'chain_fork';
@@ -76,9 +77,9 @@ export const WEAPON_LEVEL_PERKS: Record<string, Record<number, WeaponPerk>> = {
     5: { icon: '💥', name: 'Singularity',    desc: 'Explosion on impact, 60px AOE',     effect: 'explode',       value: true },
   },
   baton: {
-    2: { icon: '↔',  name: 'Extended Arc',   desc: 'AOE radius +30px',                  effect: 'radius',            value: 30 },
+    2: { icon: '↔',  name: 'Extended Arc',   desc: 'Blade reach +30px',                 effect: 'radius',            value: 30 },
     3: { icon: '💥', name: 'Shockwave',      desc: 'Enhanced knockback (100px), stuns enemies 0.5s', effect: 'damage_knockback', value: 0 },
-    4: { icon: '❤',  name: 'Life Leech',     desc: 'Each enemy hit restores 0.5 HP',    effect: 'leech',             value: true },
+    4: { icon: '🔰', name: 'Deflect',        desc: 'Blade deflects enemy projectiles back at enemies (2x dmg)', effect: 'deflect', value: true },
     5: { icon: '⚡', name: 'Chain Lightning', desc: 'Damage arcs to 2 extra enemies',   effect: 'chain',             value: true },
   },
   dart: {
