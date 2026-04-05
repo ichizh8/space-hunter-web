@@ -138,6 +138,33 @@ export class Game {
     damage: number; range: number;
   }> = [];
 
+  // Decoys (mirage_kit)
+  decoys: Array<{ x: number; y: number; hp: number; life: number; maxLife: number }> = [];
+
+  // Smoke zones (smoke_kit)
+  smokeZones: Array<{ x: number; y: number; radius: number; life: number; maxLife: number }> = [];
+
+  // Gravity wells (anchor_kit)
+  gravityWells: Array<{ x: number; y: number; radius: number; life: number; maxLife: number; pullSpeed: number }> = [];
+
+  // Drone state (drone_kit)
+  droneActive = false;
+  dronePos = v2(0, 0);
+  droneFireTimer = 0;
+  droneInterceptTimer = 0;
+
+  // Familiar state (familiar_kit)
+  familiarActive = false;
+  familiarPos = v2(0, 0);
+  familiarAttackTimer = 0;
+
+  // Void surge state
+  voidSurgeActive = false;
+  voidSurgeTimer = 0;
+
+  // Charge kit state
+  chargeCharging = false;
+
   // Weapon leveling (starts at 1; perks are levels 2-5)
   weaponLevel = 1;
   weaponPerkPending = false;
@@ -657,6 +684,122 @@ export class Game {
           damage: 2, range: 250,
         });
         break;
+      case 'chain_kit': {
+        // Fire tether toward nearest enemy, stun 3s
+        let chainNearest: Enemy | null = null;
+        let chainDist = 999999;
+        for (const e of this.enemies.enemies) {
+          if (e.hp <= 0) continue;
+          const d = v2dist(this.player.pos, e.pos);
+          if (d < chainDist) { chainDist = d; chainNearest = e; }
+        }
+        if (chainNearest) {
+          chainNearest.stunTimer = 3.0;
+          chainNearest.speed *= 0;
+          this.explosions.push({ x: chainNearest.pos.x, y: chainNearest.pos.y, radius: 0, maxRadius: 30, life: 0.3, maxLife: 0.3 });
+        }
+        break;
+      }
+      case 'charge_kit': {
+        // Knockback AOE 150px, 2 damage
+        for (const e of this.enemies.enemies) {
+          if (e.hp <= 0) continue;
+          const d = v2dist(this.player.pos, e.pos);
+          if (d < 150) {
+            const pushDir = v2norm(v2sub(e.pos, this.player.pos));
+            e.pos.x += pushDir.x * 200;
+            e.pos.y += pushDir.y * 200;
+            e.hp -= 2;
+            e.hitFlash = 0.3;
+            if (e.hp <= 0) this.onEnemyKilled(e);
+          }
+        }
+        this.explosions.push({ x: this.player.pos.x, y: this.player.pos.y, radius: 0, maxRadius: 150, life: 0.3, maxLife: 0.3 });
+        break;
+      }
+      case 'mirage_kit':
+        // Spawn decoy that draws aggro
+        this.decoys.push({
+          x: this.player.pos.x + (Math.random() - 0.5) * 40,
+          y: this.player.pos.y + (Math.random() - 0.5) * 40,
+          hp: 5, life: 6, maxLife: 6,
+        });
+        break;
+      case 'smoke_kit':
+        // Smoke zone: de-aggro enemies inside, 6s
+        this.smokeZones.push({
+          x: this.player.pos.x,
+          y: this.player.pos.y,
+          radius: 150, life: 6, maxLife: 6,
+        });
+        break;
+      case 'anchor_kit':
+        // Gravity well: pull enemies, 4s
+        this.gravityWells.push({
+          x: this.player.pos.x,
+          y: this.player.pos.y,
+          radius: 400, life: 4, maxLife: 4,
+          pullSpeed: 120,
+        });
+        break;
+      case 'drone_kit':
+        // Persistent drone that orbits, intercepts, attacks
+        this.droneActive = true;
+        this.dronePos = { x: this.player.pos.x + 50, y: this.player.pos.y };
+        this.droneFireTimer = 0;
+        this.droneInterceptTimer = 0;
+        break;
+      case 'familiar_kit':
+        // Persistent familiar that orbits and rams
+        this.familiarActive = true;
+        this.familiarPos = { x: this.player.pos.x + 60, y: this.player.pos.y };
+        this.familiarAttackTimer = 0;
+        break;
+      case 'pack_kit': {
+        // Spawn 2 ally enemies
+        for (let ai = 0; ai < 2; ai++) {
+          const angle = (ai / 2) * Math.PI * 2 + Math.random() * 0.4;
+          const spawnDist = 50 + Math.random() * 40;
+          const ally = createEnemy('Rift Parasite', {
+            x: this.player.pos.x + Math.cos(angle) * spawnDist,
+            y: this.player.pos.y + Math.sin(angle) * spawnDist,
+          });
+          ally.isAlly = true;
+          ally.hp = 8;
+          ally.maxHp = 8;
+          ally.speed = 130;
+          this.enemies.enemies.push(ally);
+        }
+        break;
+      }
+      case 'void_surge':
+        // Speed burst: spend 20 corruption for 3s +80% speed
+        if (this.player.corruption >= 20) {
+          this.player.corruption -= 20;
+          this.voidSurgeActive = true;
+          this.voidSurgeTimer = 3;
+        } else {
+          // Not enough corruption, refund cooldown
+          this.kitCooldowns[kitId] = 0;
+          this.hud.showMessage('NOT ENOUGH CORRUPTION', 1.5);
+          return;
+        }
+        break;
+      case 'rupture_kit': {
+        // AOE damage = corruption/5, clear corruption
+        const ruptureDmg = Math.floor(this.player.corruption / 5);
+        for (const e of this.enemies.enemies) {
+          if (e.hp <= 0) continue;
+          if (v2dist(this.player.pos, e.pos) < 200) {
+            e.hp -= ruptureDmg;
+            e.hitFlash = 0.3;
+            if (e.hp <= 0) this.onEnemyKilled(e);
+          }
+        }
+        this.explosions.push({ x: this.player.pos.x, y: this.player.pos.y, radius: 0, maxRadius: 200, life: 0.3, maxLife: 0.3 });
+        this.player.corruption = 0;
+        break;
+      }
       default:
         break;
     }
@@ -681,6 +824,9 @@ export class Game {
         this.kitCooldowns[kit] -= dt;
       }
     }
+
+    // Void surge speed mult
+    this.player.externalSpeedMult = this.voidSurgeActive ? 1.8 : 1.0;
 
     // Player update
     this.player.update(dt, this.map);
@@ -785,7 +931,7 @@ export class Game {
     }
 
     // Enemies update
-    this.enemies.update(dt, this.player, this.map);
+    this.enemies.update(dt, this.player, this.map, this.decoys.map(d => ({ x: d.x, y: d.y })));
 
     // Ã¢ÂÂÃ¢ÂÂ Payload escort: enemies damage pod Ã¢ÂÂÃ¢ÂÂ
     if (this.contractType === 'payload_escort' && this.podHp > 0) {
@@ -919,6 +1065,117 @@ export class Game {
             hitSet: new Set(),
           });
         }
+      }
+    }
+
+    // Update decoys
+    for (let i = this.decoys.length - 1; i >= 0; i--) {
+      this.decoys[i].life -= dt;
+      if (this.decoys[i].life <= 0 || this.decoys[i].hp <= 0) {
+        this.decoys.splice(i, 1);
+      }
+    }
+
+    // Update smoke zones
+    for (let i = this.smokeZones.length - 1; i >= 0; i--) {
+      this.smokeZones[i].life -= dt;
+      if (this.smokeZones[i].life <= 0) {
+        this.smokeZones.splice(i, 1);
+        continue;
+      }
+      // De-aggro enemies inside smoke
+      const sz = this.smokeZones[i];
+      for (const e of this.enemies.enemies) {
+        if (e.hp > 0 && !e.isAlly && v2dist(e.pos, { x: sz.x, y: sz.y }) < sz.radius) {
+          e.isAggroed = false;
+        }
+      }
+    }
+
+    // Update gravity wells
+    for (let i = this.gravityWells.length - 1; i >= 0; i--) {
+      this.gravityWells[i].life -= dt;
+      if (this.gravityWells[i].life <= 0) {
+        this.gravityWells.splice(i, 1);
+        continue;
+      }
+      const gw = this.gravityWells[i];
+      for (const e of this.enemies.enemies) {
+        if (e.hp <= 0 || e.isAlly) continue;
+        const d = v2dist(e.pos, { x: gw.x, y: gw.y });
+        if (d < gw.radius && d > 5) {
+          const pullDir = v2norm(v2sub({ x: gw.x, y: gw.y }, e.pos));
+          e.pos.x += pullDir.x * gw.pullSpeed * dt;
+          e.pos.y += pullDir.y * gw.pullSpeed * dt;
+        }
+      }
+    }
+
+    // Update drone
+    if (this.droneActive) {
+      const orbitAngle = this.elapsed * 2.0 % (Math.PI * 2);
+      this.dronePos = { x: this.player.pos.x + Math.cos(orbitAngle) * 50, y: this.player.pos.y + Math.sin(orbitAngle) * 50 };
+      this.droneInterceptTimer = Math.max(0, this.droneInterceptTimer - dt);
+      // Drone attack
+      this.droneFireTimer -= dt;
+      if (this.droneFireTimer <= 0) {
+        this.droneFireTimer = 2.5;
+        let droneBestDist = 200;
+        let droneBestEnemy: Enemy | null = null;
+        for (const e of this.enemies.enemies) {
+          if (e.hp <= 0 || e.isAlly) continue;
+          const d = v2dist(this.dronePos, e.pos);
+          if (d < droneBestDist) { droneBestDist = d; droneBestEnemy = e; }
+        }
+        if (droneBestEnemy) {
+          droneBestEnemy.hp -= 2;
+          droneBestEnemy.hitFlash = 0.15;
+          if (droneBestEnemy.hp <= 0) this.onEnemyKilled(droneBestEnemy);
+          this.explosions.push({ x: this.dronePos.x, y: this.dronePos.y, radius: 0, maxRadius: 8, life: 0.1, maxLife: 0.1 });
+        }
+      }
+      // Drone intercept enemy bullets
+      if (this.droneInterceptTimer <= 0) {
+        for (let bi = this.enemies.enemyBullets.length - 1; bi >= 0; bi--) {
+          const eb = this.enemies.enemyBullets[bi];
+          if (v2dist(eb.pos, this.dronePos) < 100) {
+            this.enemies.enemyBullets.splice(bi, 1);
+            this.droneInterceptTimer = 4;
+            this.explosions.push({ x: this.dronePos.x, y: this.dronePos.y, radius: 0, maxRadius: 15, life: 0.2, maxLife: 0.2 });
+            break;
+          }
+        }
+      }
+    }
+
+    // Update familiar
+    if (this.familiarActive) {
+      const famOrbit = (this.elapsed * 1.5 + Math.PI) % (Math.PI * 2);
+      this.familiarPos = { x: this.player.pos.x + Math.cos(famOrbit) * 55, y: this.player.pos.y + Math.sin(famOrbit) * 55 };
+      this.familiarAttackTimer -= dt;
+      if (this.familiarAttackTimer <= 0) {
+        this.familiarAttackTimer = 3;
+        let famBestDist = 160;
+        let famBestEnemy: Enemy | null = null;
+        for (const e of this.enemies.enemies) {
+          if (e.hp <= 0 || e.isAlly) continue;
+          const d = v2dist(this.familiarPos, e.pos);
+          if (d < famBestDist) { famBestDist = d; famBestEnemy = e; }
+        }
+        if (famBestEnemy) {
+          famBestEnemy.hp -= 2;
+          famBestEnemy.hitFlash = 0.15;
+          if (famBestEnemy.hp <= 0) this.onEnemyKilled(famBestEnemy);
+          this.explosions.push({ x: this.familiarPos.x, y: this.familiarPos.y, radius: 0, maxRadius: 20, life: 0.1, maxLife: 0.1 });
+        }
+      }
+    }
+
+    // Update void surge
+    if (this.voidSurgeActive) {
+      this.voidSurgeTimer -= dt;
+      if (this.voidSurgeTimer <= 0) {
+        this.voidSurgeActive = false;
       }
     }
 
@@ -1493,6 +1750,45 @@ export class Game {
       const frac = t.life / t.maxLife;
       g.rect(t.x - barW / 2, t.y - 22, barW, 3).fill({ color: 0x111111, alpha: alpha * 0.7 });
       g.rect(t.x - barW / 2, t.y - 22, barW * frac, 3).fill({ color: 0x44ffaa, alpha: alpha * 0.9 });
+    }
+
+    // Draw decoys
+    for (const dc of this.decoys) {
+      if (!this.camera.isVisible(dc.x, dc.y, 18)) continue;
+      const dcAlpha = Math.min(dc.life / 1, 1);
+      g.circle(dc.x, dc.y, 16).fill({ color: PLAYER_COLOR, alpha: dcAlpha * 0.4 });
+      g.circle(dc.x, dc.y, 16).stroke({ color: PLAYER_COLOR, width: 2, alpha: dcAlpha * 0.6 });
+      g.circle(dc.x, dc.y, 8).fill({ color: 0xffffff, alpha: dcAlpha * 0.3 });
+    }
+
+    // Draw smoke zones
+    for (const sz of this.smokeZones) {
+      if (!this.camera.isVisible(sz.x, sz.y, sz.radius)) continue;
+      const szAlpha = Math.min(sz.life / 2, 1) * 0.15;
+      g.circle(sz.x, sz.y, sz.radius).fill({ color: 0x888888, alpha: szAlpha });
+      g.circle(sz.x, sz.y, sz.radius).stroke({ color: 0xaaaaaa, width: 1, alpha: szAlpha * 2 });
+    }
+
+    // Draw gravity wells
+    for (const gw of this.gravityWells) {
+      if (!this.camera.isVisible(gw.x, gw.y, gw.radius)) continue;
+      const gwAlpha = Math.min(gw.life / 1, 1) * 0.1;
+      g.circle(gw.x, gw.y, gw.radius).stroke({ color: 0x6600cc, width: 2, alpha: gwAlpha * 3 });
+      g.circle(gw.x, gw.y, gw.radius * 0.5).stroke({ color: 0x9933ff, width: 1, alpha: gwAlpha * 4 });
+    }
+
+    // Draw drone
+    if (this.droneActive) {
+      g.circle(this.dronePos.x, this.dronePos.y, 8).fill({ color: 0x33ccff, alpha: 0.8 });
+      g.circle(this.dronePos.x, this.dronePos.y, 8).stroke({ color: 0x66ddff, width: 2, alpha: 0.6 });
+      // Intercept range
+      g.circle(this.dronePos.x, this.dronePos.y, 100).stroke({ color: 0x33ccff, width: 1, alpha: 0.06 });
+    }
+
+    // Draw familiar
+    if (this.familiarActive) {
+      g.circle(this.familiarPos.x, this.familiarPos.y, 10).fill({ color: 0x9933ff, alpha: 0.7 });
+      g.circle(this.familiarPos.x, this.familiarPos.y, 10).stroke({ color: 0xcc66ff, width: 2, alpha: 0.5 });
     }
 
     // Draw explosions

@@ -36,6 +36,8 @@ export interface Enemy {
   strafeDir: number;
   strafeTimer: number;
   meleeCooldown: number;
+  stunTimer: number;
+  isAlly: boolean;
 }
 
 let nextEnemyId = 1;
@@ -74,6 +76,8 @@ export function createEnemy(name: string, pos: Vec2, aggroed = false): Enemy {
     strafeDir: Math.random() > 0.5 ? 1 : -1,
     strafeTimer: 0,
     meleeCooldown: 0,
+    stunTimer: 0,
+    isAlly: false,
   };
 }
 
@@ -100,10 +104,48 @@ export class EnemySystem {
     }
   }
 
-  update(dt: number, player: Player, map: GameMap) {
+  update(dt: number, player: Player, map: GameMap, decoys?: Array<{ x: number; y: number }>) {
     for (const e of this.enemies) {
       e.hitFlash = Math.max(0, e.hitFlash - dt);
       e.meleeCooldown = Math.max(0, e.meleeCooldown - dt);
+
+      // Stun check
+      if (e.stunTimer > 0) {
+        e.stunTimer -= dt;
+        e.vel = v2(0, 0);
+        continue;
+      }
+
+      // Allies attack nearest non-ally enemy instead of player
+      if (e.isAlly) {
+        let allyTarget: Enemy | null = null;
+        let allyDist = 200;
+        for (const other of this.enemies) {
+          if (other === e || other.hp <= 0 || other.isAlly) continue;
+          const d = v2dist(e.pos, other.pos);
+          if (d < allyDist) { allyDist = d; allyTarget = other; }
+        }
+        if (allyTarget) {
+          const dir = v2norm(v2sub(allyTarget.pos, e.pos));
+          e.vel = v2mul(dir, e.speed);
+          if (allyDist < ENEMY_MELEE_RANGE + e.radius + allyTarget.radius && e.meleeCooldown <= 0) {
+            allyTarget.hp -= e.meleeDmg;
+            allyTarget.hitFlash = 0.15;
+            e.meleeCooldown = 1.0;
+          }
+        } else {
+          // Follow player if no targets
+          const dir = v2norm(v2sub(player.pos, e.pos));
+          e.vel = v2mul(dir, e.speed * 0.5);
+        }
+        // Apply movement
+        const nx = e.pos.x + e.vel.x * dt;
+        const ny = e.pos.y + e.vel.y * dt;
+        if (!map.isBlocked(nx, e.pos.y, e.radius)) e.pos.x = nx;
+        if (!map.isBlocked(e.pos.x, ny, e.radius)) e.pos.y = ny;
+        continue;
+      }
+
       const toPlayer = v2sub(player.pos, e.pos);
       const distToPlayer = v2len(toPlayer);
 
@@ -123,8 +165,22 @@ export class EnemySystem {
         continue;
       }
 
+      // Decoy targeting: if decoy is closer than player, move toward decoy
+      let moveTarget = player.pos;
+      if (decoys) {
+        for (const dc of decoys) {
+          const dcDist = v2dist(e.pos, dc);
+          if (dcDist < e.detection && dcDist < v2dist(e.pos, moveTarget)) {
+            moveTarget = dc;
+          }
+        }
+      }
+
+      // Smoke zone: de-aggro if inside smoke (checked externally via smokeZones)
+
       // Behavior-specific movement
-      const dirToPlayer = v2norm(toPlayer);
+      const toTarget = v2sub(moveTarget, e.pos);
+      const dirToPlayer = v2norm(toTarget);
 
       switch (e.behavior) {
         case 'charge':
@@ -202,8 +258,8 @@ export class EnemySystem {
       e.pos.x = Math.max(e.radius, Math.min(WORLD_W - e.radius, e.pos.x));
       e.pos.y = Math.max(e.radius, Math.min(WORLD_H - e.radius, e.pos.y));
 
-      // Melee attack
-      if (distToPlayer < ENEMY_MELEE_RANGE + e.radius + player.radius && e.meleeDmg > 0 && e.meleeCooldown <= 0) {
+      // Melee attack (skip allies)
+      if (!e.isAlly && distToPlayer < ENEMY_MELEE_RANGE + e.radius + player.radius && e.meleeDmg > 0 && e.meleeCooldown <= 0) {
         player.takeDamage(e.meleeDmg);
         e.meleeCooldown = 1.0;
       }

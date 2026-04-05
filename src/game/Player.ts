@@ -41,6 +41,9 @@ export class Player {
   iFrames = 0;
   hitFlash = 0;
 
+  // External speed multiplier (set by game systems like void surge)
+  externalSpeedMult = 1.0;
+
   constructor(x: number, y: number, maxHp: number, magSize: number) {
     this.pos = v2(x, y);
     this.hp = maxHp;
@@ -76,6 +79,9 @@ export class Player {
 
     // River slowdown
     if (map.isInRiver(this.pos.x, this.pos.y)) speedMod *= 0.6;
+
+    // External speed multiplier (void surge etc.)
+    speedMod *= this.externalSpeedMult;
 
     // Apply velocity
     this.vel = v2mul(dir, this.speed * speedMod);
