@@ -157,7 +157,15 @@ export class Game {
   // Familiar state (familiar_kit)
   familiarActive = false;
   familiarPos = v2(0, 0);
-  familiarAttackTimer = 0;
+  familiarState: 'idle' | 'hunting' | 'biting' | 'returning' | 'delivering' = 'idle';
+  familiarTarget: Enemy | null = null;
+  familiarBuff = '';
+  familiarBuffColor = 0x9933ff;
+  familiarCooldown = 0;
+  familiarSpeedTimer = 0;
+  familiarDmgMult = 1.0;
+  familiarDmgTimer = 0;
+  familiarBiteTimer = 0;
 
   // Void surge state
   voidSurgeActive = false;
@@ -988,10 +996,13 @@ export class Game {
         this.droneInterceptTimer = 0;
         break;
       case 'familiar_kit':
-        // Persistent familiar that orbits and rams
+        // Persistent familiar fetch companion
         this.familiarActive = true;
         this.familiarPos = { x: this.player.pos.x + 60, y: this.player.pos.y };
-        this.familiarAttackTimer = 0;
+        this.familiarState = 'idle';
+        this.familiarTarget = null;
+        this.familiarBuff = '';
+        this.familiarCooldown = 0;
         break;
       case 'pack_kit': {
         // T2: spawn 4 allies instead of 2
@@ -1112,6 +1123,7 @@ export class Game {
     let speedMult = 1.0;
     if (this.voidSurgeActive) speedMult *= 1.8;
     if (this.stimSpeedTimer > 0) { speedMult *= 1.2; this.stimSpeedTimer -= dt; }
+    if (this.familiarSpeedTimer > 0) { speedMult *= 1.3; this.familiarSpeedTimer -= dt; }
     this.player.externalSpeedMult = speedMult;
 
     // Frenzy Aura perk: nearby allies increase fire rate
@@ -1340,6 +1352,8 @@ export class Game {
         }
         if (dmg > 0) {
           let finalDmg = dmg;
+          // Familiar damage buff
+          if (this.familiarDmgTimer > 0) { this.familiarDmgTimer -= dt; finalDmg = Math.round(finalDmg * this.familiarDmgMult); }
           // Marked damage bonus
           if (enemy.markedTimer > 0) finalDmg = Math.floor(finalDmg * enemy.markedDmgBonus);
           // Affix: armored halves ranged damage
@@ -1759,35 +1773,136 @@ export class Game {
       }
     }
 
-    // Update familiar
+    // Update familiar (fetch-companion state machine)
     if (this.familiarActive) {
-      const famOrbit = (this.elapsed * 1.5 + Math.PI) % (Math.PI * 2);
-      this.familiarPos = { x: this.player.pos.x + Math.cos(famOrbit) * 55, y: this.player.pos.y + Math.sin(famOrbit) * 55 };
-      // Spotter perk: mark highest-HP enemy for +30% damage
-      if (this.hasPerk('spotter')) {
-        let spotBestHp = 0; let spotBestEnemy: Enemy | null = null;
-        for (const e of this.enemies.enemies) {
-          if (e.hp > 0 && !e.isAlly && v2dist(this.familiarPos, e.pos) < 160 && e.hp > spotBestHp) {
-            spotBestHp = e.hp; spotBestEnemy = e;
+      const famTier = this.runKitTiers['familiar_kit'] || 1;
+      const famT3 = this.kitT3Choices['familiar_kit'] || '';
+      const huntRange = (famTier >= 2 && famT3 === 'clean') ? 250 : 200;
+      const huntCooldown = (famTier >= 2 && famT3 === 'clean') ? 1.5 : 2.0;
+      const huntSpeed = 250;
+      const returnSpeed = 300;
+
+      switch (this.familiarState) {
+        case 'idle': {
+          const famOrbit = (this.elapsed * 1.5 + Math.PI) % (Math.PI * 2);
+          this.familiarPos = { x: this.player.pos.x + Math.cos(famOrbit) * 50, y: this.player.pos.y + Math.sin(famOrbit) * 50 };
+          // Spotter perk: mark highest-HP nearby enemy for +30% damage
+          if (this.hasPerk('spotter')) {
+            let spotBestHp = 0; let spotBestEnemy: Enemy | null = null;
+            for (const e of this.enemies.enemies) {
+              if (e.hp > 0 && !e.isAlly && v2dist(this.familiarPos, e.pos) < 160 && e.hp > spotBestHp) {
+                spotBestHp = e.hp; spotBestEnemy = e;
+              }
+            }
+            if (spotBestEnemy) { spotBestEnemy.markedTimer = 0.5; spotBestEnemy.markedDmgBonus = 1.3; }
           }
+          if (this.familiarCooldown > 0) {
+            this.familiarCooldown -= dt;
+          } else {
+            let bestDist = huntRange; let bestEnemy: Enemy | null = null;
+            for (const e of this.enemies.enemies) {
+              if (e.hp <= 0 || e.isAlly) continue;
+              const d = v2dist(this.familiarPos, e.pos);
+              if (d < bestDist) { bestDist = d; bestEnemy = e; }
+            }
+            if (bestEnemy) { this.familiarTarget = bestEnemy; this.familiarState = 'hunting'; }
+          }
+          break;
         }
-        if (spotBestEnemy) { spotBestEnemy.markedTimer = 0.5; spotBestEnemy.markedDmgBonus = 1.3; }
-      }
-      this.familiarAttackTimer -= dt;
-      if (this.familiarAttackTimer <= 0) {
-        this.familiarAttackTimer = 3;
-        let famBestDist = 160;
-        let famBestEnemy: Enemy | null = null;
-        for (const e of this.enemies.enemies) {
-          if (e.hp <= 0 || e.isAlly) continue;
-          const d = v2dist(this.familiarPos, e.pos);
-          if (d < famBestDist) { famBestDist = d; famBestEnemy = e; }
+        case 'hunting': {
+          if (!this.familiarTarget || this.familiarTarget.hp <= 0) {
+            this.familiarState = 'idle'; this.familiarTarget = null; break;
+          }
+          const htDir = v2norm(v2sub(this.familiarTarget.pos, this.familiarPos));
+          this.familiarPos.x += htDir.x * huntSpeed * dt;
+          this.familiarPos.y += htDir.y * huntSpeed * dt;
+          if (v2dist(this.familiarPos, this.familiarTarget.pos) < 15) {
+            this.familiarState = 'biting'; this.familiarBiteTimer = 0.15;
+          }
+          break;
         }
-        if (famBestEnemy) {
-          famBestEnemy.hp -= 2;
-          famBestEnemy.hitFlash = 0.15;
-          if (famBestEnemy.hp <= 0) this.onEnemyKilled(famBestEnemy);
-          this.explosions.push({ x: this.familiarPos.x, y: this.familiarPos.y, radius: 0, maxRadius: 20, life: 0.1, maxLife: 0.1 });
+        case 'biting': {
+          this.familiarBiteTimer -= dt;
+          if (this.familiarBiteTimer <= 0) {
+            const tgt = this.familiarTarget!;
+            const wepDef = WEAPON_DEFS[this.player.weaponId];
+            const baseWepDmg = (wepDef?.damage ?? 4) + this.weapons.bonusDamage;
+            let biteDmg = Math.max(1, Math.round(baseWepDmg * 0.5));
+            if (famTier >= 2 && famT3 === 'void') biteDmg *= 2;
+            tgt.hp -= biteDmg; tgt.hitFlash = 0.25;
+            // T3 void: bite AOE
+            if (famTier >= 3 && famT3 === 'void') {
+              this.explosions.push({ x: this.familiarPos.x, y: this.familiarPos.y, radius: 0, maxRadius: 60, life: 0.3, maxLife: 0.3 });
+              for (const e of this.enemies.enemies) {
+                if (e === tgt || e.hp <= 0 || e.isAlly) continue;
+                if (v2dist(this.familiarPos, e.pos) < 60) { e.hp -= Math.ceil(biteDmg * 0.5); e.hitFlash = 0.2; if (e.hp <= 0) this.onEnemyKilled(e); }
+              }
+            } else {
+              this.explosions.push({ x: this.familiarPos.x, y: this.familiarPos.y, radius: 0, maxRadius: 20, life: 0.15, maxLife: 0.15 });
+            }
+            if (tgt.hp <= 0) this.onEnemyKilled(tgt);
+            // Determine buff from enemy behavior
+            const beh = tgt.behavior;
+            const isElite = tgt.isElite;
+            if (isElite) { this.familiarBuff = 'corruption'; this.familiarBuffColor = 0xcc33ff; }
+            else if (beh === 'charge' || beh === 'burst') { this.familiarBuff = 'heal'; this.familiarBuffColor = 0x00ff88; }
+            else if (beh === 'pack') { this.familiarBuff = 'speed'; this.familiarBuffColor = 0xffdd00; }
+            else if (beh === 'flank' || beh === 'strafe') { this.familiarBuff = 'damage'; this.familiarBuffColor = 0xff3333; }
+            else if (beh === 'lurk' || beh === 'lurker') { this.familiarBuff = 'shield'; this.familiarBuffColor = 0x3399ff; }
+            else { this.familiarBuff = 'heal'; this.familiarBuffColor = 0x00ff88; }
+            this.familiarState = 'returning'; this.familiarTarget = null;
+          }
+          break;
+        }
+        case 'returning': {
+          const rtDir = v2norm(v2sub(this.player.pos, this.familiarPos));
+          this.familiarPos.x += rtDir.x * returnSpeed * dt;
+          this.familiarPos.y += rtDir.y * returnSpeed * dt;
+          if (v2dist(this.familiarPos, this.player.pos) < 20) { this.familiarState = 'delivering'; }
+          break;
+        }
+        case 'delivering': {
+          const buffStrong = famTier >= 3 && famT3 === 'void';
+          const buffDurMult = (famTier >= 2 && famT3 === 'void') ? 1.5 : 1.0;
+          switch (this.familiarBuff) {
+            case 'heal': {
+              const healAmt = buffStrong ? 4 : 2;
+              this.player.hp = Math.min(this.player.maxHp, this.player.hp + healAmt);
+              this.hud.showMessage(`+${healAmt} HP`, 1.2);
+              break;
+            }
+            case 'speed': {
+              this.familiarSpeedTimer = (buffStrong ? 8 : 4) * buffDurMult;
+              this.hud.showMessage('SPEED!', 1.2);
+              break;
+            }
+            case 'damage': {
+              this.familiarDmgMult = buffStrong ? 1.5 : 1.25;
+              this.familiarDmgTimer = (buffStrong ? 10 : 5) * buffDurMult;
+              this.hud.showMessage('DMG+', 1.2);
+              break;
+            }
+            case 'shield': {
+              this.player.absorbNextHit = true;
+              this.hud.showMessage('+SHIELD', 1.2);
+              break;
+            }
+            case 'corruption': {
+              const corrRed = buffStrong ? 30 : 15;
+              this.player.corruption = Math.max(0, this.player.corruption - corrRed);
+              this.hud.showMessage(`-${corrRed} CORR`, 1.2);
+              break;
+            }
+            default: {
+              this.player.hp = Math.min(this.player.maxHp, this.player.hp + 1);
+              this.hud.showMessage('+1 HP', 1.2);
+            }
+          }
+          this.familiarBuff = '';
+          // T3 clean: skip cooldown for immediate next hunt
+          this.familiarCooldown = (famTier >= 3 && famT3 === 'clean') ? 0 : huntCooldown;
+          this.familiarState = 'idle';
+          break;
         }
       }
     }
@@ -2573,8 +2688,12 @@ export class Game {
 
     // Draw familiar
     if (this.familiarActive) {
-      g.circle(this.familiarPos.x, this.familiarPos.y, 10).fill({ color: 0x9933ff, alpha: 0.7 });
-      g.circle(this.familiarPos.x, this.familiarPos.y, 10).stroke({ color: 0xcc66ff, width: 2, alpha: 0.5 });
+      const fc = this.familiarState === 'idle' ? 0x9933ff
+               : this.familiarState === 'hunting' ? 0xff6600
+               : this.familiarState === 'biting' ? 0xffffff
+               : this.familiarBuffColor;
+      g.circle(this.familiarPos.x, this.familiarPos.y, 8).fill({ color: fc, alpha: 0.85 });
+      g.circle(this.familiarPos.x, this.familiarPos.y, 8).stroke({ color: 0xffffff, width: 1.5, alpha: 0.4 });
     }
 
     // Draw explosions
