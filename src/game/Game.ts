@@ -8,7 +8,7 @@ import { HUD } from './HUD';
 import { v2dist, v2, v2sub, v2norm, v2mul, randRange } from '../lib/math';
 import {
   PLAYER_BASE_HP, PLAYER_BASE_SPEED, WORLD_W, WORLD_H,
-  PLAYER_COLOR, XP_PER_LEVEL, MAX_LEVEL
+  PLAYER_COLOR, XP_PER_LEVEL, MAX_LEVEL, POST_CAP_XP
 } from './constants';
 import { CREATURE_DEFS } from '../data/creatures';
 import { type ModifierDef } from '../data/modifiers';
@@ -175,6 +175,9 @@ export class Game {
   // Kit T3 path choices (persisted per run)
   kitT3Choices: Record<string, string> = {};
 
+  // Post-cap stat drip
+  postCapIndex = 0;
+
   // Kit perk state
   stimWithdrawalActive = false;
   sacrificeInvincibleTimer = 0;
@@ -271,7 +274,8 @@ export class Game {
     hpBonus: number,
     magBonus: number,
     callbacks: GameCallbacks,
-    contractExtras?: { holdTime?: number; podHp?: number; cacheCount?: number }
+    contractExtras?: { holdTime?: number; podHp?: number; cacheCount?: number },
+    startingWeapon?: string
   ) {
     this.app = app;
     this.callbacks = callbacks;
@@ -313,6 +317,11 @@ export class Game {
     const maxHp = PLAYER_BASE_HP + hpBonus * 2;
     const magSize = 12 + magBonus * 3;
     this.player = new Player(this.map.spawnPos.x, this.map.spawnPos.y, maxHp, magSize);
+    if (startingWeapon && WEAPON_DEFS[startingWeapon]) {
+      this.player.weaponId = startingWeapon;
+      this.player.magSize = WEAPON_DEFS[startingWeapon].magSize;
+      this.player.magAmmo = this.player.magSize;
+    }
     this.weapons = new WeaponSystem();
     this.enemies = new EnemySystem();
     this.hud = new HUD(vw, vh);
@@ -1759,7 +1768,17 @@ export class Game {
     if (this.waveTimer <= 0 && this.enemies.enemies.length < 50 && !this.modifierPickPending) {
       this.waveCount++;
       const count = 10 + this.waveCount * 3 + Math.floor(this.elapsed / 60) * 2;
+      const prevLen = this.enemies.enemies.length;
       this.enemies.spawnWave(Math.min(count, 30), this.player.pos, this.map);
+      // Time-based enemy scaling: +10% HP per 2min, +5% speed per 3min
+      const hpScale = 1 + Math.floor(this.elapsed / 120) * 0.1;
+      const spdScale = 1 + Math.floor(this.elapsed / 180) * 0.05;
+      for (let ei = prevLen; ei < this.enemies.enemies.length; ei++) {
+        const e = this.enemies.enemies[ei];
+        e.hp = Math.floor(e.hp * hpScale);
+        e.maxHp = e.hp;
+        e.speed = Math.floor(e.speed * spdScale);
+      }
       this.waveTimer = Math.max(8, 20 - this.waveCount * 1.5);
       this.hud.showMessage(`WAVE ${this.waveCount + 1}`, 1.5);
       if (this.halCooldown <= 0) {
@@ -1992,13 +2011,24 @@ export class Game {
       const threshold = XP_PER_LEVEL[this.player.level] ?? 999;
       if (this.player.essenceCollected >= threshold) {
         this.player.level++;
-        this.player.essenceCollected = 0;
+        this.player.essenceCollected -= threshold;
         this.hud.showMessage(`LEVEL ${this.player.level}!`, 1.5);
         setTimeout(() => this.hud.showHalMessage(halSay(HAL_LEVEL_UP), 4), 1000);
         this.player.maxHp += 1;
         this.player.hp = Math.min(this.player.hp + 1, this.player.maxHp);
-        // Queue upgrade pick for next update tick
         this.pendingLevelUpPicks++;
+      }
+    } else {
+      // Post-cap stat drip: every POST_CAP_XP kills, grant one buff
+      if (this.player.essenceCollected >= POST_CAP_XP) {
+        this.player.essenceCollected -= POST_CAP_XP;
+        this.postCapIndex = (this.postCapIndex + 1) % 4;
+        switch (this.postCapIndex) {
+          case 0: this.player.speed += 5; this.hud.showMessage('+SPEED', 1); break;
+          case 1: this.weapons.fireRateBonus -= 0.02; this.hud.showMessage('+FIRE RATE', 1); break;
+          case 2: this.weapons.bulletSpeedBonus += 15; this.hud.showMessage('+PROJ SPEED', 1); break;
+          case 3: this.hud.showMessage('+RELOAD', 1); break; // reload bonus applied in weapon system
+        }
       }
     }
 

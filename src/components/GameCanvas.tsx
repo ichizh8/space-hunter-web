@@ -119,6 +119,12 @@ export function GameCanvas() {
       );
 
       game.player.weaponId = weapon;
+      // Sync mag size with selected weapon
+      const wDef = (await import('../data/weapons')).WEAPON_DEFS[weapon];
+      if (wDef) {
+        game.player.magSize = wDef.magSize + magUpgrade * 3;
+        game.player.magAmmo = game.player.magSize;
+      }
 
       gameRef.current = game;
 

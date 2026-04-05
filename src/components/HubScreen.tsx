@@ -3,7 +3,7 @@ import { useState, useMemo } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { useSaveStore } from '../store/saveStore';
 import { RECIPES, BONUS_DESCS, TRACK_ORDER, REP_THRESHOLDS } from '../data/recipes';
-import { KIT_DEFS, ALL_KIT_IDS } from '../data/kits';
+import { KIT_DEFS, KIT_TREE_SECTIONS, KIT_SLOT_COSTS, checkKitPrereqs, getPrereqText } from '../data/kits';
 import {
   halSay, HAL_GREETINGS, HAL_FIRST_VISIT, HAL_PRE_CONTRACT,
   HAL_POST_HUNT_SUCCESS, HAL_POST_HUNT_FAIL, HAL_IDLE
@@ -23,6 +23,10 @@ const WEAPON_UNLOCK_DEFS = [
   { id: 'dart', name: 'Homing Dart', desc: 'Homing shots', cost: 80 },
   { id: 'flamethrower', name: 'Flamethrower', desc: 'Cone damage', cost: 180 },
   { id: 'grenade_launcher', name: 'Grenade Launcher', desc: 'Explosive', cost: 160 },
+  { id: 'entropy_cannon', name: 'Entropy Cannon', desc: 'Void Walker rep weapon', cost: 200 },
+  { id: 'pulse_cannon', name: 'Pulse Cannon', desc: 'Tactician rep weapon', cost: 200 },
+  { id: 'sniper_carbine', name: 'Sniper Carbine', desc: 'Contractor rep weapon', cost: 220 },
+  { id: 'chain_rifle', name: 'Chain Rifle', desc: 'Scrapper rep weapon', cost: 200 },
 ];
 
 const TRACK_COLORS: Record<string, string> = {
@@ -302,122 +306,124 @@ function KitsTab({ save }: { save: ReturnType<typeof useSaveStore.getState> }) {
   const unlockKit = useSaveStore(s => s.unlockKit);
   const upgradeKitTier = useSaveStore(s => s.upgradeKitTier);
   const assignKit = useSaveStore(s => s.assignKit);
+  const buyUpgrade = useSaveStore(s => s.buyUpgrade);
 
-  const s1 = save.equippedKits[0] ?? 'none';
-  const s2 = save.equippedKits[1] ?? 'none';
+  const maxSlots = 2 + (save.shipUpgrades.kit_slots || 0);
+  const slotColors = ['var(--color-accent-green)', 'var(--color-accent-cyan)', 'var(--color-accent-purple)', 'var(--color-accent-gold)'];
 
   return (
     <>
       <p className="text-center text-base text-[var(--color-accent-gold)] font-bold">Credits: {save.totalCredits}</p>
-      <div className="flex justify-center gap-4 mt-1">
-        <span className="text-sm font-bold" style={{
-          color: 'var(--color-accent-green)',
-          border: '1px solid var(--color-accent-green)',
-          background: 'rgba(68,255,102,0.1)',
-          padding: '4px 12px',
-        }}>S1: {KIT_DEFS[s1]?.name ?? s1}</span>
-        <span className="text-sm font-bold" style={{
-          color: 'var(--color-accent-cyan)',
-          border: '1px solid var(--color-accent-cyan)',
-          background: 'rgba(34,153,204,0.1)',
-          padding: '4px 12px',
-        }}>S2: {KIT_DEFS[s2]?.name ?? s2}</span>
+      <div className="flex justify-center gap-2 mt-1 flex-wrap">
+        {Array.from({ length: maxSlots }, (_, i) => {
+          const kitId = save.equippedKits[i] ?? '';
+          return (
+            <span key={i} className="text-sm font-bold" style={{
+              color: slotColors[i],
+              border: `1px solid ${slotColors[i]}`,
+              background: `${slotColors[i]}11`,
+              padding: '4px 10px',
+            }}>S{i + 1}: {KIT_DEFS[kitId]?.name ?? 'Empty'}</span>
+          );
+        })}
       </div>
+      {maxSlots < 4 && (
+        <div className="flex justify-center mt-1">
+          <button className="pixel-btn text-sm py-2 px-4"
+            style={{ borderColor: 'var(--color-accent-gold)', color: 'var(--color-accent-gold)' }}
+            disabled={save.totalCredits < KIT_SLOT_COSTS[save.shipUpgrades.kit_slots || 0]}
+            onClick={() => buyUpgrade('kit_slots', KIT_SLOT_COSTS[save.shipUpgrades.kit_slots || 0], 2)}>
+            +1 Kit Slot ({KIT_SLOT_COSTS[save.shipUpgrades.kit_slots || 0]}cr)
+          </button>
+        </div>
+      )}
       <div className="h-[1px] bg-[var(--color-border)]" />
 
-      {ALL_KIT_IDS.map(id => {
-        const def = KIT_DEFS[id];
-        const owned = save.unlockedKits.includes(id);
-        const tier = save.kitTiers[id] ?? 0;
-        const t3Choice = save.kitT3Choices[id] ?? '';
-        const isS1 = s1 === id;
-        const isS2 = s2 === id;
-        const isEquipped = isS1 || isS2;
+      {Object.entries(KIT_TREE_SECTIONS).map(([section, kitIds]) => (
+        <div key={section}>
+          <p className="text-center text-xs text-[var(--color-text-secondary)] mt-2 mb-1">--- {section} ---</p>
+          {kitIds.map(id => {
+            const def = KIT_DEFS[id];
+            const owned = save.unlockedKits.includes(id);
+            const tier = save.kitTiers[id] ?? 0;
+            const t3Choice = save.kitT3Choices[id] ?? '';
+            const prereqsMet = checkKitPrereqs(id, save.kitTiers, save.unlockedKits);
+            const equippedSlot = save.equippedKits.indexOf(id);
+            const isEquipped = equippedSlot >= 0;
 
-        return (
-          <div key={id} className="pixel-card space-y-3" style={isEquipped ? {
-            borderColor: isS1 ? 'var(--color-accent-green)' : 'var(--color-accent-cyan)',
-            background: isS1 ? 'rgba(68,255,102,0.06)' : 'rgba(34,153,204,0.06)',
-            boxShadow: isS1
-              ? '0 0 12px rgba(68,255,102,0.08), inset 0 0 12px rgba(68,255,102,0.04)'
-              : '0 0 12px rgba(34,153,204,0.08), inset 0 0 12px rgba(34,153,204,0.04)',
-          } : {}}>
-            <div className="flex justify-between items-center">
-              <span className="text-sm font-bold">{def.name}</span>
-              <div className="flex items-center gap-2">
-                {isEquipped && (
-                  <span className="text-xs font-bold" style={{
-                    color: isS1 ? 'var(--color-accent-green)' : 'var(--color-accent-cyan)',
-                    border: `1px solid ${isS1 ? 'var(--color-accent-green)' : 'var(--color-accent-cyan)'}`,
-                    padding: '2px 6px',
-                  }}>
-                    {isS1 && isS2 ? 'S1+S2' : isS1 ? 'S1' : 'S2'}
-                  </span>
+            return (
+              <div key={id} className="pixel-card space-y-3" style={isEquipped ? {
+                borderColor: slotColors[equippedSlot],
+                background: `${slotColors[equippedSlot]}0a`,
+              } : !prereqsMet && !owned ? { opacity: 0.5 } : {}}>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-bold">{!prereqsMet && !owned ? `[LOCKED] ${def.name}` : def.name}</span>
+                  <div className="flex items-center gap-2">
+                    {isEquipped && (
+                      <span className="text-xs font-bold" style={{
+                        color: slotColors[equippedSlot],
+                        border: `1px solid ${slotColors[equippedSlot]}`,
+                        padding: '2px 6px',
+                      }}>S{equippedSlot + 1}</span>
+                    )}
+                    {owned && <span className="text-xs text-[var(--color-accent-cyan)]">TIER {tier}</span>}
+                  </div>
+                </div>
+                <p className="text-xs text-[var(--color-text-secondary)]">{def.desc}</p>
+                {!owned && !prereqsMet && (
+                  <p className="text-xs" style={{ color: 'var(--color-accent-red, #cc4444)' }}>{getPrereqText(id)}</p>
                 )}
-                {owned && <span className="text-xs text-[var(--color-accent-cyan)]">TIER {tier}</span>}
+                <div className="flex gap-2 flex-wrap">
+                  {!owned ? (
+                    <button
+                      className="pixel-btn text-sm py-2 px-4"
+                      style={{ borderColor: 'var(--color-accent-green)', color: 'var(--color-accent-green)' }}
+                      disabled={save.totalCredits < def.unlockCost || !prereqsMet}
+                      onClick={() => unlockKit(id, def.unlockCost)}>
+                      Unlock {def.unlockCost}cr
+                    </button>
+                  ) : (
+                    <>
+                      {tier < 2 && (
+                        <button className="pixel-btn text-sm py-2 px-4"
+                          style={{ borderColor: 'var(--color-accent-purple)', color: 'var(--color-accent-purple)' }}
+                          disabled={save.totalCredits < def.tierCosts[1]}
+                          onClick={() => upgradeKitTier(id, 2, def.tierCosts[1])}>
+                          T2 {def.tierCosts[1]}cr
+                        </button>
+                      )}
+                      {tier === 2 && (
+                        <button className="pixel-btn text-sm py-2 px-4"
+                          style={{ borderColor: 'var(--color-accent-purple)', color: 'var(--color-accent-purple)' }}
+                          disabled={save.totalCredits < def.tierCosts[2]}
+                          onClick={() => upgradeKitTier(id, 3, def.tierCosts[2])}>
+                          T3 {def.tierCosts[2]}cr
+                        </button>
+                      )}
+                      {tier >= 3 && (
+                        <span className="text-sm text-[var(--color-accent-gold)]">MAX {t3Choice ? `(${t3Choice})` : ''}</span>
+                      )}
+                      {Array.from({ length: maxSlots }, (_, si) => (
+                        <button key={si}
+                          className="pixel-btn text-sm py-2 px-4"
+                          style={equippedSlot === si ? {
+                            borderColor: slotColors[si],
+                            background: `${slotColors[si]}33`,
+                            color: slotColors[si],
+                          } : {
+                            borderColor: 'var(--color-border-light)',
+                            color: 'var(--color-text-secondary)',
+                          }}
+                          onClick={() => assignKit(id, si)}>S{si + 1}</button>
+                      ))}
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
-            <p className="text-xs text-[var(--color-text-secondary)]">{def.desc}</p>
-            <div className="flex gap-2 flex-wrap">
-              {!owned ? (
-                <button
-                  className="pixel-btn text-sm py-2 px-4"
-                  style={{ borderColor: 'var(--color-accent-green)', color: 'var(--color-accent-green)' }}
-                  disabled={save.totalCredits < def.unlockCost}
-                  onClick={() => unlockKit(id, def.unlockCost)}>
-                  Unlock {def.unlockCost}cr
-                </button>
-              ) : (
-                <>
-                  {tier < 2 && (
-                    <button className="pixel-btn text-sm py-2 px-4"
-                      style={{ borderColor: 'var(--color-accent-purple)', color: 'var(--color-accent-purple)' }}
-                      disabled={save.totalCredits < def.tierCosts[1]}
-                      onClick={() => upgradeKitTier(id, 2, def.tierCosts[1])}>
-                      T2 {def.tierCosts[1]}cr
-                    </button>
-                  )}
-                  {tier === 2 && (
-                    <button className="pixel-btn text-sm py-2 px-4"
-                      style={{ borderColor: 'var(--color-accent-purple)', color: 'var(--color-accent-purple)' }}
-                      disabled={save.totalCredits < def.tierCosts[2]}
-                      onClick={() => upgradeKitTier(id, 3, def.tierCosts[2])}>
-                      T3 {def.tierCosts[2]}cr
-                    </button>
-                  )}
-                  {tier >= 3 && (
-                    <span className="text-sm text-[var(--color-accent-gold)]">MAX {t3Choice ? `(${t3Choice})` : ''}</span>
-                  )}
-                  <button
-                    className="pixel-btn text-sm py-2 px-4"
-                    style={isS1 ? {
-                      borderColor: 'var(--color-accent-green)',
-                      background: 'rgba(68,255,102,0.2)',
-                      color: 'var(--color-accent-green)',
-                      boxShadow: '0 0 8px rgba(68,255,102,0.15)',
-                    } : {
-                      borderColor: 'var(--color-border-light)',
-                      color: 'var(--color-text-secondary)',
-                    }}
-                    onClick={() => assignKit(id, 0)}>S1</button>
-                  <button
-                    className="pixel-btn text-sm py-2 px-4"
-                    style={isS2 ? {
-                      borderColor: 'var(--color-accent-cyan)',
-                      background: 'rgba(34,153,204,0.2)',
-                      color: 'var(--color-accent-cyan)',
-                      boxShadow: '0 0 8px rgba(34,153,204,0.15)',
-                    } : {
-                      borderColor: 'var(--color-border-light)',
-                      color: 'var(--color-text-secondary)',
-                    }}
-                    onClick={() => assignKit(id, 1)}>S2</button>
-                </>
-              )}
-            </div>
-          </div>
-        );
-      })}
+            );
+          })}
+        </div>
+      ))}
     </>
   );
 }

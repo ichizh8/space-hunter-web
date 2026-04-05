@@ -28,6 +28,49 @@ export const KIT_DEFS: Record<string, KitDef> = {
 
 export const ALL_KIT_IDS = Object.keys(KIT_DEFS);
 
+// Kit tree prerequisites (same as Godot v47)
+export const KIT_PREREQUISITES: Record<string, Array<{ kit: string; tier: number }>> = {
+  stim_pack: [],
+  flash_trap: [],
+  smoke_kit: [{ kit: 'stim_pack', tier: 2 }],
+  blink_kit: [{ kit: 'flash_trap', tier: 2 }],
+  charge_kit: [{ kit: 'stim_pack', tier: 2 }],
+  chain_kit: [{ kit: 'blink_kit', tier: 2 }],
+  turret_kit: [{ kit: 'charge_kit', tier: 2 }],
+  familiar_kit: [{ kit: 'smoke_kit', tier: 2 }],
+  mirage_kit: [{ kit: 'blink_kit', tier: 2 }],
+  anchor_kit: [{ kit: 'chain_kit', tier: 2 }],
+  drone_kit: [{ kit: 'turret_kit', tier: 2 }],
+  pack_kit: [{ kit: 'familiar_kit', tier: 2 }],
+  void_surge: [{ kit: 'anchor_kit', tier: 2 }, { kit: 'chain_kit', tier: 3 }],
+  rupture_kit: [{ kit: 'pack_kit', tier: 2 }, { kit: 'familiar_kit', tier: 3 }],
+};
+
+export const KIT_TREE_SECTIONS: Record<string, string[]> = {
+  Starter: ['stim_pack', 'flash_trap'],
+  Basic: ['smoke_kit', 'blink_kit', 'charge_kit'],
+  Advanced: ['chain_kit', 'turret_kit', 'familiar_kit', 'mirage_kit'],
+  Elite: ['anchor_kit', 'drone_kit', 'pack_kit'],
+  Apex: ['void_surge', 'rupture_kit'],
+};
+
+export const KIT_SLOT_COSTS = [200, 400];
+
+export function checkKitPrereqs(kitId: string, kitTiers: Record<string, number>, unlockedKits: string[]): boolean {
+  const prereqs = KIT_PREREQUISITES[kitId] || [];
+  for (const p of prereqs) {
+    if (!unlockedKits.includes(p.kit)) return false;
+    if ((kitTiers[p.kit] || 0) < p.tier) return false;
+  }
+  return true;
+}
+
+export function getPrereqText(kitId: string): string {
+  const prereqs = KIT_PREREQUISITES[kitId] || [];
+  if (prereqs.length === 0) return '';
+  return 'Requires: ' + prereqs.map(p => `${KIT_DEFS[p.kit]?.name || p.kit} T${p.tier}`).join(', ');
+}
+
 // ── Kit Perks (2 per kit, offered during runs) ──
 
 export interface KitPerkDef {

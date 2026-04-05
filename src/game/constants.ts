@@ -20,9 +20,12 @@ export const CORR_CLEAN = 15;
 export const CORR_VALLEY = 35;
 export const CORR_CORRUPT = 60;
 
-// XP -- flat per-tier: Lv1-5 = 20, Lv6-10 = 35, Lv11-12 = 55
+// XP -- Godot v47 lookup table (~871 total kills to cap)
 export const MAX_LEVEL = 12;
-export const XP_PER_LEVEL = [0, 20, 20, 20, 20, 20, 35, 35, 35, 35, 35, 55, 55];
+export const XP_PER_LEVEL = [0, 5, 10, 18, 28, 42, 60, 82, 108, 138, 170, 210, 210];
+
+// Post-cap stat drip: every 210 kills after cap grants one buff
+export const POST_CAP_XP = 210;
 
 // Combat
 export const ENEMY_MELEE_RANGE = 30;

@@ -48,7 +48,7 @@ export const useSaveStore = create<SaveState & SaveActions>()(
       totalCorruption: 0,
       contractsCompleted: 0,
       pantry: { ...DEFAULT_PANTRY },
-      shipUpgrades: { max_hp: 0, mag_size: 0, xp_rate: 0, loadout_slots: 0 },
+      shipUpgrades: { max_hp: 0, mag_size: 0, xp_rate: 0, loadout_slots: 0, kit_slots: 0 },
       unlockedWeapons: ['sidearm'],
       equippedKits: ['stim_pack', 'flash_trap'],
       kitTiers: { stim_pack: 1, flash_trap: 1 },
@@ -110,10 +110,16 @@ export const useSaveStore = create<SaveState & SaveActions>()(
 
       assignKit: (kitId, slot) => {
         const s = get();
+        const maxSlots = 2 + (s.shipUpgrades.kit_slots || 0);
         const eq = [...s.equippedKits];
-        while (eq.length < 2) eq.push('');
-        const other = 1 - slot;
-        if (eq[other] === kitId) eq[other] = eq[slot];
+        while (eq.length < maxSlots) eq.push('');
+        // Swap if already equipped in another slot
+        for (let i = 0; i < eq.length; i++) {
+          if (i !== slot && eq[i] === kitId) {
+            eq[i] = eq[slot];
+            break;
+          }
+        }
         eq[slot] = kitId;
         set({ equippedKits: eq });
       },
