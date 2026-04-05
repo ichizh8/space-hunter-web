@@ -2162,7 +2162,7 @@ export class Game {
     }
 
     // Dynamic map
-    this.map.drawDynamic(this.dynamicGfx, this.elapsed, this.player.x, this.player.y);
+    this.map.drawDynamic(this.dynamicGfx, this.elapsed, this.player.pos.x, this.player.pos.y);
 
     // Biome screen-space vignette
     this.drawBiomeVignette();
@@ -2382,7 +2382,7 @@ export class Game {
   private drawBiomeVignette() {
     const g = this.biomeGfx;
     g.clear();
-    const biome = this.map.getBiome(this.player.x, this.player.y);
+    const biome = this.map.getBiome(this.player.pos.x, this.player.pos.y);
     if (biome === 'open') return;
 
     const vw = this.app.screen.width;
