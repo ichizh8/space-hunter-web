@@ -48,6 +48,10 @@ export class WeaponSystem {
   voidBounce = false;
   executeThreshold = 0;
   slowOnHit = false;
+  burnOnHit = false;
+
+  // Runtime state (updated each frame by Game)
+  corruptionLevel = 0;
 
   fire(player: Player): Bullet[] {
     const def = WEAPON_DEFS[player.weaponId];
@@ -99,8 +103,13 @@ export class WeaponSystem {
     });
 
     switch (def.pattern) {
-      case 'single':
-        return [makeBullet(angle)];
+      case 'single': {
+        // Entropy cannon: scale bullet radius with corruption (base 10, up to 16 at 90 corruption)
+        const corrRadiusBonus = def.id === 'entropy_cannon'
+          ? Math.floor((this.corruptionLevel / 90) * 6)
+          : 0;
+        return [makeBullet(angle, { radius: rad + corrRadiusBonus })];
+      }
 
       case 'scatter': {
         const count = 5 + this.extraPellets;
@@ -114,20 +123,26 @@ export class WeaponSystem {
       case 'piercing':
         return [makeBullet(angle, { piercing: true })];
 
-      case 'melee_aoe':
+      case 'melee_aoe': {
+        const offset = v2fromAngle(angle, 35);
         return [makeBullet(angle, {
+          pos: v2(pos.x + offset.x, pos.y + offset.y),
           vel: v2(0, 0),
-          life: 0.2,
-          maxLife: 0.2,
+          life: 0.3,
+          maxLife: 0.3,
           aoeRadius: def.range,
         })];
+      }
 
       case 'homing':
         return [makeBullet(angle, { homing: true, life: 3.0, maxLife: 3.0 })];
 
       case 'cone_stream': {
-        const a = angle + randRange(-0.3, 0.3);
-        return [makeBullet(a, { life: 0.5, maxLife: 0.5 })];
+        const particleLife = range / Math.max(speed, 1);
+        return [0, 1, 2].map(() => {
+          const a = angle + randRange(-0.22, 0.22);
+          return makeBullet(a, { life: particleLife, maxLife: particleLife });
+        });
       }
 
       case 'arc_aoe':

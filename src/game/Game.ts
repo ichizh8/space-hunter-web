@@ -1224,6 +1224,9 @@ export class Game {
     }
     if (nearestDist === Infinity) this.player.nearestEnemyPos = null;
 
+    // Sync corruption level for bullet scaling (entropy cannon radius, etc.)
+    this.weapons.corruptionLevel = this.player.corruption;
+
     // Auto-fire when enemies in range
     if (this.player.nearestEnemyPos) {
       this.weapons.fire(this.player);
@@ -1322,6 +1325,10 @@ export class Game {
             if (enemy.shieldHp >= finalDmg) { enemy.shieldHp -= finalDmg; finalDmg = 0; }
             else { finalDmg -= enemy.shieldHp; enemy.shieldHp = 0; }
           }
+          // Entropy cannon: corruption-scaling damage (baseDamage × (1 + corruption/30))
+          if (this.weapons.corruptionScaling) {
+            finalDmg = Math.round(finalDmg * (1 + this.player.corruption / 30));
+          }
           // Execute threshold (sniper clean)
           if (this.weapons.executeThreshold > 0 && enemy.hp > 0 && (enemy.hp / enemy.maxHp) <= this.weapons.executeThreshold) {
             enemy.hp = 0;
@@ -1337,6 +1344,14 @@ export class Game {
           if (this.weapons.slowOnHit && CREATURE_DEFS[enemy.name]) {
             enemy.speed = Math.max(20, CREATURE_DEFS[enemy.name].speed * 0.7);
           }
+          // Baton base knockback (55px) — core identity; Shockwave perk upgrades to 100px + stun
+          if (this.player.weaponId === 'baton') {
+            const kbDir = v2norm(v2sub(enemy.pos, this.player.pos));
+            const kbDist = this.weapons.knockback ? 100 : 55;
+            enemy.pos.x += kbDir.x * kbDist;
+            enemy.pos.y += kbDir.y * kbDist;
+            if (this.weapons.knockback) enemy.stunTimer = Math.max(enemy.stunTimer, 0.5);
+          }
           // Lifesteal (baton void)
           if (this.weapons.lifesteal) {
             this.player.hp = Math.min(this.player.hp + 1, this.player.maxHp);
@@ -1348,6 +1363,10 @@ export class Game {
           // Corruption on fire (flamethrower void)
           if (this.weapons.corruptionOnFire) {
             this.player.corruption = Math.min(100, this.player.corruption + 0.5);
+          }
+          // Flamethrower burn DoT (Napalm perk)
+          if (this.weapons.burnOnHit) {
+            enemy.burnTimer = 3; // refresh duration; 1 dmg/s for 3s
           }
           // Conductor perk: ricochet off stunned enemies
           if (this.hasPerk('conductor') && enemy.stunTimer > 0 && !(bullet as unknown as { ricocheted?: boolean }).ricocheted) {
@@ -1395,6 +1414,16 @@ export class Game {
             this.onEnemyKilled(enemy);
           }
         }
+      }
+    }
+
+    // Burn DoT tick (flamethrower Napalm perk) — 1 dmg/s for up to 3s
+    for (const enemy of this.enemies.enemies) {
+      if (enemy.burnTimer > 0) {
+        enemy.burnTimer -= dt;
+        enemy.hp -= dt; // 1 damage per second
+        enemy.hitFlash = Math.max(enemy.hitFlash, 0.05);
+        if (enemy.hp <= 0) this.onEnemyKilled(enemy);
       }
     }
 
@@ -2530,6 +2559,8 @@ export class Game {
         } else if (card.perkEffect === 'damage_knockback' && typeof card.perkValue === 'number') {
           this.weapons.bonusDamage = (this.weapons.bonusDamage ?? 0) + card.perkValue;
           this.weapons.knockback = true;
+        } else if (card.perkEffect === 'burning') {
+          this.weapons.burnOnHit = true;
         }
         // Boolean perks stored as flags
         this.activeModifiers.push(card.id);

@@ -37,6 +37,7 @@ export interface Enemy {
   strafeTimer: number;
   meleeCooldown: number;
   stunTimer: number;
+  burnTimer: number;
   isAlly: boolean;
   // Elite affix fields
   affixes: string[];
@@ -91,6 +92,7 @@ export function createEnemy(name: string, pos: Vec2, aggroed = false): Enemy {
     strafeTimer: 0,
     meleeCooldown: 0,
     stunTimer: 0,
+    burnTimer: 0,
     isAlly: false,
     affixes: [],
     shieldHp: 0,
