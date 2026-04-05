@@ -53,10 +53,11 @@ export interface Enemy {
   lockAngle: number;    // locked aim direction (charge rush, burst dash)
   packAngle: number;    // surround angle for pack coordination
   woundedFlee: boolean; // true once set when HP drops below 20%
-  eliteEntrance: number;      // 1.0→0 entrance flicker
-  eliteAttackTimer: number;   // countdown between special attacks
-  eliteAttackPhase: number;   // 0=idle, 1=AOE windup, 2=dash windup, 22=dash active, 3=proj burst, 4=summon
-  eliteAttackWindup: number;  // windup/active duration timer
+  // Elite-specific aggro/attack state
+  eliteTeleportTimer: number;  // > 0 = pending entrance teleport; elite parks offscreen until 0
+  eliteAttackTimer: number;    // time until next attack fires
+  eliteAttackCycle: number;    // which attack fires next: 0=aoe, 1=dash, 2=burst (cycles)
+  eliteSummonTimer: number;    // 15s cooldown for summoning minions
 }
 
 let nextEnemyId = 1;
@@ -109,16 +110,17 @@ export function createEnemy(name: string, pos: Vec2, aggroed = false): Enemy {
     lockAngle: 0,
     packAngle: (nextEnemyId * 1.2566) % (Math.PI * 2), // spread across circle using golden-ish increment
     woundedFlee: false,
-    eliteEntrance: 0,
+    eliteTeleportTimer: 0,
     eliteAttackTimer: 3.0,
-    eliteAttackPhase: 0,
-    eliteAttackWindup: 0,
+    eliteAttackCycle: 0,
+    eliteSummonTimer: 15,
   };
 }
 
 export class EnemySystem {
   enemies: Enemy[] = [];
   enemyBullets: Array<{ pos: Vec2; vel: Vec2; radius: number; damage: number; life: number; color: number }> = [];
+  _pendingSummons: Vec2[] = [];
 
   spawnWave(count: number, playerPos: Vec2, map: GameMap, biome?: string) {
     for (let i = 0; i < count; i++) {
@@ -151,30 +153,17 @@ export class EnemySystem {
         continue;
       }
 
-      // Elite entrance: freeze until entrance flicker finishes
-      if (e.isElite && e.eliteEntrance > 0) {
-        e.eliteEntrance -= dt;
-        e.vel = v2(0, 0);
-        const nx = e.pos.x + e.vel.x * dt;
-        const ny = e.pos.y + e.vel.y * dt;
-        if (!map.isBlocked(nx, e.pos.y, e.radius)) e.pos.x = nx;
-        if (!map.isBlocked(e.pos.x, ny, e.radius)) e.pos.y = ny;
-        continue;
-      }
-      // Elite aggro lock: always pursue player, override leash
-      if (e.isElite) {
-        e.isAggroed = true;
-        // Lurker phase 0 override: don't wait dormant, actively approach
-        if (e.behavior === 'lurker' && (e.phase as number) === 0 && v2dist(e.pos, player.pos) > 200) {
-          e.vel = v2mul(v2norm(v2sub(player.pos, e.pos)), e.speed * 0.7);
-          const nx2 = e.pos.x + e.vel.x * dt;
-          const ny2 = e.pos.y + e.vel.y * dt;
-          if (!map.isBlocked(nx2, e.pos.y, e.radius)) e.pos.x = nx2;
-          if (!map.isBlocked(e.pos.x, ny2, e.radius)) e.pos.y = ny2;
-          e.pos.x = Math.max(e.radius, Math.min(WORLD_W - e.radius, e.pos.x));
-          e.pos.y = Math.max(e.radius, Math.min(WORLD_H - e.radius, e.pos.y));
-          continue;
+      // Elite teleport entrance: park offscreen until timer expires, then snap to aggroOrigin
+      if (e.isElite && e.eliteTeleportTimer > 0) {
+        e.eliteTeleportTimer -= dt;
+        if (e.eliteTeleportTimer <= 0) {
+          e.pos.x = e.aggroOrigin.x;
+          e.pos.y = e.aggroOrigin.y;
+          e.eliteTeleportTimer = 0;
+          e.hitFlash = 0.35;
+          e.eliteAttackTimer = randRange(2, 4);
         }
+        continue;
       }
 
       // Allies attack nearest non-ally enemy instead of player
@@ -215,8 +204,8 @@ export class EnemySystem {
         e.isAggroed = true;
       }
 
-      // Leash check
-      if (e.isAggroed && v2dist(e.pos, e.aggroOrigin) > e.leash && distToPlayer > e.detection) {
+      // Leash check (elites never de-aggro)
+      if (!e.isElite && e.isAggroed && v2dist(e.pos, e.aggroOrigin) > e.leash && distToPlayer > e.detection) {
         e.isAggroed = false;
       }
 
@@ -490,6 +479,124 @@ export class EnemySystem {
           break;
         }
 
+        case 'elite': {
+          // Aggro lock: always move toward player, no leash/de-aggro
+          e.isAggroed = true;
+
+          // Direct-to-player direction (ignores decoys)
+          const eliteToPlayer = v2sub(player.pos, e.pos);
+          const eliteDist = v2len(eliteToPlayer);
+          const eliteDir = eliteDist > 0.5 ? v2norm(eliteToPlayer) : v2fromAngle(0);
+
+          // Summon minions every 15s
+          e.eliteSummonTimer -= dt;
+          if (e.eliteSummonTimer <= 0) {
+            e.eliteSummonTimer = 15;
+            const minionCount = 2 + Math.floor(Math.random() * 2);
+            for (let mi = 0; mi < minionCount; mi++) {
+              const mAngle = Math.random() * Math.PI * 2;
+              const mDist = 50 + Math.random() * 80;
+              this._pendingSummons.push(v2(
+                e.pos.x + Math.cos(mAngle) * mDist,
+                e.pos.y + Math.sin(mAngle) * mDist,
+              ));
+            }
+            e.hitFlash = 0.1;
+          }
+
+          e.phaseTimer -= dt;
+          e.eliteAttackTimer -= dt;
+
+          if (e.phase === 0) {
+            // Default: charge toward player at 35% speed bonus
+            e.vel = v2mul(eliteDir, e.speed * 1.35);
+
+            if (e.eliteAttackTimer <= 0) {
+              const attackType = e.eliteAttackCycle % 3;
+              e.eliteAttackCycle++;
+
+              if (attackType === 0) {
+                // AOE Slam — initiate regardless; move toward player first if needed
+                e.phase = 10;
+                e.phaseTimer = 0.8;
+                e.vel = v2(0, 0);
+              } else if (attackType === 1) {
+                // Dash Attack — lock direction toward current player pos
+                e.phase = 20;
+                e.phaseTimer = 0.5;
+                e.lockAngle = Math.atan2(eliteToPlayer.y, eliteToPlayer.x);
+                e.vel = v2mul(e.vel, 0.2);
+              } else {
+                // Projectile Burst — fire immediately and reset timer
+                const spreadCount = 5 + Math.floor(Math.random() * 4);
+                const baseAngle = Math.atan2(eliteToPlayer.y, eliteToPlayer.x);
+                const spread = Math.PI / 3;
+                for (let si = 0; si < spreadCount; si++) {
+                  const a = baseAngle - spread / 2 + (si / Math.max(1, spreadCount - 1)) * spread;
+                  this.enemyBullets.push({
+                    pos: v2(e.pos.x, e.pos.y),
+                    vel: v2fromAngle(a, 230),
+                    radius: 5,
+                    damage: Math.max(1, Math.round(e.meleeDmg * 0.7)),
+                    life: 2.5,
+                    color: 0xff4400,
+                  });
+                }
+                e.hitFlash = 0.08;
+                e.eliteAttackTimer = randRange(3, 6);
+              }
+            }
+          } else if (e.phase === 10) {
+            // AOE charge: slow drift toward player, expanding pulse visual
+            e.vel = v2mul(eliteDir, e.speed * 0.3);
+            e.hitFlash = 0.04 + Math.sin(e.phaseTimer * 20) * 0.03;
+            if (e.phaseTimer <= 0) {
+              // Detonate
+              e.phase = 11;
+              e.phaseTimer = 0.2;
+              if (eliteDist < 120 + e.radius) {
+                player.takeDamage(e.meleeDmg * 2);
+              }
+              e.meleeCooldown = 0.8; // suppress normal melee right after
+            }
+          } else if (e.phase === 11) {
+            // AOE flash
+            e.hitFlash = e.phaseTimer / 0.2 * 0.4;
+            e.vel = v2mul(e.vel, 0.5);
+            if (e.phaseTimer <= 0) {
+              e.phase = 0;
+              e.eliteAttackTimer = randRange(3, 6);
+            }
+          } else if (e.phase === 20) {
+            // Dash charge: freeze, lock angle already set
+            e.vel = v2mul(e.vel, 0.6);
+            if (e.phaseTimer <= 0) {
+              e.phase = 21;
+              e.phaseTimer = 0.45;
+            }
+          } else if (e.phase === 21) {
+            // Dashing at 3x speed
+            e.vel = v2mul(v2fromAngle(e.lockAngle), e.speed * 3.0);
+            // Damage on close pass (meleeCooldown prevents spamming)
+            if (eliteDist < 35 + e.radius + player.radius && e.meleeCooldown <= 0) {
+              player.takeDamage(e.meleeDmg * 1.5);
+              e.meleeCooldown = 0.5;
+            }
+            if (e.phaseTimer <= 0) {
+              e.phase = 22;
+              e.phaseTimer = 0.4;
+            }
+          } else if (e.phase === 22) {
+            // Dash recovery: brake
+            e.vel = v2mul(e.vel, 0.75);
+            if (e.phaseTimer <= 0) {
+              e.phase = 0;
+              e.eliteAttackTimer = randRange(2, 5);
+            }
+          }
+          break;
+        }
+
         default: {
           // Stop at melee range; strafe instead of stacking
           const meleeStop = ENEMY_MELEE_RANGE + e.radius + player.radius;
@@ -558,6 +665,15 @@ export class EnemySystem {
         }
       }
     }
+
+    // Spawn elite-summoned minions after main loop (safe to push now)
+    for (const spawnPos of this._pendingSummons) {
+      const biome = map.getBiome(spawnPos.x, spawnPos.y);
+      const pool = BIOME_POOLS[biome] || BIOME_POOLS.open;
+      const name = pick(pool);
+      this.enemies.push(createEnemy(name, spawnPos, true));
+    }
+    this._pendingSummons = [];
 
     // Enemy-to-enemy separation — prevent stacking on each other
     for (let i = 0; i < this.enemies.length; i++) {
