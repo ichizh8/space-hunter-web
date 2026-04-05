@@ -158,6 +158,12 @@ export class Game {
   familiarActive = false;
   familiarPos = v2(0, 0);
   familiarAttackTimer = 0;
+  familiarState: 'IDLE' | 'HUNTING' | 'BITING' | 'RETURNING' | 'DELIVERING' = 'IDLE';
+  familiarStateTimer = 1.5;
+  familiarTarget: Enemy | null = null;
+  familiarTargetBehavior: string | null = null;
+  familiarSpeedBoostTimer = 0;
+  familiarDmgBoostTimer = 0;
 
   // Void surge state
   voidSurgeActive = false;
@@ -988,10 +994,14 @@ export class Game {
         this.droneInterceptTimer = 0;
         break;
       case 'familiar_kit':
-        // Persistent familiar that orbits and rams
+        // Persistent familiar with fetch state machine
         this.familiarActive = true;
         this.familiarPos = { x: this.player.pos.x + 60, y: this.player.pos.y };
         this.familiarAttackTimer = 0;
+        this.familiarState = 'IDLE';
+        this.familiarStateTimer = 1.5;
+        this.familiarTarget = null;
+        this.familiarTargetBehavior = null;
         break;
       case 'pack_kit': {
         // T2: spawn 4 allies instead of 2
@@ -1112,6 +1122,7 @@ export class Game {
     let speedMult = 1.0;
     if (this.voidSurgeActive) speedMult *= 1.8;
     if (this.stimSpeedTimer > 0) { speedMult *= 1.2; this.stimSpeedTimer -= dt; }
+    if (this.familiarSpeedBoostTimer > 0) { speedMult *= 1.3; this.familiarSpeedBoostTimer -= dt; }
     this.player.externalSpeedMult = speedMult;
 
     // Frenzy Aura perk: nearby allies increase fire rate
@@ -1759,11 +1770,16 @@ export class Game {
       }
     }
 
-    // Update familiar
+    // Update familiar (fetch companion state machine)
     if (this.familiarActive) {
-      const famOrbit = (this.elapsed * 1.5 + Math.PI) % (Math.PI * 2);
-      this.familiarPos = { x: this.player.pos.x + Math.cos(famOrbit) * 55, y: this.player.pos.y + Math.sin(famOrbit) * 55 };
-      // Spotter perk: mark highest-HP enemy for +30% damage
+      const FAM_SPEED = 270;
+      const FAM_BITE_RANGE = 18;
+      const FAM_RETURN_RANGE = 24;
+
+      // Decay damage boost timer
+      if (this.familiarDmgBoostTimer > 0) this.familiarDmgBoostTimer -= dt;
+
+      // Spotter perk: mark highest-HP enemy within range
       if (this.hasPerk('spotter')) {
         let spotBestHp = 0; let spotBestEnemy: Enemy | null = null;
         for (const e of this.enemies.enemies) {
@@ -1773,21 +1789,125 @@ export class Game {
         }
         if (spotBestEnemy) { spotBestEnemy.markedTimer = 0.5; spotBestEnemy.markedDmgBonus = 1.3; }
       }
-      this.familiarAttackTimer -= dt;
-      if (this.familiarAttackTimer <= 0) {
-        this.familiarAttackTimer = 3;
-        let famBestDist = 160;
-        let famBestEnemy: Enemy | null = null;
-        for (const e of this.enemies.enemies) {
-          if (e.hp <= 0 || e.isAlly) continue;
-          const d = v2dist(this.familiarPos, e.pos);
-          if (d < famBestDist) { famBestDist = d; famBestEnemy = e; }
+
+      switch (this.familiarState) {
+        case 'IDLE': {
+          // Slow orbit around player
+          const famOrbit = (this.elapsed * 1.0 + Math.PI) % (Math.PI * 2);
+          this.familiarPos = { x: this.player.pos.x + Math.cos(famOrbit) * 55, y: this.player.pos.y + Math.sin(famOrbit) * 55 };
+          this.familiarStateTimer -= dt;
+          if (this.familiarStateTimer <= 0) {
+            // Pick nearest enemy within 500px
+            let bestDist = 500; let bestEnemy: Enemy | null = null;
+            for (const e of this.enemies.enemies) {
+              if (e.hp <= 0 || e.isAlly) continue;
+              const d = v2dist(this.familiarPos, e.pos);
+              if (d < bestDist) { bestDist = d; bestEnemy = e; }
+            }
+            if (bestEnemy) {
+              this.familiarState = 'HUNTING';
+              this.familiarTarget = bestEnemy;
+              this.familiarStateTimer = 2.5;
+            } else {
+              this.familiarStateTimer = 0.5; // retry
+            }
+          }
+          break;
         }
-        if (famBestEnemy) {
-          famBestEnemy.hp -= 2;
-          famBestEnemy.hitFlash = 0.15;
-          if (famBestEnemy.hp <= 0) this.onEnemyKilled(famBestEnemy);
-          this.explosions.push({ x: this.familiarPos.x, y: this.familiarPos.y, radius: 0, maxRadius: 20, life: 0.1, maxLife: 0.1 });
+
+        case 'HUNTING': {
+          this.familiarStateTimer -= dt;
+          const tgt = this.familiarTarget;
+          if (!tgt || tgt.hp <= 0 || this.familiarStateTimer <= 0) {
+            this.familiarState = 'IDLE';
+            this.familiarStateTimer = 0.8;
+            this.familiarTarget = null;
+            break;
+          }
+          const hdx = tgt.pos.x - this.familiarPos.x;
+          const hdy = tgt.pos.y - this.familiarPos.y;
+          const hdist = Math.sqrt(hdx * hdx + hdy * hdy);
+          if (hdist < FAM_BITE_RANGE) {
+            this.familiarState = 'BITING';
+            this.familiarStateTimer = 0.6;
+            this.familiarTargetBehavior = tgt.behavior;
+            this.familiarAttackTimer = 0;
+          } else {
+            this.familiarPos.x += (hdx / hdist) * FAM_SPEED * dt;
+            this.familiarPos.y += (hdy / hdist) * FAM_SPEED * dt;
+          }
+          break;
+        }
+
+        case 'BITING': {
+          this.familiarStateTimer -= dt;
+          const tgt = this.familiarTarget;
+          if (tgt && tgt.hp > 0) {
+            this.familiarPos = { x: tgt.pos.x + 5, y: tgt.pos.y + 5 };
+            this.familiarAttackTimer -= dt;
+            if (this.familiarAttackTimer <= 0) {
+              this.familiarAttackTimer = 0.3;
+              tgt.hp -= 1; tgt.hitFlash = 0.15;
+              if (tgt.hp <= 0) { this.onEnemyKilled(tgt); this.familiarTarget = null; }
+              this.explosions.push({ x: this.familiarPos.x, y: this.familiarPos.y, radius: 0, maxRadius: 10, life: 0.1, maxLife: 0.1 });
+            }
+          }
+          if (this.familiarStateTimer <= 0 || !tgt || tgt.hp <= 0) {
+            this.familiarState = 'RETURNING';
+            this.familiarStateTimer = 2.0;
+            this.familiarTarget = null;
+          }
+          break;
+        }
+
+        case 'RETURNING': {
+          this.familiarStateTimer -= dt;
+          const rdx = this.player.pos.x - this.familiarPos.x;
+          const rdy = this.player.pos.y - this.familiarPos.y;
+          const rdist = Math.sqrt(rdx * rdx + rdy * rdy);
+          if (rdist < FAM_RETURN_RANGE || this.familiarStateTimer <= 0) {
+            this.familiarState = 'DELIVERING';
+            this.familiarStateTimer = 0.3;
+          } else {
+            this.familiarPos.x += (rdx / rdist) * FAM_SPEED * dt;
+            this.familiarPos.y += (rdy / rdist) * FAM_SPEED * dt;
+          }
+          break;
+        }
+
+        case 'DELIVERING': {
+          this.familiarStateTimer -= dt;
+          if (this.familiarStateTimer <= 0) {
+            switch (this.familiarTargetBehavior) {
+              case 'charge':
+                this.player.heal(1);
+                this.hud.showMessage('FAMILIAR: +HEAL', 1.5);
+                break;
+              case 'pack':
+                this.familiarSpeedBoostTimer = 3;
+                this.hud.showMessage('FAMILIAR: SPEED+', 1.5);
+                break;
+              case 'flank':
+                this.familiarDmgBoostTimer = 3;
+                this.hud.showMessage('FAMILIAR: DMG+', 1.5);
+                break;
+              case 'lurker':
+                this.player.iFrames = 1.5;
+                this.hud.showMessage('FAMILIAR: SHIELD', 1.5);
+                break;
+              case 'elite':
+                this.player.corruption = Math.max(0, this.player.corruption - 10);
+                this.hud.showMessage('FAMILIAR: CORRUPT CLEANSE', 1.5);
+                break;
+              default:
+                this.player.heal(1);
+                this.hud.showMessage('FAMILIAR: BUFF', 1.5);
+            }
+            this.familiarTargetBehavior = null;
+            this.familiarState = 'IDLE';
+            this.familiarStateTimer = 1.5;
+          }
+          break;
         }
       }
     }
@@ -2181,7 +2301,12 @@ export class Game {
       spr.x = e.pos.x;
       spr.y = e.pos.y;
       spr.visible = this.camera.isVisible(e.pos.x, e.pos.y, e.radius * 2);
-      spr.tint = e.hitFlash > 0 ? 0xff4444 : 0xffffff;
+      // Behavior-based tint when not flashing
+      const behaviorTint: Record<string, number> = {
+        charge: 0xff6644, flank: 0xffaa55, pack: 0x66ff88,
+        lurker: 0xcc77ff, burst: 0xffee55, strafe: 0x55eeff,
+      };
+      spr.tint = e.hitFlash > 0 ? 0xff4444 : (behaviorTint[e.behavior] ?? 0xffffff);
 
       // Scale up apex enemy sprite
       if (e.id === this.apexId) {
@@ -2433,6 +2558,38 @@ export class Game {
         g.circle(ex, ey, er * 0.4).fill({ color: 0xff2200, alpha: 0.5 + Math.sin(this.elapsed * 4) * 0.2 });
       }
 
+      // Behavior-specific visual overlays (skip elites — they have their own treatment)
+      if (!e.isElite && e.hitFlash <= 0) {
+        if (e.behavior === 'charge') {
+          // Red outer glow ring
+          g.circle(ex, ey, er * 1.5).stroke({ color: 0xff3300, width: 2, alpha: 0.55 + Math.sin(this.elapsed * 3) * 0.15 });
+        } else if (e.behavior === 'flank') {
+          // Orange glow ring
+          g.circle(ex, ey, er * 1.5).stroke({ color: 0xff8800, width: 2, alpha: 0.5 });
+        } else if (e.behavior === 'pack') {
+          // Green glow + lines to nearby pack-mates
+          g.circle(ex, ey, er * 1.5).stroke({ color: 0x33ff55, width: 2, alpha: 0.5 });
+          for (const other of this.enemies.enemies) {
+            if (other === e || other.behavior !== 'pack' || other.hp <= 0) continue;
+            const od = v2dist(e.pos, other.pos);
+            if (od < 200 && od > 0) {
+              g.moveTo(ex, ey).lineTo(other.pos.x, other.pos.y)
+                .stroke({ color: 0x33ff55, width: 1, alpha: 0.25 });
+            }
+          }
+        } else if (e.behavior === 'lurker') {
+          // Purple tint + semi-transparent fill overlay
+          g.circle(ex, ey, er * 1.2).fill({ color: 0xaa22ff, alpha: 0.18 });
+          g.circle(ex, ey, er * 1.5).stroke({ color: 0xcc44ff, width: 1.5, alpha: 0.55 });
+        } else if (e.behavior === 'burst') {
+          // Yellow glow ring
+          g.circle(ex, ey, er * 1.5).stroke({ color: 0xffdd00, width: 2, alpha: 0.5 });
+        } else if (e.behavior === 'strafe') {
+          // Cyan glow ring
+          g.circle(ex, ey, er * 1.5).stroke({ color: 0x00ddff, width: 2, alpha: 0.5 });
+        }
+      }
+
       if (e.hp < e.maxHp) {
         const bw = er * 2.5;
         const bh = 3;
@@ -2538,10 +2695,21 @@ export class Game {
       g.circle(this.dronePos.x, this.dronePos.y, 100).stroke({ color: 0x33ccff, width: 1, alpha: 0.06 });
     }
 
-    // Draw familiar
+    // Draw familiar (color by state: green=IDLE, red=HUNTING/BITING, yellow=RETURNING/DELIVERING)
     if (this.familiarActive) {
-      g.circle(this.familiarPos.x, this.familiarPos.y, 10).fill({ color: 0x9933ff, alpha: 0.7 });
-      g.circle(this.familiarPos.x, this.familiarPos.y, 10).stroke({ color: 0xcc66ff, width: 2, alpha: 0.5 });
+      const fx = this.familiarPos.x, fy = this.familiarPos.y;
+      let famCore = 0x33ff66, famRing = 0x88ffaa; // IDLE: green
+      if (this.familiarState === 'HUNTING' || this.familiarState === 'BITING') {
+        famCore = 0xff3322; famRing = 0xff7766; // red
+      } else if (this.familiarState === 'RETURNING' || this.familiarState === 'DELIVERING') {
+        famCore = 0xffcc00; famRing = 0xffee88; // yellow
+      }
+      // Outer glow
+      g.circle(fx, fy, 14).fill({ color: famCore, alpha: 0.15 + Math.sin(this.elapsed * 6) * 0.08 });
+      // Core orb
+      g.circle(fx, fy, 8).fill({ color: famCore, alpha: 0.85 });
+      // Ring
+      g.circle(fx, fy, 8).stroke({ color: famRing, width: 2, alpha: 0.7 });
     }
 
     // Draw explosions
@@ -2845,6 +3013,7 @@ export class Game {
     if (this.hasMod('last_stand') && this.player.hp < 3) mult *= 1.5;
     if (this.hasMod('precision') && this.player.justReloaded) mult *= 2;
     if (this.hasMod('momentum')) mult *= 1 + this.momentumHits * 0.15;
+    if (this.familiarDmgBoostTimer > 0) mult *= 1.4;
     return mult;
   }
 
