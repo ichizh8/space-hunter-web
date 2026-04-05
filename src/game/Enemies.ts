@@ -456,8 +456,23 @@ export class EnemySystem {
           break;
         }
 
-        default:
-          e.vel = v2mul(dirToPlayer, e.speed);
+        default: {
+          // Stop at melee range; strafe instead of stacking
+          const meleeStop = ENEMY_MELEE_RANGE + e.radius + player.radius;
+          if (distToPlayer > meleeStop + 10) {
+            e.vel = v2mul(dirToPlayer, e.speed);
+          } else {
+            // At melee range — strafe laterally so enemy doesn't push into player
+            e.strafeTimer -= dt;
+            if (e.strafeTimer <= 0) {
+              e.strafeDir *= -1;
+              e.strafeTimer = randRange(0.8, 2.0);
+            }
+            const perp = v2(-dirToPlayer.y * e.strafeDir, dirToPlayer.x * e.strafeDir);
+            e.vel = v2mul(perp, e.speed * 0.5);
+          }
+          break;
+        }
       }
       } // end non-wounded block
 
@@ -468,6 +483,17 @@ export class EnemySystem {
       if (!map.isBlocked(e.pos.x, newY, e.radius)) e.pos.y = newY;
       e.pos.x = Math.max(e.radius, Math.min(WORLD_W - e.radius, e.pos.x));
       e.pos.y = Math.max(e.radius, Math.min(WORLD_H - e.radius, e.pos.y));
+
+      // Enforce minimum distance from player — prevent stacking on top of player
+      const minPlayerDist = e.radius + player.radius + 2;
+      if (distToPlayer < minPlayerDist) {
+        const repulseDir = distToPlayer > 0.5
+          ? v2norm(v2sub(e.pos, player.pos))
+          : v2fromAngle(Math.random() * Math.PI * 2);
+        const overlap = minPlayerDist - distToPlayer;
+        e.pos.x += repulseDir.x * overlap;
+        e.pos.y += repulseDir.y * overlap;
+      }
 
       // Melee attack (skip allies)
       if (!e.isAlly && distToPlayer < ENEMY_MELEE_RANGE + e.radius + player.radius && e.meleeDmg > 0 && e.meleeCooldown <= 0) {
@@ -495,6 +521,26 @@ export class EnemySystem {
             life: 2.0,
             color: 0xff4444,
           });
+        }
+      }
+    }
+
+    // Enemy-to-enemy separation — prevent stacking on each other
+    for (let i = 0; i < this.enemies.length; i++) {
+      const a = this.enemies[i];
+      if (a.hp <= 0) continue;
+      for (let j = i + 1; j < this.enemies.length; j++) {
+        const b = this.enemies[j];
+        if (b.hp <= 0) continue;
+        const sep = v2dist(a.pos, b.pos);
+        const minSep = a.radius + b.radius + 2;
+        if (sep < minSep && sep > 0.1) {
+          const push = v2norm(v2sub(a.pos, b.pos));
+          const half = (minSep - sep) * 0.5;
+          a.pos.x += push.x * half;
+          a.pos.y += push.y * half;
+          b.pos.x -= push.x * half;
+          b.pos.y -= push.y * half;
         }
       }
     }
