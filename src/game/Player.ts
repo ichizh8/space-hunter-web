@@ -37,6 +37,9 @@ export class Player {
   aimAngle = 0;
   nearestEnemyPos: Vec2 | null = null;
 
+  // Last non-zero movement direction (used for melee swing angle)
+  lastMoveAngle = Math.PI / 2; // default south
+
   // Invincibility frames
   iFrames = 0;
   hitFlash = 0;
@@ -82,6 +85,11 @@ export class Player {
 
     // External speed multiplier (void surge etc.)
     speedMod *= this.externalSpeedMult;
+
+    // Track last movement direction for melee swing
+    if (v2len(dir) > 0.1) {
+      this.lastMoveAngle = Math.atan2(dir.y, dir.x);
+    }
 
     // Apply velocity
     this.vel = v2mul(dir, this.speed * speedMod);

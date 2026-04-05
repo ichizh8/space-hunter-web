@@ -71,7 +71,8 @@ export class WeaponSystem {
     player.fireCooldown = Math.max(0.02, def.fireRate + this.fireRateBonus);
     if (def.magSize < 999) player.magAmmo--;
 
-    const newBullets = this.createBullets(player.pos, player.aimAngle, def);
+    const swingAngle = def.pattern === 'melee_aoe' ? player.lastMoveAngle : player.aimAngle;
+    const newBullets = this.createBullets(player.pos, swingAngle, def);
     this.bullets.push(...newBullets);
 
     // Auto-reload on empty
