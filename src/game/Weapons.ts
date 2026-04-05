@@ -124,14 +124,23 @@ export class WeaponSystem {
         return [makeBullet(angle, { piercing: true })];
 
       case 'melee_aoe': {
-        const offset = v2fromAngle(angle, 35);
-        return [makeBullet(angle, {
-          pos: v2(pos.x + offset.x, pos.y + offset.y),
-          vel: v2(0, 0),
-          life: 0.3,
-          maxLife: 0.3,
-          aoeRadius: def.range,
-        })];
+        // Arc wave: 6 slash projectiles fanned across ±70° (140° total) centered on aim
+        const sharedHitSet = new Set<number>();
+        const arcCount = 6;
+        const arcHalfRad = (Math.PI * 70) / 180; // 70° each side = 140° arc
+        const slashSpeed = 350;
+        const slashLife = range / slashSpeed; // ~0.33s at base 115px range; scales with range upgrades
+        return Array.from({ length: arcCount }, (_, i) => {
+          const a = angle - arcHalfRad + (arcHalfRad * 2 / (arcCount - 1)) * i;
+          return makeBullet(a, {
+            vel: v2fromAngle(a, slashSpeed),
+            life: slashLife,
+            maxLife: slashLife,
+            radius: rad,
+            hitSet: sharedHitSet,
+            piercing: true,
+          });
+        });
       }
 
       case 'homing':
