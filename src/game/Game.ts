@@ -142,10 +142,10 @@ export class Game {
   decoys: Array<{ x: number; y: number; hp: number; life: number; maxLife: number }> = [];
 
   // Smoke zones (smoke_kit)
-  smokeZones: Array<{ x: number; y: number; radius: number; life: number; maxLife: number }> = [];
+  smokeZones: Array<{ x: number; y: number; radius: number; life: number; maxLife: number; slowing?: boolean; toxic?: boolean }> = [];
 
   // Gravity wells (anchor_kit)
-  gravityWells: Array<{ x: number; y: number; radius: number; life: number; maxLife: number; pullSpeed: number }> = [];
+  gravityWells: Array<{ x: number; y: number; radius: number; life: number; maxLife: number; pullSpeed: number; damageField?: boolean; explodeOnEnd?: boolean; enemiesInside?: number }> = [];
 
   // Drone state (drone_kit)
   droneActive = false;
@@ -164,6 +164,15 @@ export class Game {
 
   // Charge kit state
   chargeCharging = false;
+
+  // Stim T3 clean speed timer
+  stimSpeedTimer = 0;
+
+  // Blink T3 clean empowered shot
+  blinkEmpowered = false;
+
+  // Kit T3 path choices (persisted per run)
+  kitT3Choices: Record<string, string> = {};
 
   // Weapon leveling (starts at 1; perks are levels 2-5)
   weaponLevel = 1;
@@ -638,12 +647,21 @@ export class Game {
     if ((this.kitCooldowns[kitId] || 0) > 0) return;
     const kdef = KIT_DEFS[kitId];
     if (!kdef) return;
+    const tier = this.runKitTiers[kitId] || 1;
+    const t3Choice = this.kitT3Choices[kitId] || '';
 
     switch (kitId) {
-      case 'stim_pack':
-        this.player.heal(4);
+      case 'stim_pack': {
+        const heal = tier < 2 ? 4 : 5;
+        this.player.heal(heal);
         this.player.corruption = Math.min(100, this.player.corruption + 15);
+        // T3 clean: speed boost 5s
+        if (tier >= 3 && t3Choice === 'clean') {
+          this.stimSpeedTimer = 5.0;
+        }
+        // T3 void: cooldown resets on elite kill (tracked in onEnemyKilled)
         break;
+      }
       case 'flash_trap':
         // Damage all enemies within 80px
         for (const e of this.enemies.enemies) {
@@ -656,7 +674,7 @@ export class Game {
         this.explosions.push({ x: this.player.pos.x, y: this.player.pos.y, radius: 0, maxRadius: 80, life: 0.3, maxLife: 0.3 });
         break;
       case 'blink_kit': {
-        // Teleport 200px in facing direction
+        const oldPos = { x: this.player.pos.x, y: this.player.pos.y };
         const blinkDist = 200;
         const aim = this.player.nearestEnemyPos;
         if (aim) {
@@ -670,78 +688,134 @@ export class Game {
         } else {
           this.player.pos.y -= blinkDist;
         }
-        // Clamp to world
         this.player.pos.x = Math.max(0, Math.min(WORLD_W, this.player.pos.x));
         this.player.pos.y = Math.max(0, Math.min(WORLD_H, this.player.pos.y));
+        // T2: stun field at departure point
+        if (tier >= 2) {
+          for (const e of this.enemies.enemies) {
+            if (e.hp > 0 && !e.isAlly && v2dist(oldPos, e.pos) < 100) {
+              e.stunTimer = 1.5;
+            }
+          }
+          this.explosions.push({ x: oldPos.x, y: oldPos.y, radius: 0, maxRadius: 100, life: 0.3, maxLife: 0.3 });
+        }
+        // T3 clean: empowered next shot (3x damage)
+        if (tier >= 3 && t3Choice === 'clean') {
+          this.blinkEmpowered = true;
+        }
+        // T3 void: pull enemies with you
+        if (tier >= 3 && t3Choice === 'void') {
+          for (const e of this.enemies.enemies) {
+            if (e.hp > 0 && !e.isAlly && v2dist(oldPos, e.pos) < 150) {
+              e.pos.x = this.player.pos.x + (Math.random() - 0.5) * 80;
+              e.pos.y = this.player.pos.y + (Math.random() - 0.5) * 80;
+            }
+          }
+        }
         break;
       }
-      case 'turret_kit':
+      case 'turret_kit': {
+        const turretDur = tier < 2 ? 12 : (tier >= 3 && t3Choice === 'clean' ? 25 : 20);
+        const turretDmg = tier < 2 ? 2 : 2;
         this.turrets.push({
           x: this.player.pos.x,
           y: this.player.pos.y,
-          life: 12, maxLife: 12,
-          fireTimer: 0, fireRate: 0.35,
-          damage: 2, range: 250,
+          life: turretDur, maxLife: turretDur,
+          fireTimer: 0, fireRate: tier >= 2 ? 0.1 : 0.35, // T2: burst fire
+          damage: turretDmg, range: 250,
         });
         break;
+      }
       case 'chain_kit': {
         // Fire tether toward nearest enemy, stun 3s
         let chainNearest: Enemy | null = null;
         let chainDist = 999999;
-        for (const e of this.enemies.enemies) {
-          if (e.hp <= 0) continue;
+        let chainNearestIdx = -1;
+        for (let i = 0; i < this.enemies.enemies.length; i++) {
+          const e = this.enemies.enemies[i];
+          if (e.hp <= 0 || e.isAlly) continue;
           const d = v2dist(this.player.pos, e.pos);
-          if (d < chainDist) { chainDist = d; chainNearest = e; }
+          if (d < chainDist) { chainDist = d; chainNearest = e; chainNearestIdx = i; }
         }
         if (chainNearest) {
           chainNearest.stunTimer = 3.0;
-          chainNearest.speed *= 0;
           this.explosions.push({ x: chainNearest.pos.x, y: chainNearest.pos.y, radius: 0, maxRadius: 30, life: 0.3, maxLife: 0.3 });
+          // T2: arc to second enemy
+          if (tier >= 2) {
+            let secondDist = 200;
+            let secondEnemy: Enemy | null = null;
+            for (let i = 0; i < this.enemies.enemies.length; i++) {
+              if (i === chainNearestIdx || this.enemies.enemies[i].hp <= 0 || this.enemies.enemies[i].isAlly) continue;
+              const d2 = v2dist(chainNearest.pos, this.enemies.enemies[i].pos);
+              if (d2 < secondDist) { secondDist = d2; secondEnemy = this.enemies.enemies[i]; }
+            }
+            if (secondEnemy) {
+              secondEnemy.stunTimer = 3.0;
+            }
+          }
+          // T3 clean: chained enemy takes +50% damage (marked)
+          if (tier >= 3 && t3Choice === 'clean') {
+            (chainNearest as Enemy & { markedTimer?: number; markedDmgBonus?: number }).markedTimer = 5.0;
+            (chainNearest as Enemy & { markedDmgBonus?: number }).markedDmgBonus = 1.5;
+          }
         }
         break;
       }
       case 'charge_kit': {
-        // Knockback AOE 150px, 2 damage
+        const chargeDmg = tier < 2 ? 2 : 6;
+        const kbMult = (tier >= 3 && t3Choice === 'clean') ? 2.0 : 1.0;
         for (const e of this.enemies.enemies) {
-          if (e.hp <= 0) continue;
+          if (e.hp <= 0 || e.isAlly) continue;
           const d = v2dist(this.player.pos, e.pos);
           if (d < 150) {
             const pushDir = v2norm(v2sub(e.pos, this.player.pos));
-            e.pos.x += pushDir.x * 200;
-            e.pos.y += pushDir.y * 200;
-            e.hp -= 2;
+            e.pos.x += pushDir.x * 200 * kbMult;
+            e.pos.y += pushDir.y * 200 * kbMult;
+            e.hp -= chargeDmg;
             e.hitFlash = 0.3;
+            // T3 clean: stun after knockback
+            if (tier >= 3 && t3Choice === 'clean') e.stunTimer = 1.0;
             if (e.hp <= 0) this.onEnemyKilled(e);
           }
         }
         this.explosions.push({ x: this.player.pos.x, y: this.player.pos.y, radius: 0, maxRadius: 150, life: 0.3, maxLife: 0.3 });
         break;
       }
-      case 'mirage_kit':
-        // Spawn decoy that draws aggro
-        this.decoys.push({
-          x: this.player.pos.x + (Math.random() - 0.5) * 40,
-          y: this.player.pos.y + (Math.random() - 0.5) * 40,
-          hp: 5, life: 6, maxLife: 6,
-        });
+      case 'mirage_kit': {
+        // T3 clean: 3 decoys instead of 1
+        const decoyCount = (tier >= 3 && t3Choice === 'clean') ? 3 : 1;
+        for (let di = 0; di < decoyCount; di++) {
+          this.decoys.push({
+            x: this.player.pos.x + (Math.random() - 0.5) * 40,
+            y: this.player.pos.y + (Math.random() - 0.5) * 40,
+            hp: 5, life: 6, maxLife: 6,
+          });
+        }
         break;
+      }
       case 'smoke_kit':
-        // Smoke zone: de-aggro enemies inside, 6s
+        // Smoke zone: de-aggro enemies inside, 6s. T2: slows 40%. T3 void: toxic (1 dmg/s)
         this.smokeZones.push({
           x: this.player.pos.x,
           y: this.player.pos.y,
           radius: 150, life: 6, maxLife: 6,
-        });
+          slowing: tier >= 2,
+          toxic: tier >= 3 && t3Choice === 'void',
+        } as typeof this.smokeZones[number]);
         break;
-      case 'anchor_kit':
-        // Gravity well: pull enemies, 4s
+      case 'anchor_kit': {
+        // Gravity well: pull enemies. T2: 9s with pulse. T3 clean: damage field. T3 void: explode on end.
+        const gwLife = tier >= 2 ? 9 : 4;
         this.gravityWells.push({
           x: this.player.pos.x,
           y: this.player.pos.y,
-          radius: 400, life: 4, maxLife: 4,
+          radius: 400, life: gwLife, maxLife: gwLife,
           pullSpeed: 120,
-        });
+          damageField: tier >= 3 && t3Choice === 'clean',
+          explodeOnEnd: tier >= 3 && t3Choice === 'void',
+        } as typeof this.gravityWells[number]);
         break;
+      }
       case 'drone_kit':
         // Persistent drone that orbits, intercepts, attacks
         this.droneActive = true;
@@ -756,9 +830,14 @@ export class Game {
         this.familiarAttackTimer = 0;
         break;
       case 'pack_kit': {
-        // Spawn 2 ally enemies
-        for (let ai = 0; ai < 2; ai++) {
-          const angle = (ai / 2) * Math.PI * 2 + Math.random() * 0.4;
+        // T2: spawn 4 allies instead of 2
+        const allyCount = tier < 2 ? 2 : 4;
+        // Kill existing allies first
+        for (const e of this.enemies.enemies) {
+          if (e.isAlly) e.hp = 0;
+        }
+        for (let ai = 0; ai < allyCount; ai++) {
+          const angle = (ai / allyCount) * Math.PI * 2 + Math.random() * 0.4;
           const spawnDist = 50 + Math.random() * 40;
           const ally = createEnemy('Rift Parasite', {
             x: this.player.pos.x + Math.cos(angle) * spawnDist,
@@ -772,19 +851,35 @@ export class Game {
         }
         break;
       }
-      case 'void_surge':
-        // Speed burst: spend 20 corruption for 3s +80% speed
-        if (this.player.corruption >= 20) {
-          this.player.corruption -= 20;
+      case 'void_surge': {
+        // T3 clean: free at 60+ corruption
+        let surgeCost = 20;
+        if (tier >= 3 && t3Choice === 'clean' && this.player.corruption >= 60) surgeCost = 0;
+        if (this.player.corruption >= surgeCost) {
+          this.player.corruption -= surgeCost;
           this.voidSurgeActive = true;
           this.voidSurgeTimer = 3;
+          // T3 void: fire ring of 8 bullets
+          if (tier >= 3 && t3Choice === 'void') {
+            for (let bi = 0; bi < 8; bi++) {
+              const angle = (bi / 8) * Math.PI * 2;
+              const bdir = { x: Math.cos(angle), y: Math.sin(angle) };
+              this.weapons.bullets.push({
+                pos: { x: this.player.pos.x + bdir.x * 20, y: this.player.pos.y + bdir.y * 20 },
+                vel: { x: bdir.x * 300, y: bdir.y * 300 },
+                radius: 5, color: 0x6600cc, damage: 3, life: 0.8, maxLife: 0.8,
+                piercing: false, homing: false, bounces: 0, aoeRadius: 0,
+                fromPlayer: true, hitSet: new Set(),
+              });
+            }
+          }
         } else {
-          // Not enough corruption, refund cooldown
           this.kitCooldowns[kitId] = 0;
           this.hud.showMessage('NOT ENOUGH CORRUPTION', 1.5);
           return;
         }
         break;
+      }
       case 'rupture_kit': {
         // AOE damage = corruption/5, clear corruption
         const ruptureDmg = Math.floor(this.player.corruption / 5);
@@ -803,7 +898,17 @@ export class Game {
       default:
         break;
     }
-    this.kitCooldowns[kitId] = kdef.cooldown;
+    // Set cooldown (tier-adjusted for some kits)
+    let cd = kdef.cooldown;
+    if (kitId === 'stim_pack' && tier >= 2) cd = 5; // T2: 8->5s
+    // T3 mismatch penalty: double cooldown
+    if (tier >= 3 && t3Choice) {
+      const isClean = t3Choice === 'clean';
+      if ((isClean && this.player.corruption >= 35) || (!isClean && this.player.corruption < 50)) {
+        cd *= 2;
+      }
+    }
+    this.kitCooldowns[kitId] = cd;
     this.hud.showMessage(kdef.name.toUpperCase() + ' USED', 1.5);
   }
 
@@ -825,8 +930,11 @@ export class Game {
       }
     }
 
-    // Void surge speed mult
-    this.player.externalSpeedMult = this.voidSurgeActive ? 1.8 : 1.0;
+    // Speed multipliers: void surge + stim T3 clean
+    let speedMult = 1.0;
+    if (this.voidSurgeActive) speedMult *= 1.8;
+    if (this.stimSpeedTimer > 0) { speedMult *= 1.2; this.stimSpeedTimer -= dt; }
+    this.player.externalSpeedMult = speedMult;
 
     // Player update
     this.player.update(dt, this.map);
@@ -1083,11 +1191,25 @@ export class Game {
         this.smokeZones.splice(i, 1);
         continue;
       }
-      // De-aggro enemies inside smoke
       const sz = this.smokeZones[i];
       for (const e of this.enemies.enemies) {
-        if (e.hp > 0 && !e.isAlly && v2dist(e.pos, { x: sz.x, y: sz.y }) < sz.radius) {
+        if (e.hp <= 0 || e.isAlly) continue;
+        if (v2dist(e.pos, { x: sz.x, y: sz.y }) < sz.radius) {
+          // De-aggro
           e.isAggroed = false;
+          // T2: slow enemies 40%
+          if (sz.slowing) e.speed = CREATURE_DEFS[e.name]?.speed * 0.6 || e.speed * 0.6;
+          // T3 void: toxic damage
+          if (sz.toxic) {
+            e.hp -= Math.max(1, Math.round(dt));
+            e.hitFlash = 0.05;
+            if (e.hp <= 0) this.onEnemyKilled(e);
+          }
+        } else {
+          // Restore speed when leaving smoke
+          if (sz.slowing && CREATURE_DEFS[e.name]) {
+            e.speed = CREATURE_DEFS[e.name].speed;
+          }
         }
       }
     }
@@ -1096,10 +1218,25 @@ export class Game {
     for (let i = this.gravityWells.length - 1; i >= 0; i--) {
       this.gravityWells[i].life -= dt;
       if (this.gravityWells[i].life <= 0) {
+        // T3 void: explode on end
+        const gwEnd = this.gravityWells[i];
+        if (gwEnd.explodeOnEnd) {
+          const count = gwEnd.enemiesInside || 1;
+          const explodeDmg = 3 * count;
+          for (const e of this.enemies.enemies) {
+            if (e.hp > 0 && !e.isAlly && v2dist(e.pos, { x: gwEnd.x, y: gwEnd.y }) < gwEnd.radius * 0.5) {
+              e.hp -= explodeDmg;
+              e.hitFlash = 0.3;
+              if (e.hp <= 0) this.onEnemyKilled(e);
+            }
+          }
+          this.explosions.push({ x: gwEnd.x, y: gwEnd.y, radius: 0, maxRadius: gwEnd.radius * 0.5, life: 0.3, maxLife: 0.3 });
+        }
         this.gravityWells.splice(i, 1);
         continue;
       }
       const gw = this.gravityWells[i];
+      let enemyCount = 0;
       for (const e of this.enemies.enemies) {
         if (e.hp <= 0 || e.isAlly) continue;
         const d = v2dist(e.pos, { x: gw.x, y: gw.y });
@@ -1107,8 +1244,15 @@ export class Game {
           const pullDir = v2norm(v2sub({ x: gw.x, y: gw.y }, e.pos));
           e.pos.x += pullDir.x * gw.pullSpeed * dt;
           e.pos.y += pullDir.y * gw.pullSpeed * dt;
+          enemyCount++;
+          // T3 clean: damage field
+          if (gw.damageField) {
+            e.hp -= Math.max(1, Math.round(dt));
+            if (e.hp <= 0) this.onEnemyKilled(e);
+          }
         }
       }
+      gw.enemiesInside = Math.max(gw.enemiesInside || 0, enemyCount);
     }
 
     // Update drone
@@ -1394,7 +1538,13 @@ export class Game {
       this.hud.showHalMessage(halSay(HAL_ELITE_SPAWNED), 3);
       this.halCooldown = 6;
     }
-    if (enemy.isElite) this.eliteKills++;
+    if (enemy.isElite) {
+      this.eliteKills++;
+      // Stim T3 void: cooldown reset on elite kill
+      if ((this.runKitTiers['stim_pack'] || 0) >= 3 && this.kitT3Choices['stim_pack'] === 'void') {
+        this.kitCooldowns['stim_pack'] = 0;
+      }
+    }
 
     // Check level up
     if (this.player.level < MAX_LEVEL) {
@@ -1985,6 +2135,11 @@ export class Game {
   /** Get damage multiplier from active modifiers */
   getModDamageMult(enemy: { isElite?: boolean; targetingPlayer?: boolean }): number {
     let mult = 1;
+    // Blink T3 clean: empowered shot 3x
+    if (this.blinkEmpowered) {
+      mult *= 3;
+      this.blinkEmpowered = false;
+    }
     if (this.hasMod('elite_dmg') && enemy.isElite) mult *= 1.3;
     if (this.hasMod('stalker') && !enemy.targetingPlayer) mult *= 1.4;
     if (this.hasMod('pack_hunter')) {
