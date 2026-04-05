@@ -1,4 +1,4 @@
-export type FiringPattern = 'single' | 'scatter' | 'piercing' | 'melee_aoe' | 'homing' | 'cone_stream' | 'arc_aoe' | 'bounce';
+export type FiringPattern = 'single' | 'scatter' | 'piercing' | 'melee_aoe' | 'homing' | 'cone_stream' | 'arc_aoe' | 'bounce' | 'beam_stream';
 
 export interface WeaponDef {
   id: string;
@@ -21,9 +21,9 @@ export const WEAPON_DEFS: Record<string, WeaponDef> = {
   lance:            { id: 'lance',            name: 'Lance',    desc: 'Piercing beam',             fireRate: 1.6,  damage: 5, bulletSpeed: 260, bulletRadius: 5,  color: 0x44ddff, range: 500, pattern: 'piercing',    magSize: 4,  reloadTime: 2.0 },
   baton:            { id: 'baton',            name: 'Baton',    desc: 'Melee AOE',                 fireRate: 0.75, damage: 6, bulletSpeed: 0,   bulletRadius: 40, color: 0xff4444, range: 115, pattern: 'melee_aoe',   magSize: 999, reloadTime: 0 },
   dart:             { id: 'dart',             name: 'Dart',     desc: 'Homing shots',              fireRate: 1.1,  damage: 2, bulletSpeed: 180, bulletRadius: 4,  color: 0x44ff66, range: 400, pattern: 'homing',      magSize: 6,  reloadTime: 1.5 },
-  flamethrower:     { id: 'flamethrower',     name: 'Flamer',   desc: 'Cone damage',               fireRate: 0.09, damage: 1, bulletSpeed: 180, bulletRadius: 9,  color: 0xff6622, range: 140, pattern: 'cone_stream', magSize: 45, reloadTime: 2.5 },
+  flamethrower:     { id: 'flamethrower',     name: 'Flamer',   desc: 'Cone fire — burn DoT core', fireRate: 0.07, damage: 0.5, bulletSpeed: 180, bulletRadius: 9, color: 0xff6622, range: 220, pattern: 'cone_stream', magSize: 60, reloadTime: 2.5 },
   grenade_launcher: { id: 'grenade_launcher', name: 'Grenade',  desc: 'Explosive arc',             fireRate: 2.5,  damage: 8, bulletSpeed: 220, bulletRadius: 8,  color: 0xffaa00, range: 300, pattern: 'arc_aoe',     magSize: 2,  reloadTime: 2.0 },
-  entropy_cannon:   { id: 'entropy_cannon',   name: 'Entropy',  desc: 'Corruption-scaling damage', fireRate: 1.6,  damage: 5, bulletSpeed: 360, bulletRadius: 10, color: 0xaa44ff, range: 380, pattern: 'single',      magSize: 7,  reloadTime: 1.8 },
+  entropy_cannon:   { id: 'entropy_cannon',   name: 'Void Beam', desc: 'Corruption-scaling beam',  fireRate: 0.08, damage: 0.4, bulletSpeed: 800, bulletRadius: 3, color: 0xaa44ff, range: 250, pattern: 'beam_stream', magSize: 80, reloadTime: 1.0 },
   pulse_cannon:     { id: 'pulse_cannon',     name: 'Pulse',    desc: 'Bouncing projectile',       fireRate: 1.0,  damage: 3, bulletSpeed: 320, bulletRadius: 5,  color: 0x44aaff, range: 350, pattern: 'bounce',      magSize: 8,  reloadTime: 1.5 },
   sniper_carbine:   { id: 'sniper_carbine',   name: 'Sniper',   desc: 'High damage, slow',         fireRate: 2.5,  damage: 8, bulletSpeed: 600, bulletRadius: 3,  color: 0xffffff, range: 600, pattern: 'single',      magSize: 3,  reloadTime: 2.5 },
   chain_rifle:      { id: 'chain_rifle',      name: 'Chain',    desc: 'Rapid suppression',         fireRate: 0.1,  damage: 1, bulletSpeed: 450, bulletRadius: 3,  color: 0x88ffaa, range: 280, pattern: 'single',      magSize: 40, reloadTime: 3.0 },
@@ -89,7 +89,7 @@ export const WEAPON_LEVEL_PERKS: Record<string, Record<number, WeaponPerk>> = {
   },
   flamethrower: {
     2: { icon: 'F',  name: 'Fuel Tank',      desc: 'Range +30px',                       effect: 'range_bonus',   value: 30 },
-    3: { icon: 'N',  name: 'Napalm',         desc: 'Burning: +1 dmg/s for 3s on hit',   effect: 'burning',       value: true },
+    3: { icon: 'N',  name: 'Napalm',         desc: 'Burn upgrade: 3 dmg/s (base 2), spreads on kill', effect: 'burning', value: true },
     4: { icon: 'P',  name: 'Pressurized',    desc: 'Fire rate +30%',                    effect: 'fire_rate',     value: -0.036 },
     5: { icon: 'T',  name: 'Fork',           desc: 'Clean: Cryo Flamer | Void: Corruption Spray', effect: 'flamer_fork', value: true },
   },
@@ -101,7 +101,7 @@ export const WEAPON_LEVEL_PERKS: Record<string, Record<number, WeaponPerk>> = {
   },
   entropy_cannon: {
     2: { icon: 'D',  name: 'Overcharge',      desc: '+1 base damage',                   effect: 'damage',        value: 1 },
-    3: { icon: 'R',  name: 'Rapid Decay',     desc: 'Rate of fire +20%',                effect: 'fire_rate',     value: -0.4 },
+    3: { icon: 'R',  name: 'Rapid Decay',     desc: 'Rate of fire +20%',                effect: 'fire_rate',     value: -0.016 },
     4: { icon: 'P',  name: 'Penetrating',     desc: 'Penetrating rounds (pierce 1)',    effect: 'piercing',      value: true },
     5: { icon: 'F',  name: 'Fork',            desc: 'Clean: Stabilized | Void: Resonance', effect: 'entropy_fork', value: true },
   },

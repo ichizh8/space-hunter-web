@@ -1325,9 +1325,10 @@ export class Game {
             if (enemy.shieldHp >= finalDmg) { enemy.shieldHp -= finalDmg; finalDmg = 0; }
             else { finalDmg -= enemy.shieldHp; enemy.shieldHp = 0; }
           }
-          // Entropy cannon: corruption-scaling damage (baseDamage × (1 + corruption/30))
-          if (this.weapons.corruptionScaling) {
-            finalDmg = Math.round(finalDmg * (1 + this.player.corruption / 30));
+          // Entropy cannon: corruption-scaling damage always active; Resonance mutation triples the factor
+          if (this.player.weaponId === 'entropy_cannon') {
+            const scaleMult = this.weapons.corruptionScaling ? 3 : 1;
+            finalDmg *= (1 + scaleMult * this.player.corruption / 30);
           }
           // Execute threshold (sniper clean)
           if (this.weapons.executeThreshold > 0 && enemy.hp > 0 && (enemy.hp / enemy.maxHp) <= this.weapons.executeThreshold) {
@@ -1364,9 +1365,9 @@ export class Game {
           if (this.weapons.corruptionOnFire) {
             this.player.corruption = Math.min(100, this.player.corruption + 0.5);
           }
-          // Flamethrower burn DoT (Napalm perk)
-          if (this.weapons.burnOnHit) {
-            enemy.burnTimer = 3; // refresh duration; 1 dmg/s for 3s
+          // Flamethrower burn DoT — always active; Napalm perk upgrades from 2 to 3 dmg/s
+          if (this.player.weaponId === 'flamethrower') {
+            enemy.burnTimer = 3; // refresh duration; 2 dmg/s base (3 with Napalm)
           }
           // Conductor perk: ricochet off stunned enemies
           if (this.hasPerk('conductor') && enemy.stunTimer > 0 && !(bullet as unknown as { ricocheted?: boolean }).ricocheted) {
@@ -1417,11 +1418,12 @@ export class Game {
       }
     }
 
-    // Burn DoT tick (flamethrower Napalm perk) — 1 dmg/s for up to 3s
+    // Burn DoT tick — 2 dmg/s base, 3 dmg/s with Napalm perk, refreshed on hit
+    const burnDmgPerSec = this.weapons.burnOnHit ? 3 : 2;
     for (const enemy of this.enemies.enemies) {
       if (enemy.burnTimer > 0) {
         enemy.burnTimer -= dt;
-        enemy.hp -= dt; // 1 damage per second
+        enemy.hp -= burnDmgPerSec * dt;
         enemy.hitFlash = Math.max(enemy.hitFlash, 0.05);
         if (enemy.hp <= 0) this.onEnemyKilled(enemy);
       }

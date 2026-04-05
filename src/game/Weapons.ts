@@ -103,13 +103,8 @@ export class WeaponSystem {
     });
 
     switch (def.pattern) {
-      case 'single': {
-        // Entropy cannon: scale bullet radius with corruption (base 10, up to 16 at 90 corruption)
-        const corrRadiusBonus = def.id === 'entropy_cannon'
-          ? Math.floor((this.corruptionLevel / 90) * 6)
-          : 0;
-        return [makeBullet(angle, { radius: rad + corrRadiusBonus })];
-      }
+      case 'single':
+        return [makeBullet(angle)];
 
       case 'scatter': {
         const count = 5 + this.extraPellets;
@@ -147,10 +142,30 @@ export class WeaponSystem {
         return [makeBullet(angle, { homing: true, life: 3.0, maxLife: 3.0 })];
 
       case 'cone_stream': {
-        const particleLife = range / Math.max(speed, 1);
-        return [0, 1, 2].map(() => {
-          const a = angle + randRange(-0.22, 0.22);
-          return makeBullet(a, { life: particleLife, maxLife: particleLife });
+        const baseLife = range / Math.max(speed, 1);
+        const count = Math.random() < 0.5 ? 4 : 5;
+        return Array.from({ length: count }, () => {
+          const a = angle + randRange(-0.35, 0.35);
+          const spdMult = 1 + randRange(-0.2, 0.2);
+          const lifeMult = 1 + randRange(-0.15, 0.15);
+          const particleRad = 6 + Math.random() * 6; // 6–12
+          const particleSpd = Math.max(speed * spdMult, 1);
+          const particleLife = (range * lifeMult) / particleSpd;
+          return makeBullet(a, {
+            vel: v2fromAngle(a, particleSpd),
+            radius: particleRad,
+            life: particleLife,
+            maxLife: particleLife,
+          });
+        });
+      }
+
+      case 'beam_stream': {
+        const beamLife = range / Math.max(speed, 1);
+        const beamCount = Math.random() < 0.5 ? 1 : 2;
+        return Array.from({ length: beamCount }, () => {
+          const a = angle + randRange(-0.05, 0.05);
+          return makeBullet(a, { life: beamLife, maxLife: beamLife });
         });
       }
 
