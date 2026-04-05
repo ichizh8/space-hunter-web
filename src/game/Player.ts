@@ -139,6 +139,8 @@ export class Player {
   // External damage absorption (set by Game for withdrawal/sacrifice perks)
   absorbNextHit = false;
   invincibleTimer = 0;
+  /** Shield hits remaining from familiar SHIELD buff (absorbs N hits) */
+  shieldHits = 0;
 
   takeDamage(amount: number): boolean {
     if (this.iFrames > 0) return false;
@@ -146,6 +148,12 @@ export class Player {
     if (this.dodgeChance > 0 && Math.random() < this.dodgeChance) return false;
     // Sacrifice invincibility
     if (this.invincibleTimer > 0) return false;
+    // Familiar shield absorption (multi-hit)
+    if (this.shieldHits > 0) {
+      this.shieldHits--;
+      this.iFrames = 0.3;
+      return false;
+    }
     // Withdrawal absorption
     if (this.absorbNextHit) {
       this.absorbNextHit = false;
