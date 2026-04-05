@@ -131,6 +131,9 @@ export class Game {
   // Explosion effects
   explosions: Array<{ x: number; y: number; radius: number; maxRadius: number; life: number; maxLife: number }> = [];
 
+  // Enemy behavior trail particles
+  trails: Array<{ x: number; y: number; color: number; radius: number; life: number; maxLife: number; alpha: number }> = [];
+
   // Active turrets
   turrets: Array<{
     x: number; y: number;
@@ -1532,6 +1535,47 @@ export class Game {
       if (ex.life <= 0) this.explosions.splice(i, 1);
     }
 
+    // Spawn enemy behavior trail particles
+    for (const e of this.enemies.enemies) {
+      if (e.hp <= 0) continue;
+      const speed = Math.sqrt(e.vel.x * e.vel.x + e.vel.y * e.vel.y);
+      if (e.behavior === 'charge' && speed > 80) {
+        // Red trail when charging fast
+        if (Math.random() < 0.6) {
+          this.trails.push({ x: e.pos.x + (Math.random() - 0.5) * 6, y: e.pos.y + (Math.random() - 0.5) * 6, color: 0xFF2200, radius: 3 + Math.random() * 3, life: 0.3, maxLife: 0.3, alpha: 0.7 });
+        }
+      } else if (e.behavior === 'lurker') {
+        // Dark purple mist always
+        if (Math.random() < 0.4) {
+          this.trails.push({ x: e.pos.x + (Math.random() - 0.5) * 20, y: e.pos.y + (Math.random() - 0.5) * 20, color: 0x550088, radius: 5 + Math.random() * 6, life: 0.6, maxLife: 0.6, alpha: 0.35 });
+        }
+      } else if (e.behavior === 'burst' && e.burstActive) {
+        // Yellow sparks when charging a dash
+        if (Math.random() < 0.5) {
+          const angle = Math.random() * Math.PI * 2;
+          this.trails.push({ x: e.pos.x + Math.cos(angle) * 8, y: e.pos.y + Math.sin(angle) * 8, color: 0xFFDD00, radius: 2 + Math.random() * 2, life: 0.2, maxLife: 0.2, alpha: 0.9 });
+        }
+      } else if (e.behavior === 'pack') {
+        // Small green particles between nearby pack members
+        for (const other of this.enemies.enemies) {
+          if (other === e || other.behavior !== 'pack' || other.hp <= 0) continue;
+          const dx = other.pos.x - e.pos.x, dy = other.pos.y - e.pos.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 200 && Math.random() < 0.05) {
+            const t = Math.random();
+            this.trails.push({ x: e.pos.x + dx * t, y: e.pos.y + dy * t, color: 0x44FF44, radius: 2, life: 0.25, maxLife: 0.25, alpha: 0.5 });
+          }
+        }
+      }
+    }
+
+    // Update trail particles
+    for (let i = this.trails.length - 1; i >= 0; i--) {
+      const tr = this.trails[i];
+      tr.life -= dt;
+      if (tr.life <= 0) { this.trails.splice(i, 1); }
+    }
+
     // Update turrets
     for (let i = this.turrets.length - 1; i >= 0; i--) {
       const t = this.turrets[i];
@@ -2244,6 +2288,12 @@ export class Game {
       this.playerSprite.tint = this.player.hitFlash > 0 ? 0xff2200 : 0xffffff;
     }
 
+    // Behavior tints for sprites
+    const SPRITE_BEHAVIOR_TINTS: Record<string, number> = {
+      charge: 0xFF3333, flank: 0xFF8800, pack: 0x33FF33,
+      lurker: 0xAA44FF, burst: 0xFFFF00, strafe: 0x00FFFF,
+    };
+
     // Enemy sprites
     for (const e of this.enemies.enemies) {
       const spr = this.getOrCreateEnemySprite(e);
@@ -2251,7 +2301,17 @@ export class Game {
       spr.x = e.pos.x;
       spr.y = e.pos.y;
       spr.visible = this.camera.isVisible(e.pos.x, e.pos.y, e.radius * 2);
-      spr.tint = e.hitFlash > 0 ? 0xff4444 : 0xffffff;
+      const behaviorTint = SPRITE_BEHAVIOR_TINTS[e.behavior] ?? 0xffffff;
+      spr.tint = e.hitFlash > 0 ? 0xff4444 : behaviorTint;
+
+      // Lurker: semi-transparent + flicker every 2s
+      if (e.behavior === 'lurker') {
+        const lurkerDormant = (e.phase as number) === 0;
+        const flicker = Math.floor(this.elapsed / 2) % 2 === 0 ? 1.0 : 0.6;
+        spr.alpha = lurkerDormant ? 0.3 * flicker : 0.5 * flicker;
+      } else {
+        spr.alpha = 1;
+      }
 
       // Scale up apex enemy sprite
       if (e.id === this.apexId) {
@@ -2459,8 +2519,8 @@ export class Game {
 
     // Behavior-based color map for enemy visual distinction
     const BEHAVIOR_COLORS: Record<string, number> = {
-      charge: 0xff3333, flank: 0xff8800, pack: 0x33ff33,
-      lurker: 0x8800aa, burst: 0xffee00, strafe: 0x00ccff, patrol_river: 0x888888,
+      charge: 0xFF3333, flank: 0xFF8800, pack: 0x33FF33,
+      lurker: 0xAA44FF, burst: 0xFFFF00, strafe: 0x00FFFF, patrol_river: 0x888888,
     };
 
     // Enemies
@@ -2475,9 +2535,10 @@ export class Game {
       const col = e.hitFlash > 0 ? 0xffffff : bColor;
       const isVoid = e.voidType;
       const hasSprite = this.spritePool.has(e.id);
-      // Lurker dormant: 40% opacity when hiding (phase 0)
+      // Lurker: semi-transparent (0.5) + flicker every 2s; fully dormant at 0.3
       const lurkerDormant = e.behavior === 'lurker' && (e.phase as number) === 0;
-      const sa = lurkerDormant ? 0.4 : 1.0; // shape alpha multiplier
+      const lurkerFlicker = e.behavior === 'lurker' ? (Math.floor(this.elapsed / 2) % 2 === 0 ? 1.0 : 0.6) : 1.0;
+      const sa = lurkerDormant ? 0.3 * lurkerFlicker : e.behavior === 'lurker' ? 0.5 * lurkerFlicker : 1.0;
 
       if (e.isAggroed) {
         g.circle(ex, ey, er * 1.6).stroke({ color: col, width: 0.5, alpha: 0.15 * sa });
@@ -2667,6 +2728,12 @@ export class Game {
       g.circle(b.pos.x, b.pos.y, b.radius * 2.5).fill({ color: 0xff0000, alpha: 0.12 });
       g.circle(b.pos.x, b.pos.y, b.radius * 1.5).fill({ color: 0xff2200, alpha: 0.8 });
       g.circle(b.pos.x, b.pos.y, b.radius * 0.6).fill({ color: 0xff8866, alpha: 0.9 });
+    }
+
+    // Enemy behavior trail particles
+    for (const tr of this.trails) {
+      const frac = tr.life / tr.maxLife;
+      g.circle(tr.x, tr.y, tr.radius * frac).fill({ color: tr.color, alpha: tr.alpha * frac });
     }
   }
 
