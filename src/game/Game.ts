@@ -1313,6 +1313,15 @@ export class Game {
     for (const bullet of this.weapons.bullets) {
       if (!bullet.fromPlayer) continue;
       for (const enemy of this.enemies.enemies) {
+        // Baton arc gate: only hit enemies within ±70° of the swing's aim angle
+        if (bullet.tag === 'baton_slash') {
+          const toEnemy = v2sub(enemy.pos, this.player.pos);
+          const enemyAngle = Math.atan2(toEnemy.y, toEnemy.x);
+          const fireAngle = bullet.aimAngle ?? this.player.aimAngle;
+          let angleDiff = Math.abs(enemyAngle - fireAngle);
+          if (angleDiff > Math.PI) angleDiff = Math.PI * 2 - angleDiff;
+          if (angleDiff > (Math.PI * 70) / 180) continue;
+        }
         const dmg = this.weapons.checkHit(bullet, enemy.id, enemy.pos, enemy.radius);
         if (dmg > 0) {
           let finalDmg = dmg;
@@ -2391,6 +2400,14 @@ export class Game {
 
     for (const b of this.weapons.bullets) {
       if (!this.camera.isVisible(b.pos.x, b.pos.y, b.radius * 3)) continue;
+      if (b.tag === 'baton_slash') {
+        // Slash animation: fading ring that expands briefly
+        const frac = b.life / b.maxLife; // 1→0 as it expires
+        g.circle(b.pos.x, b.pos.y, b.radius * 1.8).fill({ color: b.color, alpha: frac * 0.15 });
+        g.circle(b.pos.x, b.pos.y, b.radius).fill({ color: b.color, alpha: frac * 0.4 });
+        g.circle(b.pos.x, b.pos.y, b.radius * 0.5).fill({ color: 0xffffff, alpha: frac * 0.5 });
+        continue;
+      }
       g.circle(b.pos.x, b.pos.y, b.radius * 3).fill({ color: b.color, alpha: 0.1 });
       g.circle(b.pos.x, b.pos.y, b.radius * 1.5).fill({ color: b.color, alpha: 0.8 });
       g.circle(b.pos.x, b.pos.y, b.radius * 0.8).fill({ color: 0xffffff, alpha: 0.6 });
