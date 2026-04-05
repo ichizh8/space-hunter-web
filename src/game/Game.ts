@@ -2387,24 +2387,57 @@ export class Game {
       g.circle(ax, ay, 4).stroke({ color: 0xff2200, width: 1, alpha: 0.6 });
     }
 
+    // Behavior color map
+    const BEHAVIOR_COLORS: Record<string, number> = {
+      charge: 0xff3333,
+      flank: 0xff8800,
+      pack: 0x33ff33,
+      lurker: 0x8800aa,
+      burst: 0xffee00,
+      strafe: 0x00ccff,
+      patrol_river: 0x888888,
+    };
+
+    // Pack connection lines (draw before enemies so they appear behind)
+    for (const e of this.enemies.enemies) {
+      if (e.behavior !== 'pack') continue;
+      for (const other of this.enemies.enemies) {
+        if (other.id <= e.id || other.behavior !== 'pack') continue;
+        if (v2dist(e.pos, other.pos) < 200) {
+          g.moveTo(e.pos.x, e.pos.y).lineTo(other.pos.x, other.pos.y)
+            .stroke({ color: 0x33ff33, width: 0.8, alpha: 0.3 });
+        }
+      }
+    }
+
     // Enemies
     for (const e of this.enemies.enemies) {
       if (!this.camera.isVisible(e.pos.x, e.pos.y, e.radius * 2)) continue;
-      const ex = e.pos.x, ey = e.pos.y, er = e.radius * 1.5;
-      const col = e.hitFlash > 0 ? 0xffffff : e.color;
+      const ex = e.pos.x, ey = e.pos.y;
+      const sizeScale = e.behavior === 'pack' ? 0.8 : e.behavior === 'charge' ? 1.2 : 1.0;
+      const er = e.radius * 1.5 * sizeScale;
+      const behaviorCol = BEHAVIOR_COLORS[e.behavior] ?? e.color;
+      const col = e.hitFlash > 0 ? 0xffffff : behaviorCol;
+      const baseAlpha = (e.behavior === 'lurker' && e.phase === 0) ? 0.4 : 1.0;
       const isVoid = e.voidType;
       const hasSprite = this.spritePool.has(e.id);
 
       if (e.isAggroed) {
-        g.circle(ex, ey, er * 1.6).stroke({ color: col, width: 0.5, alpha: 0.15 });
+        g.circle(ex, ey, er * 1.6).stroke({ color: col, width: 0.5, alpha: 0.15 * baseAlpha });
+      }
+
+      if (e.isElite) {
+        const pulse = 0.5 + Math.sin(this.elapsed * 3) * 0.5;
+        g.circle(ex, ey, er * 1.8).stroke({ color: col, width: 3, alpha: 0.3 + pulse * 0.4 });
+        g.circle(ex, ey, er * 2.2).stroke({ color: col, width: 1.5, alpha: 0.1 + pulse * 0.2 });
       }
 
       if (!hasSprite) {
         if (e.behavior === 'charge' || e.behavior === 'pack') {
           g.moveTo(ex, ey - er).lineTo(ex + er * 0.87, ey + er * 0.5).lineTo(ex - er * 0.87, ey + er * 0.5).closePath();
-          g.fill({ color: col, alpha: 0.6 });
+          g.fill({ color: col, alpha: 0.6 * baseAlpha });
           g.moveTo(ex, ey - er).lineTo(ex + er * 0.87, ey + er * 0.5).lineTo(ex - er * 0.87, ey + er * 0.5).closePath();
-          g.stroke({ color: col, width: 1.5, alpha: 0.9 });
+          g.stroke({ color: col, width: 1.5, alpha: 0.9 * baseAlpha });
         } else if (e.behavior === 'strafe' || e.behavior === 'patrol_river') {
           for (let i = 0; i < 6; i++) {
             const a1 = (i / 6) * Math.PI * 2 - Math.PI / 2;
@@ -2412,20 +2445,20 @@ export class Game {
             if (i === 0) g.moveTo(ex + Math.cos(a1) * er, ey + Math.sin(a1) * er);
             g.lineTo(ex + Math.cos(a2) * er, ey + Math.sin(a2) * er);
           }
-          g.closePath().fill({ color: col, alpha: 0.4 });
+          g.closePath().fill({ color: col, alpha: 0.4 * baseAlpha });
           for (let i = 0; i < 6; i++) {
             const a1 = (i / 6) * Math.PI * 2 - Math.PI / 2;
             const a2 = ((i + 1) / 6) * Math.PI * 2 - Math.PI / 2;
             if (i === 0) g.moveTo(ex + Math.cos(a1) * er, ey + Math.sin(a1) * er);
             g.lineTo(ex + Math.cos(a2) * er, ey + Math.sin(a2) * er);
           }
-          g.closePath().stroke({ color: col, width: 1.5, alpha: 0.8 });
+          g.closePath().stroke({ color: col, width: 1.5, alpha: 0.8 * baseAlpha });
         } else if (e.behavior === 'lurker') {
-          g.moveTo(ex - er, ey - er).lineTo(ex + er, ey + er).stroke({ color: col, width: 3, alpha: 0.7 });
-          g.moveTo(ex + er, ey - er).lineTo(ex - er, ey + er).stroke({ color: col, width: 3, alpha: 0.7 });
+          g.moveTo(ex - er, ey - er).lineTo(ex + er, ey + er).stroke({ color: col, width: 3, alpha: 0.7 * baseAlpha });
+          g.moveTo(ex + er, ey - er).lineTo(ex - er, ey + er).stroke({ color: col, width: 3, alpha: 0.7 * baseAlpha });
         } else {
-          g.rect(ex - er * 0.7, ey - er * 0.7, er * 1.4, er * 1.4).fill({ color: col, alpha: 0.5 });
-          g.rect(ex - er * 0.7, ey - er * 0.7, er * 1.4, er * 1.4).stroke({ color: col, width: 1.5, alpha: 0.8 });
+          g.rect(ex - er * 0.7, ey - er * 0.7, er * 1.4, er * 1.4).fill({ color: col, alpha: 0.5 * baseAlpha });
+          g.rect(ex - er * 0.7, ey - er * 0.7, er * 1.4, er * 1.4).stroke({ color: col, width: 1.5, alpha: 0.8 * baseAlpha });
         }
       }
 
