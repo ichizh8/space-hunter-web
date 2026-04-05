@@ -156,6 +156,10 @@ export class GameMap {
     // Energy rivers — glowing cyan plasma streams
     for (const river of this.rivers) {
       if (river.points.length < 2) continue;
+      // River bank: tinted ground color
+      gfx.moveTo(river.points[0].x, river.points[0].y);
+      for (let i = 1; i < river.points.length; i++) gfx.lineTo(river.points[i].x, river.points[i].y);
+      gfx.stroke({ color: 0x0088ff, width: river.width * 2.5, alpha: 0.08 });
       // Outer glow
       gfx.moveTo(river.points[0].x, river.points[0].y);
       for (let i = 1; i < river.points.length; i++) {
@@ -170,11 +174,23 @@ export class GameMap {
       gfx.stroke({ color: 0x1155cc, width: river.width * 0.6, alpha: 0.35 });
     }
 
-    // Dark matter caves — deep black with faint red ring
+    // Dark matter caves — deep black with crystal highlights
     for (const cave of this.caves) {
-      gfx.circle(cave.pos.x, cave.pos.y, cave.radius * 1.1).fill({ color: 0x110000, alpha: 0.3 });
-      gfx.circle(cave.pos.x, cave.pos.y, cave.radius).fill({ color: 0x020204, alpha: 0.8 });
-      gfx.circle(cave.pos.x, cave.pos.y, cave.radius).stroke({ color: 0x331111, width: 1, alpha: 0.4 });
+      gfx.circle(cave.pos.x, cave.pos.y, cave.radius * 1.35).fill({ color: 0x050010, alpha: 0.55 });
+      gfx.circle(cave.pos.x, cave.pos.y, cave.radius).fill({ color: 0x010003, alpha: 0.92 });
+      gfx.circle(cave.pos.x, cave.pos.y, cave.radius).stroke({ color: 0x4400aa, width: 2, alpha: 0.5 });
+      // Crystal sparkle dots
+      for (let c = 0; c < 8; c++) {
+        const cAngle = (c / 8) * Math.PI * 2;
+        const cDist = cave.radius * (0.4 + Math.random() * 0.5);
+        gfx.circle(cave.pos.x + Math.cos(cAngle) * cDist, cave.pos.y + Math.sin(cAngle) * cDist, 2 + Math.random() * 2).fill({ color: 0x8844ff, alpha: 0.4 + Math.random() * 0.3 });
+      }
+    }
+
+    // Void pools static: dark corruption ground stain
+    for (const vp of this.voidPools) {
+      gfx.circle(vp.pos.x, vp.pos.y, vp.radius * 2.0).fill({ color: 0x0a0018, alpha: 0.7 });
+      gfx.circle(vp.pos.x, vp.pos.y, vp.radius * 1.5).fill({ color: 0x050010, alpha: 0.85 });
     }
 
     // Obstacles drawn as sprites in Game.ts obstacleLayer
@@ -206,6 +222,33 @@ export class GameMap {
       const s = this.stars[i];
       const twinkle = 0.3 + Math.sin(time * s.twinkleSpeed + i) * 0.3;
       gfx.circle(s.x, s.y, s.size * 1.5).fill({ color: 0xffffff, alpha: twinkle * 0.3 });
+    }
+
+    // Cave sparkle particles — random crystals flicker
+    for (const cave of this.caves) {
+      const sparkCount = 6;
+      for (let s = 0; s < sparkCount; s++) {
+        const sparkAngle = (s / sparkCount) * Math.PI * 2 + time * 0.3;
+        const sparkDist = cave.radius * (0.3 + (Math.sin(time * 2.1 + s * 1.7) * 0.5 + 0.5) * 0.6);
+        const sparkAlpha = 0.15 + Math.sin(time * 3 + s * 2.3) * 0.15;
+        gfx.circle(
+          cave.pos.x + Math.cos(sparkAngle) * sparkDist,
+          cave.pos.y + Math.sin(sparkAngle) * sparkDist,
+          2
+        ).fill({ color: 0xaa66ff, alpha: sparkAlpha });
+      }
+    }
+
+    // River bank: animated wavy blue shimmer lines
+    for (const river of this.rivers) {
+      if (river.points.length < 2) continue;
+      const waveOffset = Math.sin(time * 1.5) * 8;
+      gfx.moveTo(river.points[0].x, river.points[0].y + waveOffset);
+      for (let i = 1; i < river.points.length; i++) {
+        const wave = Math.sin(time * 2 + i * 0.8) * 6;
+        gfx.lineTo(river.points[i].x, river.points[i].y + wave);
+      }
+      gfx.stroke({ color: 0x44aaff, width: 3, alpha: 0.12 + Math.sin(time * 1.8) * 0.05 });
     }
   }
 }

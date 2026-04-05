@@ -28,6 +28,11 @@ import {
 // Sprite base path for GitHub Pages support
 const BASE = process.env.NEXT_PUBLIC_BASE_PATH || '';
 
+const BEHAVIOR_COLORS: Record<string, number> = {
+  charge: 0xff3333, flank: 0xff8800, pack: 0x33ff33,
+  lurker: 0xaa44ff, burst: 0xffee00, strafe: 0x00ccff, patrol_river: 0x888888,
+};
+
 // Sprite name -> creature name mapping
 const CREATURE_SPRITE_MAP: Record<string, string> = {
   'Void Leech': 'void_leech',
@@ -130,6 +135,10 @@ export class Game {
 
   // Explosion effects
   explosions: Array<{ x: number; y: number; radius: number; maxRadius: number; life: number; maxLife: number }> = [];
+
+  // Behavior + biome particles
+  particles: Array<{ x: number; y: number; vx: number; vy: number; life: number; maxLife: number; color: number; radius: number }> = [];
+  biomeParticleTimer = 0;
 
   // Active turrets
   turrets: Array<{
@@ -497,13 +506,17 @@ export class Game {
     const epithet = ELITE_EPITHETS[Math.floor(Math.random() * ELITE_EPITHETS.length)];
     const displayName = `${eliteType} ${epithet}`;
 
-    // Spawn away from player
+    // Spawn near player with entrance effect
     let pos: { x: number; y: number };
-    let attempts = 0;
     do {
       pos = { x: randRange(200, WORLD_W - 200), y: randRange(200, WORLD_H - 200) };
-      attempts++;
-    } while (v2dist(pos, this.player.pos) < 600 && attempts < 30);
+    } while (false); // always use first position
+    const eAngle = Math.random() * Math.PI * 2;
+    const eDist = randRange(160, 220);
+    pos = {
+      x: Math.max(80, Math.min(WORLD_W - 80, this.player.pos.x + Math.cos(eAngle) * eDist)),
+      y: Math.max(80, Math.min(WORLD_H - 80, this.player.pos.y + Math.sin(eAngle) * eDist)),
+    };
 
     // Base stats scaled by time
     const depth = Math.min(3, Math.ceil(this.targetTotal / 10));
@@ -523,8 +536,13 @@ export class Game {
     elite.meleeDmg = baseDmg;
     elite.color = overrides.color ?? 0xffdd11;
     elite.detection = 500;
-    elite.leash = 1200;
     elite.isElite = true;
+    elite.speed = baseSpeed * 1.35;          // 35% faster
+    elite.radius = baseRadius * 1.4;         // 40% larger
+    elite.leash = 99999;
+    elite.isAggroed = true;
+    elite.eliteEntrance = 1.0;               // 1s entrance flicker
+    elite.eliteAttackTimer = 3.5;            // first attack after 3.5s
     // Give each elite type a distinct behavior pattern
     const eliteBehaviorMap: Record<string, string> = {
       'Void Hulk':       'charge',    // slow + telegraphed charges
@@ -1243,6 +1261,88 @@ export class Game {
     // Enemies update
     this.enemies.update(dt, this.player, this.map, this.decoys.map(d => ({ x: d.x, y: d.y })));
 
+    // Behavior trail particles
+    if (this.particles.length < 600) {
+      for (const e of this.enemies.enemies) {
+        if (e.hp <= 0 || !e.isAggroed) continue;
+        const spd = v2len(e.vel);
+        switch (e.behavior) {
+          case 'charge':
+            // Red trail when rushing (phase 2)
+            if ((e.phase as number) === 2 && spd > 20) {
+              for (let i = 0; i < 3; i++) {
+                this.particles.push({ x: e.pos.x + (Math.random()-0.5)*6, y: e.pos.y + (Math.random()-0.5)*6, vx: -e.vel.x*0.15 + (Math.random()-0.5)*20, vy: -e.vel.y*0.15 + (Math.random()-0.5)*20, life: 0.35, maxLife: 0.35, color: 0xff3333, radius: 3 + Math.random()*2 });
+              }
+            }
+            break;
+          case 'flank':
+            // Orange ghost particles when moving
+            if (spd > 30 && Math.random() < 0.4) {
+              this.particles.push({ x: e.pos.x, y: e.pos.y, vx: (Math.random()-0.5)*15, vy: (Math.random()-0.5)*15, life: 0.25, maxLife: 0.25, color: 0xff8800, radius: 4 });
+            }
+            break;
+          case 'pack':
+            // Green motes floating upward
+            if (Math.random() < 0.25) {
+              this.particles.push({ x: e.pos.x + (Math.random()-0.5)*e.radius, y: e.pos.y + (Math.random()-0.5)*e.radius, vx: (Math.random()-0.5)*10, vy: -15 - Math.random()*15, life: 0.6, maxLife: 0.6, color: 0x33ff33, radius: 2 });
+            }
+            break;
+          case 'lurker':
+            // Dark mist
+            if (Math.random() < 0.35) {
+              this.particles.push({ x: e.pos.x + (Math.random()-0.5)*e.radius*2, y: e.pos.y + (Math.random()-0.5)*e.radius*2, vx: (Math.random()-0.5)*8, vy: (Math.random()-0.5)*8, life: 0.8, maxLife: 0.8, color: 0x440066, radius: 5 + Math.random()*3 });
+            }
+            break;
+          case 'burst':
+            // Yellow sparks when dashing
+            if (e.burstActive && spd > 40) {
+              for (let i = 0; i < 2; i++) {
+                this.particles.push({ x: e.pos.x + (Math.random()-0.5)*8, y: e.pos.y + (Math.random()-0.5)*8, vx: (Math.random()-0.5)*50, vy: (Math.random()-0.5)*50, life: 0.2, maxLife: 0.2, color: 0xffee00, radius: 3 + Math.random()*2 });
+              }
+            }
+            break;
+          case 'strafe':
+            // Cyan smoke arc
+            if (spd > 20 && Math.random() < 0.45) {
+              this.particles.push({ x: e.pos.x + (Math.random()-0.5)*e.radius, y: e.pos.y + (Math.random()-0.5)*e.radius, vx: -e.vel.x*0.1, vy: -e.vel.y*0.1, life: 0.3, maxLife: 0.3, color: 0x00ccff, radius: 3 });
+            }
+            break;
+        }
+      }
+    }
+
+    // Update particles
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i];
+      p.life -= dt;
+      if (p.life <= 0) { this.particles.splice(i, 1); continue; }
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+    }
+
+    // Biome ambient particles
+    this.biomeParticleTimer -= dt;
+    if (this.biomeParticleTimer <= 0 && this.particles.length < 600) {
+      this.biomeParticleTimer = 0.05;
+      const biome = this.map.getBiome(this.player.pos.x, this.player.pos.y);
+      const px = this.player.pos.x, py = this.player.pos.y;
+      if (biome === 'cave') {
+        for (let i = 0; i < 4; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const dist = 80 + Math.random() * 120;
+          this.particles.push({ x: px + Math.cos(angle)*dist, y: py + Math.sin(angle)*dist, vx: (Math.random()-0.5)*5, vy: (Math.random()-0.5)*5, life: 2.0, maxLife: 2.0, color: 0x110033, radius: 6 + Math.random()*4 });
+        }
+      } else if (biome === 'void_pool') {
+        for (let i = 0; i < 3; i++) {
+          this.particles.push({ x: px + (Math.random()-0.5)*200, y: py + 80 + Math.random()*80, vx: (Math.random()-0.5)*10, vy: -20 - Math.random()*25, life: 1.5, maxLife: 1.5, color: 0x6600aa, radius: 3 + Math.random()*3 });
+        }
+      } else if (biome === 'river_bank') {
+        for (let i = 0; i < 2; i++) {
+          this.particles.push({ x: px + (Math.random()-0.5)*150, y: py + (Math.random()-0.5)*150, vx: (Math.random()-0.5)*12, vy: -8 - Math.random()*10, life: 1.2, maxLife: 1.2, color: 0x2244ff, radius: 2 + Math.random()*2 });
+        }
+      }
+    }
+
     // Enemy runtime: affixes + kit perks
     for (const e of this.enemies.enemies) {
       if (e.hp <= 0) continue;
@@ -1288,6 +1388,126 @@ export class Game {
       if (e.affixes.includes('berserker') && e.hp / e.maxHp < 0.3) {
         if (CREATURE_DEFS[e.name]) {
           e.speed = Math.max(e.speed, (CREATURE_DEFS[e.name]?.speed ?? e.speed) * 1.5);
+        }
+      }
+    }
+
+    // ── Elite special attacks ──
+    for (const e of this.enemies.enemies) {
+      if (!e.isElite || e.hp <= 0 || e.eliteEntrance > 0) continue;
+
+      if (e.eliteAttackPhase === 0) {
+        // Idle: count down to next attack
+        e.eliteAttackTimer -= dt;
+        if (e.eliteAttackTimer <= 0) {
+          const dist = v2dist(e.pos, this.player.pos);
+          const r = Math.random();
+          if (r < 0.28 && dist < 130) {
+            // AOE Slam
+            e.eliteAttackPhase = 1;
+            e.eliteAttackWindup = 0.8;
+            e.stunTimer = 0.8;
+          } else if (r < 0.55) {
+            // Dash Attack
+            e.eliteAttackPhase = 2;
+            e.eliteAttackWindup = 0.5;
+            e.stunTimer = 0.5;
+            e.lockAngle = Math.atan2(this.player.pos.y - e.pos.y, this.player.pos.x - e.pos.x);
+          } else if (r < 0.80) {
+            // Projectile Burst (fires immediately after short pause)
+            e.eliteAttackPhase = 3;
+            e.eliteAttackWindup = 0.3;
+            e.stunTimer = 0.3;
+          } else {
+            // Summon
+            e.eliteAttackPhase = 4;
+            e.eliteAttackWindup = 0.5;
+            e.stunTimer = 0.5;
+          }
+        }
+      } else {
+        // Active attack phase: count down the windup timer in Game.ts
+        // (stunTimer in Enemies.ts handles movement freeze)
+        e.eliteAttackWindup -= dt;
+
+        if (e.eliteAttackPhase === 1 && e.eliteAttackWindup <= 0) {
+          // AOE Slam: damage player if in range
+          const slamRadius = 130;
+          if (v2dist(this.player.pos, e.pos) < slamRadius) {
+            this.player.takeDamage(e.meleeDmg * 1.8);
+          }
+          this.explosions.push({ x: e.pos.x, y: e.pos.y, radius: 0, maxRadius: slamRadius, life: 0.5, maxLife: 0.5 });
+          e.eliteAttackPhase = 0;
+          e.eliteAttackTimer = randRange(3, 6);
+
+        } else if (e.eliteAttackPhase === 2 && e.eliteAttackWindup <= 0) {
+          // Dash: launch at locked angle for 0.35s
+          e.eliteAttackPhase = 22;
+          e.eliteAttackWindup = 0.35;
+          e.stunTimer = 0; // unfreeze so we can control movement in phase 22
+
+        } else if (e.eliteAttackPhase === 22) {
+          // Dash active: manually move elite + deal contact damage
+          const dashSpeed = e.speed * 4;
+          const dashDx = Math.cos(e.lockAngle) * dashSpeed * dt;
+          const dashDy = Math.sin(e.lockAngle) * dashSpeed * dt;
+          const enx = e.pos.x + dashDx;
+          const eny = e.pos.y + dashDy;
+          if (!this.map.isBlocked(enx, e.pos.y, e.radius)) e.pos.x = enx;
+          if (!this.map.isBlocked(e.pos.x, eny, e.radius)) e.pos.y = eny;
+          e.pos.x = Math.max(e.radius, Math.min(WORLD_W - e.radius, e.pos.x));
+          e.pos.y = Math.max(e.radius, Math.min(WORLD_H - e.radius, e.pos.y));
+          // Freeze normal movement during dash
+          e.stunTimer = Math.max(e.stunTimer, dt + 0.02);
+          // Contact damage
+          if (v2dist(this.player.pos, e.pos) < e.radius + this.player.radius + 8 && e.meleeCooldown <= 0) {
+            this.player.takeDamage(e.meleeDmg * 2);
+            e.meleeCooldown = 1.5;
+          }
+          // Emit dash particles
+          if (this.particles.length < 600) {
+            this.particles.push({ x: e.pos.x, y: e.pos.y, vx: -Math.cos(e.lockAngle)*60 + (Math.random()-0.5)*30, vy: -Math.sin(e.lockAngle)*60 + (Math.random()-0.5)*30, life: 0.3, maxLife: 0.3, color: e.color || 0xffdd11, radius: 5 });
+          }
+          if (e.eliteAttackWindup <= 0) {
+            e.eliteAttackPhase = 0;
+            e.eliteAttackTimer = randRange(2, 5);
+            e.stunTimer = 0;
+          }
+
+        } else if (e.eliteAttackPhase === 3 && e.eliteAttackWindup <= 0) {
+          // Projectile Burst: 6-8 projectiles spread toward player
+          const count = 6 + Math.floor(Math.random() * 3);
+          const baseAngle = Math.atan2(this.player.pos.y - e.pos.y, this.player.pos.x - e.pos.x);
+          const spreadTotal = Math.PI / 3;
+          for (let i = 0; i < count; i++) {
+            const angle = baseAngle - spreadTotal / 2 + (i / (count - 1)) * spreadTotal;
+            this.enemies.enemyBullets.push({
+              pos: v2(e.pos.x, e.pos.y),
+              vel: v2fromAngle(angle, 185),
+              radius: 5,
+              damage: e.meleeDmg,
+              life: 2.5,
+              color: e.color || 0xffdd11,
+            });
+          }
+          e.eliteAttackPhase = 0;
+          e.eliteAttackTimer = randRange(3, 6);
+
+        } else if (e.eliteAttackPhase === 4 && e.eliteAttackWindup <= 0) {
+          // Summon: 2-3 minions
+          const sumCount = 2 + Math.floor(Math.random() * 2);
+          const minionPool = ['Void Leech', 'Shadow Crawler', 'Abyss Worm'];
+          const behaviorPool = ['charge', 'flank', 'pack'];
+          for (let i = 0; i < sumCount; i++) {
+            const angle = (i / sumCount) * Math.PI * 2 + Math.random() * 0.5;
+            const spawnPos = v2(e.pos.x + Math.cos(angle) * 65, e.pos.y + Math.sin(angle) * 65);
+            const minion = createEnemy(minionPool[Math.floor(Math.random() * minionPool.length)], spawnPos, true);
+            minion.behavior = behaviorPool[Math.floor(Math.random() * behaviorPool.length)];
+            this.enemies.enemies.push(minion);
+          }
+          this.hud.showMessage('MINIONS SUMMONED', 1.5);
+          e.eliteAttackPhase = 0;
+          e.eliteAttackTimer = randRange(6, 10);
         }
       }
     }
@@ -2251,7 +2471,11 @@ export class Game {
       spr.x = e.pos.x;
       spr.y = e.pos.y;
       spr.visible = this.camera.isVisible(e.pos.x, e.pos.y, e.radius * 2);
-      spr.tint = e.hitFlash > 0 ? 0xff4444 : 0xffffff;
+      const bTint = BEHAVIOR_COLORS[e.behavior] ?? 0xffffff;
+      spr.tint = e.hitFlash > 0 ? 0xff4444 : bTint;
+      // Lurker dormant: slow pulse fade between 20%-70% opacity
+      const lurkerDormant = e.behavior === 'lurker' && (e.phase as number) === 0;
+      spr.alpha = lurkerDormant ? 0.2 + Math.abs(Math.sin(this.elapsed * 1.5 + e.id * 0.7)) * 0.5 : 1.0;
 
       // Scale up apex enemy sprite
       if (e.id === this.apexId) {
@@ -2457,12 +2681,6 @@ export class Game {
       g.circle(ax, ay, 4).stroke({ color: 0xff2200, width: 1, alpha: 0.6 });
     }
 
-    // Behavior-based color map for enemy visual distinction
-    const BEHAVIOR_COLORS: Record<string, number> = {
-      charge: 0xff3333, flank: 0xff8800, pack: 0x33ff33,
-      lurker: 0x8800aa, burst: 0xffee00, strafe: 0x00ccff, patrol_river: 0x888888,
-    };
-
     // Enemies
     for (const e of this.enemies.enemies) {
       if (!this.camera.isVisible(e.pos.x, e.pos.y, e.radius * 2)) continue;
@@ -2480,7 +2698,7 @@ export class Game {
       const sa = lurkerDormant ? 0.4 : 1.0; // shape alpha multiplier
 
       if (e.isAggroed) {
-        g.circle(ex, ey, er * 1.6).stroke({ color: col, width: 0.5, alpha: 0.15 * sa });
+        g.circle(ex, ey, er * 1.6).stroke({ color: col, width: 1.5, alpha: 0.35 * sa });
       }
 
       if (!hasSprite) {
@@ -2524,6 +2742,20 @@ export class Game {
         }
       }
 
+      // Glow ring for sprite enemies — makes behavior color obvious
+      if (hasSprite) {
+        g.circle(ex, ey, er * 1.2).fill({ color: bColor, alpha: 0.18 * sa });
+        g.circle(ex, ey, er * 1.2).stroke({ color: bColor, width: 2.5, alpha: 0.65 * sa });
+        // Pack link lines (only needed here for sprite enemies — no-sprite already has them)
+        if (e.behavior === 'pack') {
+          for (const other of this.enemies.enemies) {
+            if (other !== e && other.hp > 0 && other.behavior === 'pack' && v2dist(e.pos, other.pos) < 200) {
+              g.moveTo(ex, ey).lineTo(other.pos.x, other.pos.y).stroke({ color: 0x33ff33, width: 1, alpha: 0.4 });
+            }
+          }
+        }
+      }
+
       if (isVoid) {
         g.circle(ex, ey, er * 0.4).fill({ color: 0xff2200, alpha: 0.5 + Math.sin(this.elapsed * 4) * 0.2 });
       }
@@ -2532,7 +2764,28 @@ export class Game {
       // Elite: pulsing glow ring using original creature color
       if (e.isElite) {
         const pulseAlpha = 0.3 + Math.sin(this.elapsed * 3) * 0.2;
-        g.circle(ex, ey, er * 1.8).stroke({ color: e.color, width: 2, alpha: pulseAlpha });
+        g.circle(ex, ey, er * 2.0).stroke({ color: e.color, width: 3, alpha: pulseAlpha });
+        g.circle(ex, ey, er * 2.4).stroke({ color: e.color, width: 1, alpha: pulseAlpha * 0.4 });
+      }
+      // Elite entrance flicker: draw semi-transparent flickering silhouette
+      if (e.isElite && (e as any).eliteEntrance > 0) {
+        const flickerAlpha = Math.abs(Math.sin(this.elapsed * 25)) * 0.6;
+        g.circle(ex, ey, er * 2.2).fill({ color: e.color, alpha: flickerAlpha * 0.3 });
+        g.circle(ex, ey, er * 2.2).stroke({ color: e.color, width: 3, alpha: flickerAlpha });
+      }
+      // Elite AOE windup ring
+      if (e.isElite && (e as any).eliteAttackPhase === 1) {
+        const windupFrac = 1 - (e as any).eliteAttackWindup / 0.8;
+        const slamR = 130 * windupFrac;
+        g.circle(ex, ey, slamR).stroke({ color: 0xff6600, width: 3, alpha: 0.7 });
+        g.circle(ex, ey, 130).stroke({ color: 0xff3300, width: 1, alpha: 0.25 });
+      }
+      // Elite dash preview line
+      if (e.isElite && (e as any).eliteAttackPhase === 2) {
+        const dashEndX = ex + Math.cos((e as any).lockAngle) * 250;
+        const dashEndY = ey + Math.sin((e as any).lockAngle) * 250;
+        g.moveTo(ex, ey).lineTo(dashEndX, dashEndY).stroke({ color: 0xffdd11, width: 3, alpha: 0.6 });
+        g.circle(dashEndX, dashEndY, 10).stroke({ color: 0xffdd11, width: 2, alpha: 0.4 });
       }
 
       if (e.hp < e.maxHp) {
@@ -2545,11 +2798,41 @@ export class Game {
         g.rect(bx, by, bw * frac, bh).fill({ color: e.id === this.apexId ? 0xff8000 : 0xff2200, alpha: 0.9 });
       }
     }
+
+    // Screen-edge arrows for off-screen elites
+    const camLeft = this.camera.x, camRight = this.camera.x + this.camera.viewW;
+    const camTop = this.camera.y, camBottom = this.camera.y + this.camera.viewH;
+    for (const e of this.enemies.enemies) {
+      if (!e.isElite || e.hp <= 0) continue;
+      if (e.pos.x >= camLeft && e.pos.x <= camRight && e.pos.y >= camTop && e.pos.y <= camBottom) continue;
+      // Off-screen: draw arrow on screen edge
+      const dx = e.pos.x - this.player.pos.x;
+      const dy = e.pos.y - this.player.pos.y;
+      const angle = Math.atan2(dy, dx);
+      const edgeDist = Math.min(this.camera.viewW, this.camera.viewH) * 0.42;
+      const arrowX = this.player.pos.x + Math.cos(angle) * edgeDist;
+      const arrowY = this.player.pos.y + Math.sin(angle) * edgeDist;
+      const sz = 10;
+      const pulseA = 0.7 + Math.sin(this.elapsed * 4) * 0.3;
+      g.moveTo(arrowX + Math.cos(angle) * sz, arrowY + Math.sin(angle) * sz)
+        .lineTo(arrowX + Math.cos(angle + 2.4) * sz, arrowY + Math.sin(angle + 2.4) * sz)
+        .lineTo(arrowX + Math.cos(angle - 2.4) * sz, arrowY + Math.sin(angle - 2.4) * sz)
+        .closePath().fill({ color: e.color || 0xffdd11, alpha: pulseA });
+      g.circle(arrowX, arrowY, sz * 1.5).stroke({ color: e.color || 0xffdd11, width: 1.5, alpha: pulseA * 0.4 });
+    }
   }
 
   private drawBullets() {
     const g = this.bulletGfx;
     g.clear();
+
+    // Draw behavior + biome particles
+    for (const p of this.particles) {
+      if (!this.camera.isVisible(p.x, p.y, p.radius * 2)) continue;
+      const alpha = (p.life / p.maxLife) * 0.75;
+      g.circle(p.x, p.y, p.radius * 2).fill({ color: p.color, alpha: alpha * 0.25 });
+      g.circle(p.x, p.y, p.radius).fill({ color: p.color, alpha: alpha });
+    }
 
     for (const b of this.weapons.bullets) {
       if (!this.camera.isVisible(b.pos.x, b.pos.y, b.radius * 3)) continue;
