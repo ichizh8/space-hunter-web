@@ -46,6 +46,12 @@ export interface Enemy {
   // Marked (for kit perks / chain T3)
   markedTimer: number;
   markedDmgBonus: number;
+  // Extended behavior state
+  phase: number;        // generic phase for state-machine behaviors (0-based)
+  phaseTimer: number;   // countdown timer for current phase
+  lockAngle: number;    // locked aim direction (charge rush, burst dash)
+  packAngle: number;    // surround angle for pack coordination
+  woundedFlee: boolean; // true once set when HP drops below 20%
 }
 
 let nextEnemyId = 1;
@@ -92,6 +98,11 @@ export function createEnemy(name: string, pos: Vec2, aggroed = false): Enemy {
     magneticTimer: 0,
     markedTimer: 0,
     markedDmgBonus: 1,
+    phase: 0,
+    phaseTimer: 0,
+    lockAngle: 0,
+    packAngle: (nextEnemyId * 1.2566) % (Math.PI * 2), // spread across circle using golden-ish increment
+    woundedFlee: false,
   };
 }
 
@@ -196,73 +207,257 @@ export class EnemySystem {
       const toTarget = v2sub(moveTarget, e.pos);
       const dirToPlayer = v2norm(toTarget);
 
-      switch (e.behavior) {
-        case 'charge':
-          e.vel = v2mul(dirToPlayer, e.speed);
-          break;
+      // Wounded flee / berserk: triggers once below 20% HP (elites never flee)
+      if (!e.woundedFlee && e.hp < e.maxHp * 0.2 && !e.isElite) {
+        e.woundedFlee = true;
+      }
 
-        case 'flank':
+      if (e.woundedFlee) {
+        // Aggressive types go berserk; others flee
+        if (e.behavior === 'charge' || e.behavior === 'burst' || e.behavior === 'pack') {
+          e.vel = v2mul(dirToPlayer, e.speed * 1.8); // berserk rush
+        } else {
+          e.vel = v2mul(v2norm(v2sub(e.pos, player.pos)), e.speed * 1.2); // flee
+        }
+      } else {
+      switch (e.behavior) {
+        case 'charge': {
+          // Phase 0: approach at reduced speed
+          // Phase 1: telegraph (stop + pulse, 0.5s)
+          // Phase 2: rush at locked angle (0.75s)
+          // Phase 3: recovery deceleration (0.7s) then cooldown
+          e.phaseTimer -= dt;
+          if (e.phase === 0) {
+            e.vel = v2mul(dirToPlayer, e.speed * 0.65);
+            if (distToPlayer < 260 && e.phaseTimer <= 0) {
+              e.phase = 1;
+              e.phaseTimer = 0.5;
+              e.vel = v2(0, 0);
+            }
+          } else if (e.phase === 1) {
+            // Telegraph: stop and flash
+            e.vel = v2mul(e.vel, 0.7);
+            e.hitFlash = 0.08; // visual pulse
+            if (e.phaseTimer <= 0) {
+              e.lockAngle = Math.atan2(toTarget.y, toTarget.x);
+              e.phase = 2;
+              e.phaseTimer = 0.75;
+            }
+          } else if (e.phase === 2) {
+            // Rush: full speed in locked direction
+            e.vel = v2mul(v2fromAngle(e.lockAngle), e.speed * 2.6);
+            // Knockback on melee contact during rush (applied in melee block below)
+            if (e.phaseTimer <= 0) {
+              e.phase = 3;
+              e.phaseTimer = 0.7;
+            }
+          } else {
+            // Recovery: brake
+            e.vel = v2mul(e.vel, 0.82);
+            if (e.phaseTimer <= 0) {
+              e.phase = 0;
+              e.phaseTimer = randRange(1.2, 2.5); // cooldown before next charge
+            }
+          }
+          break;
+        }
+
+        case 'flank': {
+          // Orbit player at ~190px, switch sides periodically, lunge to attack
           e.flankTimer -= dt;
           if (e.flankTimer <= 0) {
             e.flankSide *= -1;
-            e.flankTimer = randRange(1, 2.5);
+            e.flankTimer = randRange(2.5, 5);
           }
-          {
-            const perp = v2(-dirToPlayer.y * e.flankSide, dirToPlayer.x * e.flankSide);
-            const dir = v2norm(v2add(dirToPlayer, v2mul(perp, 0.6)));
-            e.vel = v2mul(dir, e.speed);
+          const orbitDist = 190;
+          const perp = v2(-dirToPlayer.y * e.flankSide, dirToPlayer.x * e.flankSide);
+          if (distToPlayer > orbitDist * 1.6) {
+            // Too far — close in quickly
+            e.vel = v2mul(dirToPlayer, e.speed);
+          } else {
+            // Orbit: blend toward orbit radius + tangential movement
+            const distErr = distToPlayer - orbitDist;
+            const radial = v2mul(dirToPlayer, distErr * 0.008);
+            const orbitDir = v2norm(v2add(perp, radial));
+            e.vel = v2mul(orbitDir, e.speed);
+          }
+          // Lunge when close enough from a flanking position
+          if (distToPlayer < 110) {
+            e.vel = v2mul(dirToPlayer, e.speed * 1.6);
           }
           break;
+        }
 
-        case 'burst':
+        case 'burst': {
+          // Phase 0 (idle, wait): hold at safe range
+          // Phase 1 (dash in): fast dash toward locked angle
+          // Phase 2 (retreat): dash away at speed
           e.burstTimer -= dt;
           if (e.burstTimer <= 0) {
             e.burstActive = !e.burstActive;
-            e.burstTimer = e.burstActive ? 0.8 : randRange(1.5, 3);
+            if (e.burstActive) {
+              // Start dash
+              e.lockAngle = Math.atan2(toTarget.y, toTarget.x);
+              e.burstTimer = 0.5;
+            } else {
+              // Retreat phase
+              e.lockAngle = Math.atan2(-toTarget.y, -toTarget.x); // away from player
+              e.burstTimer = randRange(1.0, 2.2);
+            }
           }
-          e.vel = e.burstActive ? v2mul(dirToPlayer, e.speed * 2) : v2mul(e.vel, 0.9);
+          if (e.burstActive) {
+            e.vel = v2mul(v2fromAngle(e.lockAngle), e.speed * 2.4);
+          } else {
+            // Retreat or idle at safe range
+            if (distToPlayer < 280) {
+              e.vel = v2mul(v2fromAngle(e.lockAngle), e.speed * 1.1);
+            } else {
+              e.vel = v2mul(e.vel, 0.88); // hold at distance
+            }
+          }
           break;
+        }
 
-        case 'strafe':
+        case 'strafe': {
+          // Orbit at ~220px, switch direction frequently, random dodge bursts
           e.strafeTimer -= dt;
           if (e.strafeTimer <= 0) {
             e.strafeDir *= -1;
-            e.strafeTimer = randRange(1, 2);
+            e.strafeTimer = randRange(0.7, 1.6);
           }
-          if (distToPlayer < 200) {
-            // Strafe and keep distance
+          e.flankTimer -= dt;
+          const preferredDist = 220;
+          const perpS = v2(-dirToPlayer.y * e.strafeDir, dirToPlayer.x * e.strafeDir);
+          if (distToPlayer < preferredDist - 35) {
+            // Too close — strafe away
+            e.vel = v2mul(v2norm(v2add(v2mul(perpS, 1.4), v2norm(v2sub(e.pos, player.pos)))), e.speed);
+          } else if (distToPlayer > preferredDist + 50) {
+            // Too far — close while strafing
+            e.vel = v2mul(v2norm(v2add(perpS, v2mul(dirToPlayer, 0.7))), e.speed);
+          } else {
+            // At range — pure strafe; occasional dodge burst
+            if (e.flankTimer <= 0 && Math.random() < 0.4) {
+              e.vel = v2mul(perpS, e.speed * 1.9); // burst dodge
+              e.flankTimer = randRange(1.5, 3.0);
+            } else {
+              if (e.flankTimer <= 0) e.flankTimer = randRange(0.4, 1.2);
+              e.vel = v2mul(perpS, e.speed);
+            }
+          }
+          break;
+        }
+
+        case 'pack': {
+          // Surround player: each enemy holds a different angle around the player.
+          // Rotate angle slowly; lunge when at position; flee if isolated.
+          e.packAngle += dt * 0.35 * e.flankSide;
+          e.flankTimer -= dt;
+          if (e.flankTimer <= 0) {
+            if (Math.random() < 0.25) e.flankSide *= -1; // occasionally reverse orbit
+            e.flankTimer = randRange(1.8, 4.0);
+          }
+          const packOrbit = 140;
+          const targetPos = v2(
+            player.pos.x + Math.cos(e.packAngle) * packOrbit,
+            player.pos.y + Math.sin(e.packAngle) * packOrbit,
+          );
+          const toTargetPos = v2sub(targetPos, e.pos);
+          const toTargetDist = v2len(toTargetPos);
+
+          // Check isolation: flee if no pack-mates within 200px
+          let hasNearby = false;
+          for (const other of this.enemies) {
+            if (other === e || other.hp <= 0 || other.behavior !== 'pack') continue;
+            if (v2dist(other.pos, e.pos) < 200) { hasNearby = true; break; }
+          }
+          if (!hasNearby && distToPlayer > 80) {
+            // Isolated — back off briefly
+            e.vel = v2mul(v2norm(v2sub(e.pos, player.pos)), e.speed * 0.8);
+          } else if (distToPlayer < 70) {
+            // Inside attack range — press in
+            e.vel = v2mul(dirToPlayer, e.speed * 1.3);
+          } else if (toTargetDist > 25) {
+            // Move to surround position
+            e.vel = v2mul(v2norm(toTargetPos), e.speed);
+          } else {
+            // Hold position
+            e.vel = v2mul(e.vel, 0.85);
+          }
+          break;
+        }
+
+        case 'lurker': {
+          // Phase 0: hide / patrol slowly near aggroOrigin
+          // Phase 1: brief pause then pounce
+          // Phase 2: retreat to a new hide spot
+          e.phaseTimer -= dt;
+          if (e.phase === 0) {
+            // Dormant — drift slowly, wait for player
+            e.vel = v2mul(e.vel, 0.88);
+            if (distToPlayer < 200) {
+              e.phase = 1;
+              e.phaseTimer = 0.25; // brief wind-up pause
+            }
+          } else if (e.phase === 1) {
+            if (e.phaseTimer > 0) {
+              e.vel = v2mul(e.vel, 0.6); // freeze briefly
+            } else {
+              // Pounce
+              e.vel = v2mul(dirToPlayer, e.speed * 2.3);
+              if (distToPlayer < 100 || e.phaseTimer < -0.8) {
+                // Struck or overshoot — retreat
+                e.phase = 2;
+                e.phaseTimer = randRange(1.2, 2.0);
+                // Pick a new hide spot near obstacles (just offset from current)
+                const hideAngle = Math.random() * Math.PI * 2;
+                e.aggroOrigin = v2(
+                  e.pos.x + Math.cos(hideAngle) * randRange(150, 280),
+                  e.pos.y + Math.sin(hideAngle) * randRange(150, 280),
+                );
+              }
+            }
+          } else {
+            // Retreat to hide spot
+            const toHide = v2sub(e.aggroOrigin, e.pos);
+            e.vel = v2mul(v2norm(toHide), e.speed * 1.3);
+            if (v2len(toHide) < 60 || e.phaseTimer <= 0) {
+              e.phase = 0;
+            }
+          }
+          break;
+        }
+
+        case 'patrol_river': {
+          // Unpredictable zigzag patrol; occasionally rushes at player
+          e.flankTimer -= dt;
+          if (e.flankTimer <= 0) {
+            // Pick a new patrol angle with some bias toward player
+            const bias = Math.atan2(toTarget.y, toTarget.x);
+            const spread = Math.PI * 0.9;
+            e.lockAngle = bias + (Math.random() - 0.5) * spread;
+            e.flankTimer = randRange(1.0, 3.0);
+          }
+          if (distToPlayer < 180) {
+            // Engage: rush and circle
             const perp = v2(-dirToPlayer.y * e.strafeDir, dirToPlayer.x * e.strafeDir);
-            const retreat = v2mul(dirToPlayer, -0.3);
-            e.vel = v2mul(v2norm(v2add(perp, retreat)), e.speed);
+            e.vel = v2mul(v2norm(v2add(dirToPlayer, perp)), e.speed * 0.85);
+            // Random strafe flip
+            e.strafeTimer -= dt;
+            if (e.strafeTimer <= 0) {
+              e.strafeDir *= -1;
+              e.strafeTimer = randRange(0.8, 2.0);
+            }
           } else {
-            e.vel = v2mul(dirToPlayer, e.speed * 0.5);
+            // Patrol along current angle
+            e.vel = v2mul(v2fromAngle(e.lockAngle), e.speed * 0.75);
           }
           break;
-
-        case 'pack':
-          // Move toward player but stay in a cluster
-          e.vel = v2mul(dirToPlayer, e.speed * (distToPlayer > 150 ? 1 : 0.3));
-          break;
-
-        case 'lurker':
-          if (distToPlayer < 150) {
-            e.vel = v2mul(dirToPlayer, e.speed * 1.5); // Fast lunge
-          } else {
-            e.vel = v2mul(e.vel, 0.9); // Dormant
-          }
-          break;
-
-        case 'patrol_river':
-          if (distToPlayer < 250) {
-            e.vel = v2mul(dirToPlayer, e.speed * 0.6);
-          } else {
-            e.vel = v2mul(e.vel, 0.95);
-          }
-          break;
+        }
 
         default:
           e.vel = v2mul(dirToPlayer, e.speed);
       }
+      } // end non-wounded block
 
       // Move with collision
       const newX = e.pos.x + e.vel.x * dt;
@@ -276,6 +471,12 @@ export class EnemySystem {
       if (!e.isAlly && distToPlayer < ENEMY_MELEE_RANGE + e.radius + player.radius && e.meleeDmg > 0 && e.meleeCooldown <= 0) {
         player.takeDamage(e.meleeDmg);
         e.meleeCooldown = 1.0;
+        // Charge rush knockback: shove player away
+        if (e.behavior === 'charge' && e.phase === 2) {
+          const kbDir = v2norm(v2sub(player.pos, e.pos));
+          player.pos.x = Math.max(player.radius, Math.min(WORLD_W - player.radius, player.pos.x + kbDir.x * 90));
+          player.pos.y = Math.max(player.radius, Math.min(WORLD_H - player.radius, player.pos.y + kbDir.y * 90));
+        }
       }
 
       // Ranged attack
