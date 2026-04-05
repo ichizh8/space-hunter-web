@@ -29,8 +29,8 @@ import {
 const BASE = process.env.NEXT_PUBLIC_BASE_PATH || '';
 
 const BEHAVIOR_COLORS: Record<string, number> = {
-  charge: 0xff3333, flank: 0xff8800, pack: 0x33ff33,
-  lurker: 0xaa44ff, burst: 0xffee00, strafe: 0x00ccff, patrol_river: 0x888888,
+  charge: 0xFF3333, flank: 0xFF8800, pack: 0x33FF33,
+  lurker: 0xAA44FF, burst: 0xFFFF00, strafe: 0x00FFFF, patrol_river: 0x888888,
 };
 
 // Sprite name -> creature name mapping
@@ -2464,6 +2464,12 @@ export class Game {
       this.playerSprite.tint = this.player.hitFlash > 0 ? 0xff2200 : 0xffffff;
     }
 
+    // Behavior tints for sprites
+    const SPRITE_BEHAVIOR_TINTS: Record<string, number> = {
+      charge: 0xFF3333, flank: 0xFF8800, pack: 0x33FF33,
+      lurker: 0xAA44FF, burst: 0xFFFF00, strafe: 0x00FFFF,
+    };
+
     // Enemy sprites
     for (const e of this.enemies.enemies) {
       const spr = this.getOrCreateEnemySprite(e);
@@ -2471,11 +2477,17 @@ export class Game {
       spr.x = e.pos.x;
       spr.y = e.pos.y;
       spr.visible = this.camera.isVisible(e.pos.x, e.pos.y, e.radius * 2);
-      const bTint = BEHAVIOR_COLORS[e.behavior] ?? 0xffffff;
-      spr.tint = e.hitFlash > 0 ? 0xff4444 : bTint;
-      // Lurker dormant: slow pulse fade between 20%-70% opacity
-      const lurkerDormant = e.behavior === 'lurker' && (e.phase as number) === 0;
-      spr.alpha = lurkerDormant ? 0.2 + Math.abs(Math.sin(this.elapsed * 1.5 + e.id * 0.7)) * 0.5 : 1.0;
+      const behaviorTint = SPRITE_BEHAVIOR_TINTS[e.behavior] ?? 0xffffff;
+      spr.tint = e.hitFlash > 0 ? 0xff4444 : behaviorTint;
+
+      // Lurker: semi-transparent + flicker every 2s
+      if (e.behavior === 'lurker') {
+        const lurkerDormant = (e.phase as number) === 0;
+        const flicker = Math.floor(this.elapsed / 2) % 2 === 0 ? 1.0 : 0.6;
+        spr.alpha = lurkerDormant ? 0.3 * flicker : 0.5 * flicker;
+      } else {
+        spr.alpha = 1;
+      }
 
       // Scale up apex enemy sprite
       if (e.id === this.apexId) {
@@ -2693,9 +2705,10 @@ export class Game {
       const col = e.hitFlash > 0 ? 0xffffff : bColor;
       const isVoid = e.voidType;
       const hasSprite = this.spritePool.has(e.id);
-      // Lurker dormant: 40% opacity when hiding (phase 0)
+      // Lurker: semi-transparent (0.5) + flicker every 2s; fully dormant at 0.3
       const lurkerDormant = e.behavior === 'lurker' && (e.phase as number) === 0;
-      const sa = lurkerDormant ? 0.4 : 1.0; // shape alpha multiplier
+      const lurkerFlicker = e.behavior === 'lurker' ? (Math.floor(this.elapsed / 2) % 2 === 0 ? 1.0 : 0.6) : 1.0;
+      const sa = lurkerDormant ? 0.3 * lurkerFlicker : e.behavior === 'lurker' ? 0.5 * lurkerFlicker : 1.0;
 
       if (e.isAggroed) {
         g.circle(ex, ey, er * 1.6).stroke({ color: col, width: 1.5, alpha: 0.35 * sa });
@@ -2951,6 +2964,7 @@ export class Game {
       g.circle(b.pos.x, b.pos.y, b.radius * 1.5).fill({ color: 0xff2200, alpha: 0.8 });
       g.circle(b.pos.x, b.pos.y, b.radius * 0.6).fill({ color: 0xff8866, alpha: 0.9 });
     }
+
   }
 
   /** Build current progression state snapshot for upgrade generation */
