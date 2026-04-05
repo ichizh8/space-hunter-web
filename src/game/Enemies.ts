@@ -53,6 +53,10 @@ export interface Enemy {
   lockAngle: number;    // locked aim direction (charge rush, burst dash)
   packAngle: number;    // surround angle for pack coordination
   woundedFlee: boolean; // true once set when HP drops below 20%
+  eliteEntrance: number;      // 1.0→0 entrance flicker
+  eliteAttackTimer: number;   // countdown between special attacks
+  eliteAttackPhase: number;   // 0=idle, 1=AOE windup, 2=dash windup, 22=dash active, 3=proj burst, 4=summon
+  eliteAttackWindup: number;  // windup/active duration timer
 }
 
 let nextEnemyId = 1;
@@ -105,6 +109,10 @@ export function createEnemy(name: string, pos: Vec2, aggroed = false): Enemy {
     lockAngle: 0,
     packAngle: (nextEnemyId * 1.2566) % (Math.PI * 2), // spread across circle using golden-ish increment
     woundedFlee: false,
+    eliteEntrance: 0,
+    eliteAttackTimer: 3.0,
+    eliteAttackPhase: 0,
+    eliteAttackWindup: 0,
   };
 }
 
@@ -141,6 +149,32 @@ export class EnemySystem {
         e.stunTimer -= dt;
         e.vel = v2(0, 0);
         continue;
+      }
+
+      // Elite entrance: freeze until entrance flicker finishes
+      if (e.isElite && e.eliteEntrance > 0) {
+        e.eliteEntrance -= dt;
+        e.vel = v2(0, 0);
+        const nx = e.pos.x + e.vel.x * dt;
+        const ny = e.pos.y + e.vel.y * dt;
+        if (!map.isBlocked(nx, e.pos.y, e.radius)) e.pos.x = nx;
+        if (!map.isBlocked(e.pos.x, ny, e.radius)) e.pos.y = ny;
+        continue;
+      }
+      // Elite aggro lock: always pursue player, override leash
+      if (e.isElite) {
+        e.isAggroed = true;
+        // Lurker phase 0 override: don't wait dormant, actively approach
+        if (e.behavior === 'lurker' && (e.phase as number) === 0 && v2dist(e.pos, player.pos) > 200) {
+          e.vel = v2mul(v2norm(v2sub(player.pos, e.pos)), e.speed * 0.7);
+          const nx2 = e.pos.x + e.vel.x * dt;
+          const ny2 = e.pos.y + e.vel.y * dt;
+          if (!map.isBlocked(nx2, e.pos.y, e.radius)) e.pos.x = nx2;
+          if (!map.isBlocked(e.pos.x, ny2, e.radius)) e.pos.y = ny2;
+          e.pos.x = Math.max(e.radius, Math.min(WORLD_W - e.radius, e.pos.x));
+          e.pos.y = Math.max(e.radius, Math.min(WORLD_H - e.radius, e.pos.y));
+          continue;
+        }
       }
 
       // Allies attack nearest non-ally enemy instead of player
