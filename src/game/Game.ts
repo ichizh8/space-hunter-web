@@ -1309,10 +1309,13 @@ export class Game {
     // Player bullets update
     this.weapons.update(dt, this.enemies.enemies.map(e => ({ pos: e.pos, id: e.id })));
 
-    // Plasma Sword: update sweep angle each frame (aimAngle-70° → aimAngle+70° over lifetime)
+    // Plasma Sword: anchor sweep to player's current position every frame
     const _PLASMA_DEG70 = 70 * Math.PI / 180;
     for (const b of this.weapons.bullets) {
       if (b.tag === 'plasma_slash' && b.aimAngle !== undefined) {
+        // Track player so the sword moves with them
+        b.pos.x = this.player.pos.x;
+        b.pos.y = this.player.pos.y;
         const progress = 1 - (b.life / b.maxLife);
         const sweepAngle = b.aimAngle - _PLASMA_DEG70 + progress * (_PLASMA_DEG70 * 2);
         const outerDist = 110 + this.weapons.radiusBonus;
