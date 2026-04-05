@@ -5,7 +5,7 @@ import { Player } from './Player';
 import { WeaponSystem } from './Weapons';
 import { EnemySystem, type Enemy, createEnemy } from './Enemies';
 import { HUD } from './HUD';
-import { v2dist, v2, v2sub, v2norm, v2mul, randRange } from '../lib/math';
+import { v2dist, v2, v2sub, v2norm, v2mul, randRange, lineSegHitsCircle } from '../lib/math';
 import {
   PLAYER_BASE_HP, PLAYER_BASE_SPEED, WORLD_W, WORLD_H,
   PLAYER_COLOR, XP_PER_LEVEL, MAX_LEVEL, POST_CAP_XP
@@ -1313,16 +1313,16 @@ export class Game {
     for (const bullet of this.weapons.bullets) {
       if (!bullet.fromPlayer) continue;
       for (const enemy of this.enemies.enemies) {
-        // Baton arc gate: only hit enemies within ±70° of the swing's aim angle
+        // Baton line-slash: line-segment vs circle, bypass normal circle checkHit
+        let dmg: number;
         if (bullet.tag === 'baton_slash') {
-          const toEnemy = v2sub(enemy.pos, this.player.pos);
-          const enemyAngle = Math.atan2(toEnemy.y, toEnemy.x);
-          const fireAngle = bullet.aimAngle ?? this.player.aimAngle;
-          let angleDiff = Math.abs(enemyAngle - fireAngle);
-          if (angleDiff > Math.PI) angleDiff = Math.PI * 2 - angleDiff;
-          if (angleDiff > (Math.PI * 70) / 180) continue;
+          if (bullet.hitSet.has(enemy.id)) continue;
+          if (!lineSegHitsCircle(bullet.lineStart!, bullet.lineEnd!, enemy.pos, enemy.radius + 8)) continue;
+          bullet.hitSet.add(enemy.id);
+          dmg = bullet.damage;
+        } else {
+          dmg = this.weapons.checkHit(bullet, enemy.id, enemy.pos, enemy.radius);
         }
-        const dmg = this.weapons.checkHit(bullet, enemy.id, enemy.pos, enemy.radius);
         if (dmg > 0) {
           let finalDmg = dmg;
           // Marked damage bonus
@@ -2400,12 +2400,21 @@ export class Game {
 
     for (const b of this.weapons.bullets) {
       if (!this.camera.isVisible(b.pos.x, b.pos.y, b.radius * 3)) continue;
-      if (b.tag === 'baton_slash') {
-        // Slash animation: fading ring that expands briefly
+      if (b.tag === 'baton_slash' && b.lineStart && b.lineEnd) {
+        // Line slash: bright fading stroke perpendicular to aim direction
         const frac = b.life / b.maxLife; // 1→0 as it expires
-        g.circle(b.pos.x, b.pos.y, b.radius * 1.8).fill({ color: b.color, alpha: frac * 0.15 });
-        g.circle(b.pos.x, b.pos.y, b.radius).fill({ color: b.color, alpha: frac * 0.4 });
-        g.circle(b.pos.x, b.pos.y, b.radius * 0.5).fill({ color: 0xffffff, alpha: frac * 0.5 });
+        // Outer glow
+        g.moveTo(b.lineStart.x, b.lineStart.y)
+          .lineTo(b.lineEnd.x, b.lineEnd.y)
+          .stroke({ color: b.color, width: 14, alpha: frac * 0.2 });
+        // Mid line
+        g.moveTo(b.lineStart.x, b.lineStart.y)
+          .lineTo(b.lineEnd.x, b.lineEnd.y)
+          .stroke({ color: b.color, width: 5, alpha: frac * 0.75 });
+        // Core white highlight
+        g.moveTo(b.lineStart.x, b.lineStart.y)
+          .lineTo(b.lineEnd.x, b.lineEnd.y)
+          .stroke({ color: 0xffffff, width: 2, alpha: frac * 0.9 });
         continue;
       }
       g.circle(b.pos.x, b.pos.y, b.radius * 3).fill({ color: b.color, alpha: 0.1 });

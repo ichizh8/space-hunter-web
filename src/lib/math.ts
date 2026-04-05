@@ -25,6 +25,19 @@ export const v2fromAngle = (angle: number, len = 1): Vec2 => ({
   y: Math.sin(angle) * len,
 });
 
+/** Distance from point p to line segment (a→b), clamped to the segment. */
+export function pointToSegDist(p: Vec2, a: Vec2, b: Vec2): number {
+  const abx = b.x - a.x, aby = b.y - a.y;
+  const len2 = abx * abx + aby * aby;
+  if (len2 === 0) return v2dist(p, a);
+  const t = Math.max(0, Math.min(1, ((p.x - a.x) * abx + (p.y - a.y) * aby) / len2));
+  return v2dist(p, { x: a.x + t * abx, y: a.y + t * aby });
+}
+
+/** Returns true if line segment (a→b) intersects a circle at center c with given radius. */
+export const lineSegHitsCircle = (a: Vec2, b: Vec2, c: Vec2, radius: number): boolean =>
+  pointToSegDist(c, a, b) <= radius;
+
 export const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 export const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 export const randRange = (min: number, max: number) => min + Math.random() * (max - min);

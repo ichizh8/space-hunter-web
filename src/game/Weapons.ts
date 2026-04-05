@@ -19,6 +19,8 @@ export interface Bullet {
   hitSet: Set<number>; // enemy IDs already hit
   tag?: string;       // optional identifier for special bullet types
   aimAngle?: number;  // aim angle at fire time (used for arc filtering)
+  lineStart?: Vec2;   // line-slash endpoints (baton_slash)
+  lineEnd?: Vec2;
 }
 
 export class WeaponSystem {
@@ -121,20 +123,28 @@ export class WeaponSystem {
         return [makeBullet(angle, { piercing: true })];
 
       case 'melee_aoe': {
-        // Single arc-sweep hitbox: stationary circle placed ahead of player, angle-filtered in Game.ts
-        const slashRadius = rad + 25; // ~65px base (40 def + 25), scales with radius upgrades
-        const offsetDist = 60;
-        const slashPos = v2(pos.x + Math.cos(angle) * offsetDist, pos.y + Math.sin(angle) * offsetDist);
+        // Line-slash hitbox: a segment perpendicular to aim direction, ~110px wide, 55px ahead
+        const offsetDist = 55;
+        const halfLen = 55;
+        const cx = pos.x + Math.cos(angle) * offsetDist;
+        const cy = pos.y + Math.sin(angle) * offsetDist;
+        // Perpendicular direction
+        const px = -Math.sin(angle);
+        const py = Math.cos(angle);
+        const lineStart = v2(cx - px * halfLen, cy - py * halfLen);
+        const lineEnd   = v2(cx + px * halfLen, cy + py * halfLen);
         return [makeBullet(angle, {
-          pos: slashPos,
+          pos: v2(cx, cy),
           vel: v2(0, 0),
-          radius: slashRadius,
+          radius: 4, // not used for collision; kept small
           life: 0.25,
           maxLife: 0.25,
           piercing: true,
           hitSet: new Set(),
           tag: 'baton_slash',
           aimAngle: angle,
+          lineStart,
+          lineEnd,
         })];
       }
 
