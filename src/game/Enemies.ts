@@ -138,7 +138,26 @@ export class EnemySystem {
       const pool = BIOME_POOLS[spawnBiome] || BIOME_POOLS.open;
       const name = pick(pool);
       const aggroed = Math.random() < 0.6;
-      this.enemies.push(createEnemy(name, pos, aggroed));
+
+      if (CREATURE_DEFS[name]?.behavior === 'pack') {
+        this.spawnPackGroup(pos, name, aggroed);
+      } else {
+        this.enemies.push(createEnemy(name, pos, aggroed));
+      }
+    }
+  }
+
+  /** Spawn 3-5 pack enemies clustered together with evenly-distributed surround angles. */
+  spawnPackGroup(basePos: Vec2, name: string, aggroed = true) {
+    const groupSize = randInt(3, 5);
+    for (let i = 0; i < groupSize; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = randRange(20, 80);
+      const pos = v2(basePos.x + Math.cos(angle) * dist, basePos.y + Math.sin(angle) * dist);
+      const enemy = createEnemy(name, pos, aggroed);
+      // Assign evenly-spread surround angles so the pack fans out immediately
+      enemy.packAngle = (i / groupSize) * Math.PI * 2;
+      this.enemies.push(enemy);
     }
   }
 
