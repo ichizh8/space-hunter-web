@@ -9,11 +9,35 @@ import {
   HAL_POST_HUNT_SUCCESS, HAL_POST_HUNT_FAIL, HAL_IDLE
 } from '../data/hal';
 
-const UPGRADE_DEFS = [
-  { id: 'max_hp', name: 'Reinforced Suit', desc: 'Max HP +2', cost: 80, maxLevel: 3 },
-  { id: 'mag_size', name: 'Extended Magazine', desc: 'Mag Size +3', cost: 60, maxLevel: 3 },
-  { id: 'xp_rate', name: 'Void Attunement', desc: 'XP Rate +10%', cost: 50, maxLevel: 3 },
-  { id: 'loadout_slots', name: 'Extra Loadout', desc: '+1 slot', cost: 100, maxLevel: 2 },
+const UTILITY_UPGRADE_DEFS = [
+  {
+    id: 'scanner', name: 'Scanner', maxLevel: 3,
+    costs: [60, 120, 200],
+    descs: ['Caches visible on minimap', 'Elites always visible', 'All enemies visible'],
+  },
+  {
+    id: 'thrusters', name: 'Thrusters', maxLevel: 3,
+    costs: [80, 150, 250],
+    descs: ['Dash ability (1 charge, 150px, 1.5s CD)', '2 dash charges', 'Cooldown -40%'],
+  },
+  {
+    id: 'salvage_module', name: 'Salvage Module', maxLevel: 2,
+    costs: [100, 200],
+    descs: ['+30% pickup drop chance', 'Guaranteed extra ingredient from elites'],
+  },
+  {
+    id: 'emergency_protocol', name: 'Emergency Protocol', maxLevel: 1,
+    costs: [300],
+    descs: ['Once per contract, revive with 3 HP when killed'],
+  },
+];
+
+const BONUS_UPGRADE_DEFS = [
+  { id: 'conditioning', name: 'Conditioning', desc: '+5% max HP per level', cost: 40, maxLevel: 5 },
+  { id: 'reflex_training', name: 'Reflex Training', desc: '+3% move speed per level', cost: 40, maxLevel: 5 },
+  { id: 'trigger_discipline', name: 'Trigger Discipline', desc: '+4% fire rate per level', cost: 50, maxLevel: 5 },
+  { id: 'combat_training', name: 'Combat Training', desc: '+3% damage per level', cost: 50, maxLevel: 5 },
+  { id: 'quick_hands', name: 'Quick Hands', desc: '-5% reload time per level', cost: 40, maxLevel: 5 },
 ];
 
 const WEAPON_UNLOCK_DEFS = [
@@ -269,8 +293,31 @@ function UpgradesTab({ save }: { save: ReturnType<typeof useSaveStore.getState> 
   return (
     <>
       <p className="text-center text-base text-[var(--color-accent-gold)] font-bold">Credits: {save.totalCredits}</p>
-      <SectionHeader text="SUIT UPGRADES" color="var(--color-accent-cyan)" />
-      {UPGRADE_DEFS.map(def => {
+
+      <SectionHeader text="UTILITY UPGRADES" color="var(--color-accent-cyan)" />
+      {UTILITY_UPGRADE_DEFS.map(def => {
+        const level = save.shipUpgrades[def.id] ?? 0;
+        const maxed = level >= def.maxLevel;
+        const cost = def.costs[level] ?? 0;
+        const nextDesc = def.descs[level] ?? def.descs[def.maxLevel - 1];
+        return (
+          <div key={def.id} className="pixel-card flex items-center gap-3">
+            <div className="flex-1">
+              <p className="text-sm font-bold">{def.name} <span className="text-[var(--color-text-muted)]">Lv{level}/{def.maxLevel}</span></p>
+              <p className="text-xs text-[var(--color-text-secondary)] mt-1">{maxed ? def.descs[def.maxLevel - 1] : `Next: ${nextDesc}`}</p>
+            </div>
+            <button
+              className="pixel-btn text-sm py-2 px-4"
+              disabled={maxed || save.totalCredits < cost}
+              onClick={() => buyUpgrade(def.id, cost, def.maxLevel)}>
+              {maxed ? 'MAX' : `${cost}cr`}
+            </button>
+          </div>
+        );
+      })}
+
+      <SectionHeader text="PASSIVE BONUSES" color="var(--color-accent-purple)" />
+      {BONUS_UPGRADE_DEFS.map(def => {
         const level = save.shipUpgrades[def.id] ?? 0;
         const maxed = level >= def.maxLevel;
         return (
@@ -281,6 +328,7 @@ function UpgradesTab({ save }: { save: ReturnType<typeof useSaveStore.getState> 
             </div>
             <button
               className="pixel-btn text-sm py-2 px-4"
+              style={{ borderColor: 'var(--color-accent-purple)', color: 'var(--color-accent-purple)' }}
               disabled={maxed || save.totalCredits < def.cost}
               onClick={() => buyUpgrade(def.id, def.cost, def.maxLevel)}>
               {maxed ? 'MAX' : `${def.cost}cr`}
@@ -288,6 +336,7 @@ function UpgradesTab({ save }: { save: ReturnType<typeof useSaveStore.getState> 
           </div>
         );
       })}
+
       <SectionHeader text="WEAPONS" color="var(--color-accent-orange)" />
       {WEAPON_UNLOCK_DEFS.map(def => {
         const owned = save.unlockedWeapons.includes(def.id);

@@ -49,7 +49,7 @@ export const useSaveStore = create<SaveState & SaveActions>()(
       totalCorruption: 0,
       contractsCompleted: 0,
       pantry: { ...DEFAULT_PANTRY },
-      shipUpgrades: { max_hp: 0, mag_size: 0, xp_rate: 0, loadout_slots: 0, kit_slots: 0 },
+      shipUpgrades: { scanner: 0, thrusters: 0, salvage_module: 0, emergency_protocol: 0, conditioning: 0, reflex_training: 0, trigger_discipline: 0, combat_training: 0, quick_hands: 0, kit_slots: 0 },
       unlockedWeapons: ['sidearm'],
       equippedKits: ['stim_pack', 'flash_trap'],
       kitTiers: { stim_pack: 1, flash_trap: 1 },

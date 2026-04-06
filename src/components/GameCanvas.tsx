@@ -15,8 +15,7 @@ export function GameCanvas() {
   const contract = useGameStore(s => s.currentContract);
   const weapon = useGameStore(s => s.startingWeapon);
   const kits = useSaveStore(s => s.equippedKits);
-  const hpUpgrade = useSaveStore(s => s.shipUpgrades.max_hp ?? 0);
-  const magUpgrade = useSaveStore(s => s.shipUpgrades.mag_size ?? 0);
+  const shipUpgrades = useSaveStore(s => s.shipUpgrades);
 
   // Legacy modifier picker state (kept for compat)
   const [modChoices, setModChoices] = useState<ModifierDef[] | null>(null);
@@ -84,8 +83,7 @@ export function GameCanvas() {
         kits,
         contract?.type ?? 'hunt',
         contract?.targetTotal ?? 10,
-        hpUpgrade,
-        magUpgrade,
+        shipUpgrades,
         {
           onDeath: () => {},
           onComplete: () => {},
@@ -122,10 +120,10 @@ export function GameCanvas() {
       );
 
       game.player.weaponId = weapon;
-      // Sync mag size with selected weapon
+      // Sync mag size with selected weapon (no mag upgrade in new system)
       const wDef = (await import('../data/weapons')).WEAPON_DEFS[weapon];
       if (wDef) {
-        game.player.magSize = wDef.magSize + magUpgrade * 3;
+        game.player.magSize = wDef.magSize;
         game.player.magAmmo = game.player.magSize;
       }
 
