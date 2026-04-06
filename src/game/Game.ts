@@ -272,6 +272,13 @@ export class Game {
   eliteTimer = 0;
   eliteSpawnedCount = 0;
 
+  // Screen shake
+  shakeTimer = 0;
+  shakeAmt = 0;
+
+  // Scorch marks left by elite charge impacts
+  scorchMarks: Array<{ x: number; y: number; life: number; maxLife: number }> = [];
+
   // Contract reward / par time (passed via contractExtras)
   contractReward = 0;
   contractParTime = 300;
@@ -588,12 +595,12 @@ export class Game {
     const epithet = ELITE_EPITHETS[Math.floor(Math.random() * ELITE_EPITHETS.length)];
     const displayName = `${eliteType} ${epithet}`;
 
-    // Teleport entrance: pick a spot 130-220px from player for the warning silhouette
-    const tpAngle = Math.random() * Math.PI * 2;
-    const tpDist = 130 + Math.random() * 90;
+    // Spawn far from player; elite will use long-range charge to close in
+    const spawnAngle = Math.random() * Math.PI * 2;
+    const spawnDist = 600 + Math.random() * 300;
     const pos = {
-      x: Math.max(100, Math.min(WORLD_W - 100, this.player.pos.x + Math.cos(tpAngle) * tpDist)),
-      y: Math.max(100, Math.min(WORLD_H - 100, this.player.pos.y + Math.sin(tpAngle) * tpDist)),
+      x: Math.max(100, Math.min(WORLD_W - 100, this.player.pos.x + Math.cos(spawnAngle) * spawnDist)),
+      y: Math.max(100, Math.min(WORLD_H - 100, this.player.pos.y + Math.sin(spawnAngle) * spawnDist)),
     };
 
     // Base stats scaled by time
@@ -605,8 +612,8 @@ export class Game {
     const baseRadius = overrides.radius ?? 20;
     const baseDmg = overrides.meleeDmg ?? (2 + depth);
 
-    // Elite starts offscreen — will teleport to pos after 1s warning
-    const elite = createEnemy('Void Leech', v2(-9999, -9999), true);
+    // Elite spawns at real position and charges in with long-range charge
+    const elite = createEnemy('Void Leech', v2(pos.x, pos.y), true);
     elite.name = eliteType;
     elite.hp = baseHp;
     elite.maxHp = baseHp;
@@ -618,9 +625,8 @@ export class Game {
     elite.leash = 99999;
     elite.isElite = true;
     elite.behavior = 'elite';
-    elite.aggroOrigin = v2(pos.x, pos.y); // teleport destination
-    elite.eliteTeleportTimer = 1.0;
-    elite.eliteAttackTimer = 99; // set to real value after teleport arrives
+    elite.eliteChargeTimer = 0; // ready to charge immediately on spawn
+    elite.eliteAttackTimer = randRange(4, 8);
 
     // Roll affixes
     let affixCount = 1;
@@ -1348,6 +1354,26 @@ export class Game {
     // Enemies update
     this.enemies.update(dt, this.player, this.map, this.decoys.map(d => ({ x: d.x, y: d.y })));
 
+    // Process elite charge impacts: screen shake + scorch mark + explosion particles
+    for (const impactPos of this.enemies._pendingImpacts) {
+      this.shakeTimer = 0.3;
+      this.shakeAmt = 6;
+      this.scorchMarks.push({ x: impactPos.x, y: impactPos.y, life: 3.0, maxLife: 3.0 });
+      for (let i = 0; i < 18; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const spd = 60 + Math.random() * 120;
+        this.particles.push({ x: impactPos.x, y: impactPos.y, vx: Math.cos(angle) * spd, vy: Math.sin(angle) * spd, life: 0.5, maxLife: 0.5, color: 0xff6600, radius: 4 + Math.random() * 4 });
+      }
+    }
+    this.enemies._pendingImpacts = [];
+
+    // Update scorch marks
+    for (let i = this.scorchMarks.length - 1; i >= 0; i--) {
+      this.scorchMarks[i].life -= dt;
+      if (this.scorchMarks[i].life <= 0) this.scorchMarks.splice(i, 1);
+    }
+    this.shakeTimer = Math.max(0, this.shakeTimer - dt);
+
     // Behavior trail particles
     if (this.particles.length < 600) {
       for (const e of this.enemies.enemies) {
@@ -1392,6 +1418,14 @@ export class Game {
             // Cyan smoke arc
             if (spd > 20 && Math.random() < 0.45) {
               this.particles.push({ x: e.pos.x + (Math.random()-0.5)*e.radius, y: e.pos.y + (Math.random()-0.5)*e.radius, vx: -e.vel.x*0.1, vy: -e.vel.y*0.1, life: 0.3, maxLife: 0.3, color: 0x00ccff, radius: 3 });
+            }
+            break;
+          case 'elite':
+            // Bright trail during long-range charge (phase 31)
+            if ((e.phase as number) === 31) {
+              for (let i = 0; i < 4; i++) {
+                this.particles.push({ x: e.pos.x + (Math.random()-0.5)*e.radius, y: e.pos.y + (Math.random()-0.5)*e.radius, vx: -e.vel.x*0.08 + (Math.random()-0.5)*30, vy: -e.vel.y*0.08 + (Math.random()-0.5)*30, life: 0.2, maxLife: 0.2, color: 0xffcc00, radius: 5 + Math.random()*4 });
+              }
             }
             break;
         }
@@ -2388,9 +2422,11 @@ export class Game {
     this.drawEntities();
     this.drawBullets();
 
-    // Update camera on world layer
-    this.worldLayer.x = -this.camera.x;
-    this.worldLayer.y = -this.camera.y;
+    // Update camera on world layer (with screen shake)
+    const shakeX = this.shakeTimer > 0 ? (Math.random() - 0.5) * this.shakeAmt * 2 : 0;
+    const shakeY = this.shakeTimer > 0 ? (Math.random() - 0.5) * this.shakeAmt * 2 : 0;
+    this.worldLayer.x = -this.camera.x + shakeX;
+    this.worldLayer.y = -this.camera.y + shakeY;
 
     // HUD
     this.hud.draw(this.player, dt, this.totalKills, this.elapsed, this.equippedKits, this.kitCooldowns, this.screenFlash);
@@ -2822,19 +2858,22 @@ export class Game {
       g.circle(ax, ay, 4).stroke({ color: 0xff2200, width: 1, alpha: 0.6 });
     }
 
-    // Elite teleport warning silhouettes (drawn before enemy loop, at aggroOrigin)
+    // Elite charge warning: pulsing target marker at locked position (phase 30 = wind-up)
     for (const e of this.enemies.enemies) {
-      if (!e.isElite || e.eliteTeleportTimer <= 0) continue;
+      if (!e.isElite || (e.phase as number) !== 30) continue;
       const wx = e.aggroOrigin.x, wy = e.aggroOrigin.y;
-      if (!this.camera.isVisible(wx, wy, e.radius * 4)) continue;
-      const er = e.radius * 1.5;
-      const flicker = Math.sin(this.elapsed * 18) > 0 ? 0.55 : 0.1;
-      // Flickering outline silhouette
-      g.circle(wx, wy, er).stroke({ color: e.color, width: 3, alpha: flicker });
-      g.circle(wx, wy, er * 1.8).stroke({ color: e.color, width: 1.5, alpha: flicker * 0.5 });
-      // Warning cross-hairs
-      g.moveTo(wx - er * 1.4, wy).lineTo(wx + er * 1.4, wy).stroke({ color: 0xff2200, width: 1, alpha: flicker * 0.8 });
-      g.moveTo(wx, wy - er * 1.4).lineTo(wx, wy + er * 1.4).stroke({ color: 0xff2200, width: 1, alpha: flicker * 0.8 });
+      if (!this.camera.isVisible(wx, wy, 80)) continue;
+      const pulse = 0.4 + Math.abs(Math.sin(e.phaseTimer * 8)) * 0.6;
+      g.circle(wx, wy, 60).stroke({ color: 0xff2200, width: 3, alpha: pulse });
+      g.circle(wx, wy, 40).stroke({ color: 0xff6600, width: 2, alpha: pulse * 0.7 });
+      g.circle(wx, wy, 15).fill({ color: 0xff2200, alpha: pulse * 0.25 });
+    }
+    // Scorch marks left after elite charge impact
+    for (const mark of this.scorchMarks) {
+      if (!this.camera.isVisible(mark.x, mark.y, 80)) continue;
+      const alpha = (mark.life / mark.maxLife) * 0.45;
+      g.circle(mark.x, mark.y, 80).fill({ color: 0x220000, alpha });
+      g.circle(mark.x, mark.y, 60).stroke({ color: 0xff4400, width: 2, alpha: alpha * 0.8 });
     }
 
     // Enemies

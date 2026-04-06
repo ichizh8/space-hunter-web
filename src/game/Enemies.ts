@@ -54,7 +54,7 @@ export interface Enemy {
   packAngle: number;    // surround angle for pack coordination
   woundedFlee: boolean; // true once set when HP drops below 20%
   // Elite-specific aggro/attack state
-  eliteTeleportTimer: number;  // > 0 = pending entrance teleport; elite parks offscreen until 0
+  eliteChargeTimer: number;    // cooldown for long-range charge attack; 0 = ready
   eliteAttackTimer: number;    // time until next attack fires
   eliteAttackCycle: number;    // which attack fires next: 0=aoe, 1=dash, 2=burst (cycles)
   eliteSummonTimer: number;    // 15s cooldown for summoning minions
@@ -110,7 +110,7 @@ export function createEnemy(name: string, pos: Vec2, aggroed = false): Enemy {
     lockAngle: 0,
     packAngle: (nextEnemyId * 1.2566) % (Math.PI * 2), // spread across circle using golden-ish increment
     woundedFlee: false,
-    eliteTeleportTimer: 0,
+    eliteChargeTimer: 0,
     eliteAttackTimer: 3.0,
     eliteAttackCycle: 0,
     eliteSummonTimer: 15,
@@ -121,6 +121,7 @@ export class EnemySystem {
   enemies: Enemy[] = [];
   enemyBullets: Array<{ pos: Vec2; vel: Vec2; radius: number; damage: number; life: number; color: number }> = [];
   _pendingSummons: Vec2[] = [];
+  _pendingImpacts: Vec2[] = [];
 
   spawnWave(count: number, playerPos: Vec2, map: GameMap, biome?: string) {
     for (let i = 0; i < count; i++) {
@@ -153,18 +154,6 @@ export class EnemySystem {
         continue;
       }
 
-      // Elite teleport entrance: park offscreen until timer expires, then snap to aggroOrigin
-      if (e.isElite && e.eliteTeleportTimer > 0) {
-        e.eliteTeleportTimer -= dt;
-        if (e.eliteTeleportTimer <= 0) {
-          e.pos.x = e.aggroOrigin.x;
-          e.pos.y = e.aggroOrigin.y;
-          e.eliteTeleportTimer = 0;
-          e.hitFlash = 0.35;
-          e.eliteAttackTimer = randRange(2, 4);
-        }
-        continue;
-      }
 
       // Allies attack nearest non-ally enemy instead of player
       if (e.isAlly) {
@@ -506,8 +495,16 @@ export class EnemySystem {
 
           e.phaseTimer -= dt;
           e.eliteAttackTimer -= dt;
+          e.eliteChargeTimer = Math.max(0, e.eliteChargeTimer - dt);
 
           if (e.phase === 0) {
+            // Long-range charge when far from player (takes priority over normal attacks)
+            if (e.eliteChargeTimer <= 0 && eliteDist > 400) {
+              e.phase = 30;
+              e.phaseTimer = 1.5;
+              e.aggroOrigin = v2(player.pos.x, player.pos.y); // lock target now
+              e.vel = v2(0, 0);
+            } else {
             // Default: charge toward player at 35% speed bonus
             e.vel = v2mul(eliteDir, e.speed * 1.35);
 
@@ -546,6 +543,7 @@ export class EnemySystem {
                 e.eliteAttackTimer = randRange(3, 6);
               }
             }
+            } // end else (not charging)
           } else if (e.phase === 10) {
             // AOE charge: slow drift toward player, expanding pulse visual
             e.vel = v2mul(eliteDir, e.speed * 0.3);
@@ -592,6 +590,43 @@ export class EnemySystem {
             if (e.phaseTimer <= 0) {
               e.phase = 0;
               e.eliteAttackTimer = randRange(2, 5);
+            }
+          } else if (e.phase === 30) {
+            // Long-range charge wind-up: stop moving, glow brighter
+            // aggroOrigin holds the locked target position (set when phase started)
+            e.vel = v2(0, 0);
+            e.hitFlash = 0.05 + Math.abs(Math.sin(e.phaseTimer * 10)) * 0.12;
+            if (e.phaseTimer <= 0) {
+              // Lock angle toward stored target
+              const cdx = e.aggroOrigin.x - e.pos.x;
+              const cdy = e.aggroOrigin.y - e.pos.y;
+              e.lockAngle = Math.atan2(cdy, cdx);
+              e.phase = 31;
+              e.phaseTimer = 0.3;
+            }
+          } else if (e.phase === 31) {
+            // Charging at extreme speed toward locked target position
+            e.vel = v2fromAngle(e.lockAngle, 2000);
+            const distToTarget = v2dist(e.pos, e.aggroOrigin);
+            // Impact when close to target OR time runs out
+            if (distToTarget < 100 + e.radius || e.phaseTimer <= 0) {
+              // AOE damage in 80px radius
+              if (v2dist(e.pos, player.pos) < 80 + e.radius + player.radius) {
+                player.takeDamage(e.meleeDmg * 2);
+              }
+              this._pendingImpacts.push(v2(e.aggroOrigin.x, e.aggroOrigin.y));
+              e.phase = 32;
+              e.phaseTimer = 0.8;
+              e.vel = v2(0, 0);
+              e.meleeCooldown = 0.8;
+              e.eliteChargeTimer = 8 + Math.random() * 4; // 8-12s cooldown
+            }
+          } else if (e.phase === 32) {
+            // Charge recovery: slow movement, briefly vulnerable
+            e.vel = v2mul(eliteDir, e.speed * 0.5);
+            if (e.phaseTimer <= 0) {
+              e.phase = 0;
+              e.eliteAttackTimer = randRange(2, 4);
             }
           }
           break;
