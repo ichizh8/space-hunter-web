@@ -1217,16 +1217,18 @@ export class Game {
           if (e.isAlly) e.hp = 0;
         }
         for (let ai = 0; ai < allyCount; ai++) {
-          const angle = (ai / allyCount) * Math.PI * 2 + Math.random() * 0.4;
-          const spawnDist = 50 + Math.random() * 40;
+          const angle = (ai / allyCount) * Math.PI * 2;
+          const spawnDist = 120;
           const ally = createEnemy('Rift Parasite', {
             x: this.player.pos.x + Math.cos(angle) * spawnDist,
             y: this.player.pos.y + Math.sin(angle) * spawnDist,
           });
           ally.isAlly = true;
+          ally.isAggroed = false;
+          ally.meleeDmg = 0;
           ally.hp = 8;
           ally.maxHp = 8;
-          ally.speed = 130;
+          ally.speed = 160;
           this.enemies.enemies.push(ally);
         }
         break;
@@ -1303,13 +1305,13 @@ export class Game {
     let cd = kdef.cooldown;
     if (kitId === 'stim_pack' && tier >= 2) cd = 5; // T2: 8->5s
     // T3 mismatch penalty: double cooldown
-    if (tier >= 3 && t3Choice) {
+    if (!suppressUsedMessage && tier >= 3 && t3Choice) {
       const isClean = t3Choice === 'clean';
       if ((isClean && this.player.corruption >= 35) || (!isClean && this.player.corruption < 50)) {
         cd *= 2;
       }
     }
-    this.kitCooldowns[kitId] = cd;
+    if (!suppressUsedMessage) this.kitCooldowns[kitId] = cd;
     if (!suppressUsedMessage) this.hud.showMessage(kdef.name.toUpperCase() + ' USED', 1.5);
   }
 

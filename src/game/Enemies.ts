@@ -189,9 +189,19 @@ export class EnemySystem {
             e.meleeCooldown = 1.0;
           }
         } else {
-          // Follow player if no targets
-          const dir = v2norm(v2sub(player.pos, e.pos));
-          e.vel = v2mul(dir, e.speed * 0.5);
+          // Orbit near player if no targets, do not stack on top of them
+          const offset = v2sub(e.pos, player.pos);
+          const dist = v2len(offset);
+          if (dist < 90) {
+            const away = dist > 0.5 ? v2norm(offset) : v2fromAngle(Math.random() * Math.PI * 2);
+            e.vel = v2mul(away, e.speed * 0.8);
+          } else if (dist > 150) {
+            const dir = v2norm(v2sub(player.pos, e.pos));
+            e.vel = v2mul(dir, e.speed * 0.45);
+          } else {
+            const tangent = v2fromAngle(Math.atan2(offset.y, offset.x) + Math.PI / 2);
+            e.vel = v2mul(tangent, e.speed * 0.4);
+          }
         }
         // Apply movement
         const nx = e.pos.x + e.vel.x * dt;
