@@ -241,8 +241,8 @@ export class EnemySystem {
         continue;
       }
 
-      // Target selection: nearest ally can draw aggro, otherwise player, then decoys can override
-      let moveTarget = allyTarget && allyTargetDist < distToPlayer ? allyTarget.pos : player.pos;
+      // Target selection: nearby allies should reliably pull aggro, not only when slightly closer than player
+      let moveTarget = (allyTarget && allyTargetDist < e.detection * 1.2) ? allyTarget.pos : player.pos;
       if (decoys) {
         for (const dc of decoys) {
           const dcDist = v2dist(e.pos, dc);
@@ -710,7 +710,7 @@ export class EnemySystem {
 
       // Melee attack against current target, allies never hit the player
       if (!e.isAlly && e.meleeDmg > 0 && e.meleeCooldown <= 0) {
-        if (allyTarget && allyTargetDist < distToPlayer && allyTargetDist < ENEMY_MELEE_RANGE + e.radius + allyTarget.radius) {
+        if (allyTarget && allyTargetDist < ENEMY_MELEE_RANGE + e.radius + allyTarget.radius) {
           allyTarget.hp -= e.meleeDmg;
           allyTarget.hitFlash = 0.15;
           e.meleeCooldown = 1.0;

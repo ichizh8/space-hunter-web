@@ -3089,12 +3089,17 @@ export class Game {
       spr.x = e.pos.x;
       spr.y = e.pos.y;
       spr.visible = this.camera.isVisible(e.pos.x, e.pos.y, e.radius * 2);
-      const rawTint = SPRITE_BEHAVIOR_TINTS[e.behavior] ?? 0xffffff;
-      const behaviorTint = subtleTint(rawTint, 0.3);
+      const rawTint = e.isAlly ? 0x33ffaa : (SPRITE_BEHAVIOR_TINTS[e.behavior] ?? 0xffffff);
+      const behaviorTint = subtleTint(rawTint, e.isAlly ? 0.65 : 0.3);
       spr.tint = e.hitFlash > 0 ? 0xff4444 : behaviorTint;
 
+      if (!e.isAlly) spr.scale.set(1);
+
       // Lurker: semi-transparent + flicker every 2s
-      if (e.behavior === 'lurker') {
+      if (e.isAlly) {
+        spr.alpha = 0.95;
+        spr.scale.set(1.15);
+      } else if (e.behavior === 'lurker') {
         const lurkerDormant = (e.phase as number) === 0;
         const flicker = Math.floor(this.elapsed / 2) % 2 === 0 ? 1.0 : 0.6;
         spr.alpha = lurkerDormant ? 0.3 * flicker : 0.5 * flicker;
