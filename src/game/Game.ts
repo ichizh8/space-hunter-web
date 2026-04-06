@@ -1710,7 +1710,7 @@ export class Game {
         let nearestDist = Infinity;
         let nearestEnemy: Enemy | null = null;
         for (const enemy of this.enemies.enemies) {
-          if (enemy.hp <= 0 || bullet.hitSet.has(enemy.id)) continue;
+          if (enemy.hp <= 0 || enemy.isAlly || bullet.hitSet.has(enemy.id)) continue;
           if (!lineSegHitsCircle(bullet.lineStart, bullet.lineEnd, enemy.pos, enemy.radius + 4)) continue;
           const d = v2dist(bullet.lineStart, enemy.pos);
           if (d < nearestDist) { nearestDist = d; nearestEnemy = enemy; }
@@ -1737,6 +1737,7 @@ export class Game {
       }
 
       for (const enemy of this.enemies.enemies) {
+        if (enemy.hp <= 0 || enemy.isAlly) continue;
         // Plasma Sword line-slash: line-segment vs circle, bypass normal circle checkHit
         let dmg: number;
         if (bullet.tag === 'plasma_slash') {
@@ -1837,7 +1838,7 @@ export class Game {
             });
             // AOE: damage all enemies in radius
             for (const other of this.enemies.enemies) {
-              if (other.id === enemy.id) continue;
+              if (other.id === enemy.id || other.isAlly || other.hp <= 0) continue;
               if (v2dist(bullet.pos, other.pos) < bullet.aoeRadius) {
                 other.hp -= dmg;
                 other.hitFlash = 0.1;
