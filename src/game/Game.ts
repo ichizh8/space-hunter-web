@@ -2355,7 +2355,7 @@ export class Game {
         e.maxHp = e.hp;
         e.speed = Math.floor(e.speed * spdScale);
       }
-      this.waveTimer = Math.max(8, 20 - this.waveCount * 1.5);
+      this.waveTimer = Math.max(6, 18 - this.waveCount * 1.5);
       this.hud.showMessage(`WAVE ${this.waveCount + 1}`, 1.5);
       if (this.halCooldown <= 0) {
         setTimeout(() => this.hud.showHalMessage(halSay(HAL_WAVE_INCOMING), 3), 600);
@@ -3657,6 +3657,19 @@ export class Game {
         g.moveTo(b.lineStart.x, b.lineStart.y)
           .lineTo(b.lineEnd.x, b.lineEnd.y)
           .stroke({ color: 0xffffff, width: 2, alpha: frac });
+        continue;
+      }
+      if (b.tag === 'sniper_trail') {
+        const spd = v2len(b.vel);
+        if (spd > 0) {
+          const trailLen = 120;
+          const tx = b.pos.x - (b.vel.x / spd) * trailLen;
+          const ty = b.pos.y - (b.vel.y / spd) * trailLen;
+          g.moveTo(b.pos.x, b.pos.y).lineTo(tx, ty).stroke({ color: 0xffffff, width: 6, alpha: 0.12 });
+          g.moveTo(b.pos.x, b.pos.y).lineTo(tx, ty).stroke({ color: 0xddddff, width: 2, alpha: 0.7 * (b.life / b.maxLife) });
+        }
+        g.circle(b.pos.x, b.pos.y, b.radius * 2.5).fill({ color: 0xffffff, alpha: 0.15 });
+        g.circle(b.pos.x, b.pos.y, b.radius).fill({ color: 0xffffff, alpha: 1 });
         continue;
       }
       g.circle(b.pos.x, b.pos.y, b.radius * 3).fill({ color: b.color, alpha: 0.1 });
