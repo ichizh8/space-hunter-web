@@ -2826,13 +2826,13 @@ export class Game {
 
     // Table: [type, normal%, elite%]
     const table: [DropType, number, number][] = [
-      ['medkit',       0.05, 0.20],
-      ['void_purge',   0.03, 0.15],
-      ['damage_burst', 0.02, 0.02],
-      ['emp_pulse',    0.01, 0.01],
-      ['ally_drone',   isApex ? 1.0 : 0.01, isApex ? 1.0 : 0.01],
-      ['speed_boost',  0.03, 0.03],
-      ['shield',       0.02, 0.02],
+      ['medkit',       0.01, 0.05],
+      ['void_purge',   0.005, 0.03],
+      ['damage_burst', 0.003, 0.003],
+      ['emp_pulse',    0.001, 0.001],
+      ['ally_drone',   isApex ? 1.0 : 0.001, isApex ? 1.0 : 0.001],
+      ['speed_boost',  0.005, 0.005],
+      ['shield',       0.003, 0.003],
     ];
 
     for (const [type, normalPct, elitePct] of table) {

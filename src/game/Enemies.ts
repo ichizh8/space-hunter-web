@@ -137,7 +137,23 @@ export class EnemySystem {
       const spawnBiome = biome || map.getBiome(pos.x, pos.y);
       const pool = BIOME_POOLS[spawnBiome] || BIOME_POOLS.open;
       const name = pick(pool);
+      const def = CREATURE_DEFS[name];
       const aggroed = Math.random() < 0.6;
+
+      if (def?.behavior === 'pack') {
+        // Spawn a cluster of 3-5 pack enemies together
+        const packSize = randInt(3, 5);
+        for (let p = 0; p < packSize; p++) {
+          const offset = v2(
+            (Math.random() - 0.5) * 80,
+            (Math.random() - 0.5) * 80,
+          );
+          this.enemies.push(createEnemy(name, v2add(pos, offset), aggroed));
+        }
+        // Spawning a pack counts as one wave slot; skip remaining pack members
+        continue;
+      }
+
       this.enemies.push(createEnemy(name, pos, aggroed));
     }
   }
