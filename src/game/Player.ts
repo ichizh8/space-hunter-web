@@ -137,6 +137,7 @@ export class Player {
   corruptionResistMult = 1.0;
 
   // External damage absorption (set by Game for withdrawal/sacrifice perks)
+  reloadTimeMult = 1.0;
   absorbNextHit = false;
   invincibleTimer = 0;
   /** Shield hits remaining from familiar SHIELD buff (absorbs N hits) */

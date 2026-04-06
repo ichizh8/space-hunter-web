@@ -65,7 +65,7 @@ export class WeaponSystem {
     if (player.fireCooldown > 0) return [];
     if (player.reloadTimer > 0) return [];
     if (player.magAmmo <= 0 && def.magSize < 999) {
-      player.reloadTimer = def.reloadTime;
+      player.reloadTimer = def.reloadTime * player.reloadTimeMult;
       return [];
     }
 
@@ -78,7 +78,7 @@ export class WeaponSystem {
 
     // Auto-reload on empty
     if (player.magAmmo <= 0 && def.magSize < 999) {
-      player.reloadTimer = def.reloadTime;
+      player.reloadTimer = def.reloadTime * player.reloadTimeMult;
     }
 
     // Cap bullet count

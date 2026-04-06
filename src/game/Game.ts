@@ -14,7 +14,7 @@ import { CREATURE_DEFS } from '../data/creatures';
 import { type ModifierDef } from '../data/modifiers';
 import { WEAPON_DEFS, WEAPON_LEVEL_PERKS, WEAPON_MUTATIONS } from '../data/weapons';
 import { KIT_DEFS } from '../data/kits';
-import { ELITE_TYPES, ELITE_OVERRIDES, ELITE_EPITHETS, rollAffixes } from '../data/elites';
+import { ELITE_TYPES, APEX_TYPES, ELITE_OVERRIDES, ELITE_EPITHETS, rollAffixes } from '../data/elites';
 import { type UpgradeCard, type ProgressionState, generateUpgrades } from '../data/upgrades';
 import {
   halSay,
@@ -87,6 +87,27 @@ interface ExtractionCache {
 }
 
 let nextCacheId = 1;
+
+// ── Drop capsule interface ──
+type DropType = 'medkit' | 'void_purge' | 'damage_burst' | 'emp_pulse' | 'ally_drone' | 'speed_boost' | 'shield';
+interface DropCapsule {
+  id: number;
+  pos: { x: number; y: number };
+  type: DropType;
+  life: number;
+  maxLife: number;
+}
+let nextDropId = 1;
+
+const DROP_COLORS: Record<DropType, number> = {
+  medkit: 0x44ff66,
+  void_purge: 0xaa44ff,
+  damage_burst: 0xff2222,
+  emp_pulse: 0x22aaff,
+  ally_drone: 0xffdd00,
+  speed_boost: 0xffffff,
+  shield: 0x00ffee,
+};
 
 export interface GameCallbacks {
   onDeath: () => void;
@@ -267,6 +288,15 @@ export class Game {
   // Boss hunt state
   apexSpawned = false; // boss_hunt: has the apex target been spawned?
   apexId = -1;         // boss_hunt: enemy id of the apex
+  apexName = '';
+  apexPhase = 1;
+  apexAttackTimer = 5;
+  apexPackTimer = 25;
+  apexShieldTimer = 30;
+  apexShieldActive = false;
+  apexShieldDuration = 0;
+  apexPhaseTransitionTimer = 0;
+  apexInstabilityTimer = 8;
 
   // Elite spawning
   eliteTimer = 0;
@@ -307,6 +337,32 @@ export class Game {
   kitT3Pending: string[] = [];
   kitT3ChoicePending = false;
 
+  // Ship (hub) upgrades applied to this run
+  shipUpgrades: Record<string, number> = {};
+
+  // Dash (Thrusters upgrade)
+  dashCharges = 0;
+  dashMaxCharges = 0;
+  dashCooldown = 0;
+  dashMaxCooldown = 1.5;
+  dashActive = false;
+  dashTimer = 0;
+  dashVelX = 0;
+  dashVelY = 0;
+
+  // Emergency Protocol (revive once)
+  emergencyProtocolUsed = false;
+
+  // Active drop effects
+  damageBurstTimer = 0;
+  speedBoostTimer = 0;
+
+  // Ally drones (from drop capsule)
+  allyDrones: Array<{ x: number; y: number; hp: number; maxHp: number; life: number; fireTimer: number }> = [];
+
+  // Drop capsules
+  dropCapsules: DropCapsule[] = [];
+
   // HAL event tracking
   halCooldown = 0;
   halReloadSaid = false;
@@ -325,8 +381,7 @@ export class Game {
     kits: string[],
     contractType: string,
     targetTotal: number,
-    hpBonus: number,
-    magBonus: number,
+    shipUpgrades: Record<string, number>,
     callbacks: GameCallbacks,
     contractExtras?: { holdTime?: number; podHp?: number; cacheCount?: number; reward?: number; parTime?: number; difficulty?: number },
     startingWeapon?: string
@@ -336,8 +391,9 @@ export class Game {
     this.equippedKits = kits;
     this.contractType = contractType;
     this.targetTotal = targetTotal;
-    this.hpBonus = hpBonus;
-    this.magBonus = magBonus;
+    this.shipUpgrades = shipUpgrades;
+    this.hpBonus = 0;
+    this.magBonus = 0;
 
     // Initialize kit cooldowns and run-local kit tiers
     for (const kit of kits) {
@@ -381,15 +437,39 @@ export class Game {
     this.map = new GameMap();
     this.map.generate();
 
-    const maxHp = PLAYER_BASE_HP + hpBonus * 2;
-    const magSize = 12 + magBonus * 3;
-    this.player = new Player(this.map.spawnPos.x, this.map.spawnPos.y, maxHp, magSize);
+    // Apply hub upgrades
+    const condLevel = shipUpgrades.conditioning ?? 0;
+    const maxHp = Math.round(PLAYER_BASE_HP * (1 + condLevel * 0.05));
+    this.player = new Player(this.map.spawnPos.x, this.map.spawnPos.y, maxHp, 12);
     if (startingWeapon && WEAPON_DEFS[startingWeapon]) {
       this.player.weaponId = startingWeapon;
       this.player.magSize = WEAPON_DEFS[startingWeapon].magSize;
       this.player.magAmmo = this.player.magSize;
     }
+    // Reflex Training: +3% move speed per level
+    const reflexLevel = shipUpgrades.reflex_training ?? 0;
+    if (reflexLevel > 0) {
+      this.player.baseSpeed = Math.round(PLAYER_BASE_SPEED * (1 + reflexLevel * 0.03));
+      this.player.speed = this.player.baseSpeed;
+    }
+    // Quick Hands: -5% reload time per level
+    const quickLevel = shipUpgrades.quick_hands ?? 0;
+    if (quickLevel > 0) {
+      this.player.reloadTimeMult = Math.max(0.5, 1 - quickLevel * 0.05);
+    }
     this.weapons = new WeaponSystem();
+    // Trigger Discipline: +4% fire rate per level (reduces cooldown)
+    const triggerLevel = shipUpgrades.trigger_discipline ?? 0;
+    if (triggerLevel > 0) {
+      this.weapons.fireRateBonus = -(triggerLevel * 0.04);
+    }
+    // Thrusters: dash ability
+    const thrusterLevel = shipUpgrades.thrusters ?? 0;
+    if (thrusterLevel >= 1) {
+      this.dashMaxCharges = thrusterLevel >= 2 ? 2 : 1;
+      this.dashCharges = this.dashMaxCharges;
+      this.dashMaxCooldown = thrusterLevel >= 3 ? 1.5 * 0.6 : 1.5;
+    }
     this.enemies = new EnemySystem();
     this.hud = new HUD(vw, vh);
 
@@ -563,22 +643,36 @@ export class Game {
       attempts++;
     } while (v2dist(pos, this.player.pos) < 800 && attempts < 30);
 
-    // Create a super-powered enemy based on Cave Lurker (tankiest base creature)
+    // Pick apex type from APEX_TYPES
+    const apexType = APEX_TYPES[Math.floor(Math.random() * APEX_TYPES.length)];
+    this.apexName = apexType;
+
     const apex = createEnemy('Cave Lurker', pos, true);
-    apex.hp = 60 + this.targetTotal * 10;  // Very tanky
+    apex.name = apexType;
+    apex.hp = 300 + this.contractDifficulty * 50;
     apex.maxHp = apex.hp;
-    apex.speed = 90;
-    apex.meleeDmg = 4;
-    apex.radius = 28;
-    apex.detection = 600;
-    apex.behavior = 'charge'; // Override lurker — apex always charges
+    apex.speed = 110;
+    apex.meleeDmg = 6;
+    apex.radius = 40;
+    apex.detection = 9999;
+    apex.behavior = 'elite';
     apex.isElite = true;
     apex.isTarget = true;
-    apex.leash = 9999; // Never gives up
+    apex.leash = 9999;
+    apex.eliteAttackTimer = 1.5;
+    apex.eliteAttackCycle = 0;
+    apex.eliteChargeTimer = 0;
     this.apexId = apex.id;
+    this.apexPhase = 1;
+    this.apexAttackTimer = 3;
+    this.apexPackTimer = 25;
+    this.apexShieldTimer = 30;
+    this.apexInstabilityTimer = 8;
     this.enemies.enemies.push(apex);
 
-    this.hud.showMessage('APEX TARGET DETECTED', 2.5);
+    this.hud.showMessage(`${apexType.toUpperCase()} DETECTED`, 3);
+    this.shakeTimer = 0.4;
+    this.shakeAmt = 6;
     if (this.halCooldown <= 0) {
       setTimeout(() => this.hud.showHalMessage(halSay(HAL_ELITE_SPAWNED), 4), 1500);
       this.halCooldown = 6;
@@ -832,6 +926,10 @@ export class Game {
         if (e.key.toLowerCase() === 'e' && this.equippedKits.length > 1) {
           this.activateKit(this.equippedKits[1]);
         }
+        if (e.key === 'Shift' || e.key === ' ') {
+          e.preventDefault();
+          this.activateDash();
+        }
       } else {
         this.player.onKeyUp(e.key);
       }
@@ -839,6 +937,26 @@ export class Game {
 
     window.addEventListener('keydown', (e) => onKey(e, true));
     window.addEventListener('keyup', (e) => onKey(e, false));
+  }
+
+  activateDash() {
+    if (this.dashMaxCharges === 0 || this.dashCharges <= 0 || this.dashActive) return;
+    this.dashCharges--;
+    this.dashActive = true;
+    this.dashTimer = 0.12; // dash lasts 0.12s
+    // Dash in current movement direction or aim direction
+    const vx = this.player.vel.x, vy = this.player.vel.y;
+    const len = Math.sqrt(vx * vx + vy * vy);
+    if (len > 0.1) {
+      this.dashVelX = (vx / len) * 1250;
+      this.dashVelY = (vy / len) * 1250;
+    } else {
+      const a = this.player.aimAngle;
+      this.dashVelX = Math.cos(a) * 1250;
+      this.dashVelY = Math.sin(a) * 1250;
+    }
+    // Start recharge cooldown if not already ticking
+    if (this.dashCooldown <= 0) this.dashCooldown = this.dashMaxCooldown;
   }
 
   activateKit(kitId: string) {
@@ -1626,6 +1744,10 @@ export class Game {
           if (enemy.markedTimer > 0) finalDmg = Math.floor(finalDmg * enemy.markedDmgBonus);
           // Affix: armored halves ranged damage
           if (enemy.affixes.includes('armored')) finalDmg = Math.max(1, Math.floor(finalDmg * 0.5));
+          // Apex phase transition invulnerability
+          if (enemy.id === this.apexId && this.apexPhaseTransitionTimer > 0) finalDmg = 0;
+          // Apex phase 2 shield: 50% damage reduction
+          if (enemy.id === this.apexId && this.apexShieldActive) finalDmg = Math.max(1, Math.floor(finalDmg * 0.5));
           // Affix: shielded absorbs damage
           if (enemy.affixes.includes('shielded') && enemy.shieldHp > 0) {
             if (enemy.shieldHp >= finalDmg) { enemy.shieldHp -= finalDmg; finalDmg = 0; }
@@ -2201,8 +2323,13 @@ export class Game {
     }
 
     // Ã¢ÂÂÃ¢ÂÂ Boss Hunt: spawn apex after wave 2 Ã¢ÂÂÃ¢ÂÂ
-    if (this.contractType === 'boss_hunt' && !this.apexSpawned && this.waveCount >= 2) {
-      this.spawnApex();
+    if (this.contractType === 'boss_hunt') {
+      if (!this.apexSpawned && this.waveCount >= 2) {
+        this.spawnApex();
+      }
+      if (this.apexSpawned) {
+        this.updateApexBoss(dt);
+      }
     }
 
     // Elite spawn timer (60s fixed for hunt; 45-70s for others)
@@ -2246,12 +2373,81 @@ export class Game {
       }
     }
 
+    // ── Dash update ──
+    if (this.dashActive) {
+      this.dashTimer -= dt;
+      this.player.pos.x += this.dashVelX * dt;
+      this.player.pos.y += this.dashVelY * dt;
+      this.player.iFrames = Math.max(this.player.iFrames, this.dashTimer + 0.01);
+      if (this.dashTimer <= 0) this.dashActive = false;
+    }
+    if (this.dashCooldown > 0) {
+      this.dashCooldown -= dt;
+      if (this.dashCooldown <= 0 && this.dashCharges < this.dashMaxCharges) {
+        this.dashCharges++;
+        if (this.dashCharges < this.dashMaxCharges) this.dashCooldown = this.dashMaxCooldown;
+      }
+    }
+
+    // ── Active drop effect timers ──
+    if (this.damageBurstTimer > 0) this.damageBurstTimer -= dt;
+    if (this.speedBoostTimer > 0) this.speedBoostTimer -= dt;
+
+    // ── Ally drone update ──
+    for (let i = this.allyDrones.length - 1; i >= 0; i--) {
+      const d = this.allyDrones[i];
+      d.life -= dt;
+      if (d.life <= 0 || d.hp <= 0) { this.allyDrones.splice(i, 1); continue; }
+      // Orbit player
+      const orbitAngle = (this.elapsed * 2.5 + i * Math.PI) % (Math.PI * 2);
+      d.x = this.player.pos.x + Math.cos(orbitAngle) * 60;
+      d.y = this.player.pos.y + Math.sin(orbitAngle) * 60;
+      // Fire at nearest enemy
+      d.fireTimer -= dt;
+      if (d.fireTimer <= 0) {
+        d.fireTimer = 1.2;
+        let bestDist = 250; let bestEnemy: Enemy | null = null;
+        for (const e of this.enemies.enemies) {
+          if (e.hp <= 0 || e.isAlly) continue;
+          const ed = v2dist({ x: d.x, y: d.y }, e.pos);
+          if (ed < bestDist) { bestDist = ed; bestEnemy = e; }
+        }
+        if (bestEnemy) {
+          bestEnemy.hp -= 4;
+          bestEnemy.hitFlash = 0.15;
+          if (bestEnemy.hp <= 0) this.onEnemyKilled(bestEnemy);
+          this.explosions.push({ x: d.x, y: d.y, radius: 0, maxRadius: 8, life: 0.1, maxLife: 0.1 });
+        }
+      }
+    }
+
+    // ── Drop capsule update ──
+    for (let i = this.dropCapsules.length - 1; i >= 0; i--) {
+      const cap = this.dropCapsules[i];
+      cap.life -= dt;
+      if (cap.life <= 0) { this.dropCapsules.splice(i, 1); continue; }
+      // Collection
+      if (v2dist(this.player.pos, cap.pos) < this.player.radius + 14) {
+        this.applyDropEffect(cap.type);
+        this.dropCapsules.splice(i, 1);
+      }
+    }
+
     // Death check
     if (this.player.hp <= 0 && !this.dead) {
-      this.dead = true;
-      this.hud.showMessage('YOU DIED', 3);
-      this.hud.showHalMessage(halSay(HAL_PLAYER_DIED), 4);
-      setTimeout(() => this.finishHunt('FAILED'), 2000);
+      // Emergency Protocol: revive once with 3 HP
+      if ((this.shipUpgrades.emergency_protocol ?? 0) >= 1 && !this.emergencyProtocolUsed) {
+        this.emergencyProtocolUsed = true;
+        this.player.hp = 3;
+        this.player.iFrames = 2.0;
+        this.hud.showMessage('EMERGENCY PROTOCOL!', 2.5);
+        this.screenFlash = 0.6;
+      } else {
+        this.dead = true;
+        this.hud.showMessage('YOU DIED', 3);
+        this.hud.showHalMessage(halSay(HAL_PLAYER_DIED), 4);
+        setTimeout(() => this.finishHunt('FAILED'), 2000);
+      }
     }
 
     // Ã¢ÂÂÃ¢ÂÂ Contract completion checks Ã¢ÂÂÃ¢ÂÂ
@@ -2612,6 +2808,226 @@ export class Game {
     if (def && Math.random() < 0.3) {
       this.ingredients.push({ id: `ingredient_${def.ingredient.id}`, name: def.ingredient.name });
     }
+    // Salvage module: guaranteed extra ingredient from elites
+    if (enemy.isElite && (this.shipUpgrades.salvage_module ?? 0) >= 2 && def) {
+      this.ingredients.push({ id: `ingredient_${def.ingredient.id}`, name: def.ingredient.name });
+    }
+
+    // World drop capsules
+    this.rollDropCapsule(enemy);
+  }
+
+  private rollDropCapsule(enemy: Enemy) {
+    const salvage = this.shipUpgrades.salvage_module ?? 0;
+    const dropMult = salvage >= 2 ? 1.6 : salvage >= 1 ? 1.3 : 1.0;
+    const isElite = enemy.isElite && !enemy.isTarget;
+    const isApex = enemy.isTarget;
+    const isNormal = !enemy.isElite;
+
+    // Table: [type, normal%, elite%]
+    const table: [DropType, number, number][] = [
+      ['medkit',       0.05, 0.20],
+      ['void_purge',   0.03, 0.15],
+      ['damage_burst', 0.02, 0.02],
+      ['emp_pulse',    0.01, 0.01],
+      ['ally_drone',   isApex ? 1.0 : 0.01, isApex ? 1.0 : 0.01],
+      ['speed_boost',  0.03, 0.03],
+      ['shield',       0.02, 0.02],
+    ];
+
+    for (const [type, normalPct, elitePct] of table) {
+      let chance = isNormal ? normalPct : elitePct;
+      chance *= dropMult;
+      if (Math.random() < chance) {
+        const maxLife = 30 + Math.random() * 10;
+        this.dropCapsules.push({
+          id: nextDropId++,
+          pos: { x: enemy.pos.x + (Math.random() - 0.5) * 30, y: enemy.pos.y + (Math.random() - 0.5) * 30 },
+          type,
+          life: maxLife,
+          maxLife,
+        });
+      }
+    }
+  }
+
+  private updateApexBoss(dt: number) {
+    const apex = this.enemies.enemies.find(e => e.id === this.apexId);
+    if (!apex || apex.hp <= 0) return;
+
+    const hpFrac = apex.hp / apex.maxHp;
+    const newPhase = hpFrac > 0.6 ? 1 : hpFrac > 0.3 ? 2 : 3;
+
+    // Phase transition
+    if (newPhase > this.apexPhase) {
+      this.apexPhase = newPhase;
+      this.apexPhaseTransitionTimer = 1.0;
+      this.shakeTimer = 0.6;
+      this.shakeAmt = 10;
+      this.screenFlash = 0.7;
+      this.apexAttackTimer = 3;
+      const phaseNames = ['', 'PHASE 2: UNLEASHED', 'PHASE 3: VOID FORM'];
+      this.hud.showMessage(phaseNames[newPhase - 1] ?? `PHASE ${newPhase}`, 3);
+      // Phase 3: spawn 1 elite minion
+      if (newPhase === 3) {
+        this.spawnElite();
+        this.apexInstabilityTimer = 4;
+      }
+    }
+
+    // Phase transition invulnerability
+    if (this.apexPhaseTransitionTimer > 0) {
+      this.apexPhaseTransitionTimer -= dt;
+      return; // skip attacks during transition
+    }
+
+    // Phase 2+: speed boost
+    if (this.apexPhase >= 2) {
+      apex.speed = 143; // 110 * 1.3
+    }
+
+    // Phase 2+: periodic shield (5s every 30s)
+    if (this.apexPhase >= 2) {
+      this.apexShieldTimer -= dt;
+      if (this.apexShieldTimer <= 0 && !this.apexShieldActive) {
+        this.apexShieldActive = true;
+        this.apexShieldDuration = 5.0;
+        this.apexShieldTimer = 30;
+        this.hud.showMessage('APEX SHIELDED', 1.5);
+      }
+      if (this.apexShieldActive) {
+        this.apexShieldDuration -= dt;
+        if (this.apexShieldDuration <= 0) this.apexShieldActive = false;
+      }
+    }
+
+    // Pack spawning
+    const packInterval = this.apexPhase >= 2 ? 20 : 25;
+    this.apexPackTimer -= dt;
+    if (this.apexPackTimer <= 0) {
+      this.apexPackTimer = packInterval;
+      const count = 3 + Math.floor(Math.random() * 3);
+      for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 80 + Math.random() * 120;
+        const spawnPos = {
+          x: Math.max(100, Math.min(WORLD_W - 100, apex.pos.x + Math.cos(angle) * dist)),
+          y: Math.max(100, Math.min(WORLD_H - 100, apex.pos.y + Math.sin(angle) * dist)),
+        };
+        const mob = createEnemy('Void Leech', spawnPos, true);
+        mob.hp = 8; mob.maxHp = 8;
+        this.enemies.enemies.push(mob);
+      }
+    }
+
+    // Phase 3: gravity pull toward apex
+    if (this.apexPhase >= 3) {
+      const toApex = v2norm(v2sub(apex.pos, this.player.pos));
+      this.player.pos.x += toApex.x * 25 * dt;
+      this.player.pos.y += toApex.y * 25 * dt;
+
+      // Spawn instability corruption zones around arena
+      this.apexInstabilityTimer -= dt;
+      if (this.apexInstabilityTimer <= 0) {
+        this.apexInstabilityTimer = 4 + Math.random() * 3;
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 120 + Math.random() * 220;
+        this.instabilityZones.push({
+          x: apex.pos.x + Math.cos(angle) * dist,
+          y: apex.pos.y + Math.sin(angle) * dist,
+          timer: 14, maxTimer: 14, radius: 80,
+        });
+      }
+    }
+
+    // Attack timer
+    const cdMult = this.apexPhase >= 3 ? 0.6 : 1.0;
+    this.apexAttackTimer -= dt;
+    if (this.apexAttackTimer > 0) return;
+
+    // Choose attack based on phase cycle
+    let attack: 'charge' | 'slam' | 'ring';
+    if (this.apexPhase === 1) {
+      attack = apex.eliteAttackCycle % 2 === 0 ? 'charge' : 'slam';
+    } else {
+      const cycle = apex.eliteAttackCycle % 3;
+      attack = cycle === 0 ? 'charge' : cycle === 1 ? 'slam' : 'ring';
+    }
+    apex.eliteAttackCycle++;
+
+    if (attack === 'charge') {
+      // Reuse elite charge wind-up: phase 30
+      apex.phase = 30;
+      apex.phaseTimer = 0.7;
+      apex.aggroOrigin = { x: this.player.pos.x, y: this.player.pos.y };
+      apex.lockAngle = Math.atan2(this.player.pos.y - apex.pos.y, this.player.pos.x - apex.pos.x);
+    } else if (attack === 'slam') {
+      // AOE slam: reuse elite phase 10 (charge-up)
+      apex.phase = 10;
+      apex.phaseTimer = 0.8;
+    } else if (attack === 'ring') {
+      // Ring of 8 projectiles
+      for (let i = 0; i < 8; i++) {
+        const angle = (i / 8) * Math.PI * 2;
+        this.enemies.enemyBullets.push({
+          pos: { x: apex.pos.x, y: apex.pos.y },
+          vel: v2fromAngle(angle, 190),
+          radius: 7,
+          damage: 3,
+          life: 2.5,
+          color: 0xff3300,
+        });
+      }
+      this.hud.showMessage('VOID RING!', 1.2);
+    }
+
+    const baseCd = 5;
+    this.apexAttackTimer = baseCd * cdMult;
+  }
+
+  private applyDropEffect(type: DropType) {
+    switch (type) {
+      case 'medkit':
+        this.player.heal(3);
+        this.hud.showMessage('+3 HP', 1.5);
+        break;
+      case 'void_purge':
+        this.player.corruption = Math.max(0, this.player.corruption - 15);
+        this.hud.showMessage('-15 CORRUPTION', 1.5);
+        break;
+      case 'damage_burst':
+        this.damageBurstTimer = 8;
+        this.hud.showMessage('+50% DAMAGE 8s', 2);
+        break;
+      case 'emp_pulse': {
+        const camLeft = this.camera.x, camRight = this.camera.x + this.camera.viewW;
+        const camTop = this.camera.y, camBottom = this.camera.y + this.camera.viewH;
+        let empKills = 0;
+        for (const e of this.enemies.enemies) {
+          if (e.hp <= 0 || e.isAlly) continue;
+          if (e.pos.x >= camLeft && e.pos.x <= camRight && e.pos.y >= camTop && e.pos.y <= camBottom) {
+            e.hp -= 15;
+            e.hitFlash = 0.4;
+            if (e.hp <= 0) { this.onEnemyKilled(e); empKills++; }
+          }
+        }
+        this.screenFlash = 0.5;
+        this.hud.showMessage(`EMP! ${empKills} HITS`, 1.5);
+        break;
+      }
+      case 'ally_drone':
+        this.allyDrones.push({ x: this.player.pos.x, y: this.player.pos.y, hp: 30, maxHp: 30, life: 20, fireTimer: 0.5 });
+        this.hud.showMessage('ALLY DRONE DEPLOYED', 2);
+        break;
+      case 'speed_boost':
+        this.speedBoostTimer = 10;
+        this.hud.showMessage('+40% SPEED 10s', 1.5);
+        break;
+      case 'shield':
+        this.player.shieldHits = Math.max(this.player.shieldHits, 5);
+        this.hud.showMessage('SHIELD x5', 1.5);
+        break;
+    }
   }
 
   private updateSprites() {
@@ -2676,7 +3092,9 @@ export class Game {
       // Scale up apex enemy sprite
       if (e.id === this.apexId) {
         spr.scale.set(3.5);
-        spr.tint = e.hitFlash > 0 ? 0xff4444 : subtleTint(0xff8800, 0.3);
+        const apexAuraColor = this.apexPhase === 3 ? 0x9900cc : this.apexPhase === 2 ? 0xff8800 : 0xff3300;
+        spr.tint = e.hitFlash > 0 ? 0xff4444 : subtleTint(apexAuraColor, 0.3);
+        spr.alpha = this.apexPhaseTransitionTimer > 0 ? 0.5 + Math.sin(this.elapsed * 20) * 0.5 : 1;
       }
 
       const eMoving = Math.abs(e.vel.x) > 3 || Math.abs(e.vel.y) > 3;
@@ -3019,8 +3437,22 @@ export class Game {
       // Elite: pulsing glow ring using original creature color
       if (e.isElite) {
         const pulseAlpha = 0.3 + Math.sin(this.elapsed * 3) * 0.2;
-        g.circle(ex, ey, er * 2.0).stroke({ color: e.color, width: 3, alpha: pulseAlpha });
-        g.circle(ex, ey, er * 2.4).stroke({ color: e.color, width: 1, alpha: pulseAlpha * 0.4 });
+        const eliteGlowColor = e.id === this.apexId
+          ? (this.apexPhase === 3 ? 0x9900cc : this.apexPhase === 2 ? 0xff8800 : 0xff3300)
+          : e.color;
+        g.circle(ex, ey, er * 2.0).stroke({ color: eliteGlowColor, width: e.id === this.apexId ? 4 : 3, alpha: pulseAlpha });
+        g.circle(ex, ey, er * 2.4).stroke({ color: eliteGlowColor, width: 1, alpha: pulseAlpha * 0.4 });
+        // Apex: extra large outer aura
+        if (e.id === this.apexId) {
+          g.circle(ex, ey, er * 3.2).stroke({ color: eliteGlowColor, width: 2, alpha: pulseAlpha * 0.25 });
+          g.circle(ex, ey, er * 2.0).fill({ color: eliteGlowColor, alpha: 0.05 + Math.sin(this.elapsed * 2) * 0.02 });
+          // Phase 2 shield visual
+          if (this.apexShieldActive) {
+            const shieldAlpha = 0.4 + Math.sin(this.elapsed * 10) * 0.3;
+            g.circle(ex, ey, er * 2.8).stroke({ color: 0x44aaff, width: 3, alpha: shieldAlpha });
+            g.circle(ex, ey, er * 2.8).fill({ color: 0x44aaff, alpha: 0.06 });
+          }
+        }
 
         // AOE Slam charge-up: expanding pulse ring
         if (e.phase === 10) {
@@ -3061,6 +3493,89 @@ export class Game {
         const frac = e.hp / e.maxHp;
         g.rect(bx, by, bw, bh).fill({ color: 0x110000, alpha: 0.8 });
         g.rect(bx, by, bw * frac, bh).fill({ color: e.id === this.apexId ? 0xff8000 : 0xff2200, alpha: 0.9 });
+      }
+    }
+
+    // ── Drop capsules ──
+    for (const cap of this.dropCapsules) {
+      if (!this.camera.isVisible(cap.pos.x, cap.pos.y, 30)) continue;
+      const cx = cap.pos.x, cy = cap.pos.y;
+      const col = DROP_COLORS[cap.type];
+      const pulse = 0.7 + Math.sin(this.elapsed * 4 + cap.id) * 0.3;
+      const r = 10 + Math.sin(this.elapsed * 3 + cap.id) * 2;
+      // Blink when about to despawn (last 6s)
+      let alpha = 1;
+      if (cap.life < 6) {
+        alpha = 0.4 + Math.abs(Math.sin(this.elapsed * 8)) * 0.6;
+      }
+      g.circle(cx, cy, r * 1.6).fill({ color: col, alpha: 0.12 * alpha });
+      g.circle(cx, cy, r).fill({ color: col, alpha: 0.8 * alpha * pulse });
+      g.circle(cx, cy, r).stroke({ color: 0xffffff, width: 1, alpha: 0.5 * alpha });
+      g.circle(cx, cy, 4).fill({ color: 0xffffff, alpha: 0.9 * alpha });
+    }
+
+    // ── Scanner: all-enemy dots in minimap-style corners (level 3) ──
+    const scannerLevel = this.shipUpgrades.scanner ?? 0;
+    if (scannerLevel >= 3) {
+      for (const e of this.enemies.enemies) {
+        if (e.hp <= 0 || e.isAlly) continue;
+        if (this.camera.isVisible(e.pos.x, e.pos.y, e.radius * 2)) continue;
+        // tiny dot near edge in world space
+        const dx = e.pos.x - this.player.pos.x;
+        const dy = e.pos.y - this.player.pos.y;
+        const ang = Math.atan2(dy, dx);
+        const edgeDist = Math.min(this.camera.viewW, this.camera.viewH) * 0.47;
+        const dotX = this.player.pos.x + Math.cos(ang) * edgeDist;
+        const dotY = this.player.pos.y + Math.sin(ang) * edgeDist;
+        const dc = e.isElite ? (e.color || 0xffdd11) : 0x888888;
+        g.circle(dotX, dotY, 3).fill({ color: dc, alpha: 0.7 });
+      }
+    }
+
+    // ── Ally drones ──
+    for (const d of this.allyDrones) {
+      if (!this.camera.isVisible(d.x, d.y, 20)) continue;
+      const pulseA = 0.7 + Math.sin(this.elapsed * 5) * 0.3;
+      g.circle(d.x, d.y, 10).fill({ color: 0xffdd00, alpha: 0.75 * pulseA });
+      g.circle(d.x, d.y, 10).stroke({ color: 0xffffff, width: 1.5, alpha: 0.8 });
+      g.circle(d.x, d.y, 14).stroke({ color: 0xffdd00, width: 1, alpha: 0.3 });
+      // HP bar
+      if (d.hp < d.maxHp) {
+        const bw = 18;
+        g.rect(d.x - bw / 2, d.y - 18, bw, 3).fill({ color: 0x110000, alpha: 0.8 });
+        g.rect(d.x - bw / 2, d.y - 18, bw * (d.hp / d.maxHp), 3).fill({ color: 0xffdd00, alpha: 0.9 });
+      }
+    }
+
+    // ── Boss HP bar (screen-space via camera offset) ──
+    if (this.contractType === 'boss_hunt' && this.apexSpawned) {
+      const apex = this.enemies.enemies.find(e => e.id === this.apexId);
+      if (apex) {
+        const barW = Math.min(this.camera.viewW * 0.6, 360);
+        const barH = 14;
+        const bx = this.camera.x + (this.camera.viewW - barW) / 2;
+        const by = this.camera.y + 10;
+        const frac = Math.max(0, apex.hp / apex.maxHp);
+        const barColor = this.apexPhase === 3 ? 0x9900cc : this.apexPhase === 2 ? 0xff8800 : 0xff3300;
+        g.rect(bx, by, barW, barH).fill({ color: 0x110000, alpha: 0.85 });
+        g.rect(bx, by, barW * frac, barH).fill({ color: barColor, alpha: 0.9 });
+        g.rect(bx, by, barW, barH).stroke({ color: barColor, width: 1, alpha: 0.5 });
+        // Phase markers
+        for (const pct of [0.6, 0.3]) {
+          const mx = bx + barW * pct;
+          g.moveTo(mx, by).lineTo(mx, by + barH).stroke({ color: 0xffffff, width: 1.5, alpha: 0.6 });
+        }
+        // Shield glow
+        if (this.apexShieldActive) {
+          g.rect(bx, by, barW, barH).stroke({ color: 0x44aaff, width: 3, alpha: 0.7 + Math.sin(this.elapsed * 8) * 0.3 });
+        }
+        // Name label above bar
+        const labelX = this.camera.x + this.camera.viewW / 2;
+        const labelY = this.camera.y + 10 + barH + 4;
+        // Draw small text indicator using a rect as placeholder (text is in HUD layer)
+        const ph = this.apexPhase;
+        const phaseColors = [0, 0xff3300, 0xff8800, 0x9900cc];
+        g.circle(labelX, labelY + 4, 4).fill({ color: phaseColors[ph] ?? 0xff3300, alpha: 0.8 + Math.sin(this.elapsed * 3) * 0.2 });
       }
     }
 
@@ -3514,6 +4029,11 @@ export class Game {
   /** Get damage multiplier from active modifiers */
   getModDamageMult(enemy: { isElite?: boolean; targetingPlayer?: boolean; pos?: { x: number; y: number }; markedTimer?: number; markedDmgBonus?: number }): number {
     let mult = 1;
+    // Combat Training: +3% damage per level
+    const combatLevel = this.shipUpgrades.combat_training ?? 0;
+    if (combatLevel > 0) mult *= 1 + combatLevel * 0.03;
+    // Damage Burst pickup: +50% damage for 8s
+    if (this.damageBurstTimer > 0) mult *= 1.5;
     // Blink T3 clean: empowered shot 3x
     if (this.blinkEmpowered) {
       mult *= 3;
@@ -3589,6 +4109,8 @@ export class Game {
     let mult = 1;
     if (this.hasMod('last_stand') && this.player.hp < 3) mult *= 1.3;
     if (this.hasMod('adrenaline')) mult *= 1 + this.adrenalineStacks * 0.05;
+    // Speed Boost pickup: +40% speed for 10s
+    if (this.speedBoostTimer > 0) mult *= 1.4;
     return mult;
   }
 
