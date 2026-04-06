@@ -3144,6 +3144,19 @@ export class Game {
           .stroke({ color: 0xffffff, width: 2, alpha: frac });
         continue;
       }
+      if (b.tag === 'sniper_trail') {
+        const spd = v2len(b.vel);
+        if (spd > 0) {
+          const trailLen = 120;
+          const tx = b.pos.x - (b.vel.x / spd) * trailLen;
+          const ty = b.pos.y - (b.vel.y / spd) * trailLen;
+          g.moveTo(b.pos.x, b.pos.y).lineTo(tx, ty).stroke({ color: 0xffffff, width: 6, alpha: 0.12 });
+          g.moveTo(b.pos.x, b.pos.y).lineTo(tx, ty).stroke({ color: 0xddddff, width: 2, alpha: 0.7 * (b.life / b.maxLife) });
+        }
+        g.circle(b.pos.x, b.pos.y, b.radius * 2.5).fill({ color: 0xffffff, alpha: 0.15 });
+        g.circle(b.pos.x, b.pos.y, b.radius).fill({ color: 0xffffff, alpha: 1 });
+        continue;
+      }
       g.circle(b.pos.x, b.pos.y, b.radius * 3).fill({ color: b.color, alpha: 0.1 });
       g.circle(b.pos.x, b.pos.y, b.radius * 1.5).fill({ color: b.color, alpha: 0.8 });
       g.circle(b.pos.x, b.pos.y, b.radius * 0.8).fill({ color: 0xffffff, alpha: 0.6 });

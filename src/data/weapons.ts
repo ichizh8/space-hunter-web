@@ -25,7 +25,7 @@ export const WEAPON_DEFS: Record<string, WeaponDef> = {
   grenade_launcher: { id: 'grenade_launcher', name: 'Grenade',  desc: 'Explosive arc',             fireRate: 2.5,  damage: 8, bulletSpeed: 220, bulletRadius: 8,  color: 0xffaa00, range: 300, pattern: 'arc_aoe',     magSize: 2,  reloadTime: 2.0 },
   entropy_cannon:   { id: 'entropy_cannon',   name: 'Void Beam', desc: 'Corruption-scaling beam',  fireRate: 0.08, damage: 0.4, bulletSpeed: 800, bulletRadius: 3, color: 0xaa44ff, range: 250, pattern: 'beam_stream', magSize: 80, reloadTime: 1.0 },
   pulse_cannon:     { id: 'pulse_cannon',     name: 'Pulse',    desc: 'Slow orb — AOE pulses in flight', fireRate: 1.0, damage: 3, bulletSpeed: 140, bulletRadius: 7, color: 0x44aaff, range: 550, pattern: 'bounce',      magSize: 8,  reloadTime: 1.5 },
-  sniper_carbine:   { id: 'sniper_carbine',   name: 'Sniper',   desc: 'High damage, slow',         fireRate: 2.5,  damage: 8, bulletSpeed: 600, bulletRadius: 3,  color: 0xffffff, range: 600, pattern: 'single',      magSize: 3,  reloadTime: 2.5 },
+  sniper_carbine:   { id: 'sniper_carbine',   name: 'Sniper',   desc: 'Near-perfect accuracy, blazing fast round', fireRate: 2.5,  damage: 8, bulletSpeed: 1800, bulletRadius: 3,  color: 0xffffff, range: 600, pattern: 'single',      magSize: 4,  reloadTime: 2.5 },
   chain_rifle:      { id: 'chain_rifle',      name: 'Chain',    desc: 'Rapid suppression',         fireRate: 0.1,  damage: 1, bulletSpeed: 450, bulletRadius: 3,  color: 0x88ffaa, range: 280, pattern: 'single',      magSize: 40, reloadTime: 3.0 },
 };
 

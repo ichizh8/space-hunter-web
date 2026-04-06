@@ -111,7 +111,7 @@ export class WeaponSystem {
 
     switch (def.pattern) {
       case 'single':
-        return [makeBullet(angle)];
+        return [makeBullet(angle, def.id === 'sniper_carbine' ? { tag: 'sniper_trail' } : {})];
 
       case 'scatter': {
         const count = 5 + this.extraPellets;
@@ -198,19 +198,6 @@ export class WeaponSystem {
 
       case 'bounce':
         return [makeBullet(angle, { bounces: 3 + this.bounceExtra, pulseTimer: 0.5 })];
-
-      case 'laser': {
-        // Instant-hit beam: stationary visual bullet; Game.ts trims lineEnd to first hit via ray cast
-        return [makeBullet(angle, {
-          vel: v2(0, 0),
-          life: 0.13,
-          maxLife: 0.13,
-          tag: 'laser_beam',
-          lineStart: v2(pos.x, pos.y),
-          lineEnd: v2(pos.x + Math.cos(angle) * range, pos.y + Math.sin(angle) * range),
-          piercing: false,
-        })];
-      }
 
       default:
         return [makeBullet(angle)];
