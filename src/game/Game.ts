@@ -966,6 +966,7 @@ export class Game {
     if (!kdef) return;
     const tier = this.runKitTiers[kitId] || 1;
     const t3Choice = this.kitT3Choices[kitId] || '';
+    let suppressUsedMessage = false;
 
     switch (kitId) {
       case 'stim_pack': {
@@ -1263,8 +1264,9 @@ export class Game {
         const currentCorruption = this.player.corruption;
         if (currentCorruption <= 0) {
           this.kitCooldowns[kitId] = 0;
+          suppressUsedMessage = true;
           this.hud.showMessage('NO CORRUPTION TO DETONATE', 1.5);
-          return;
+          break;
         }
         // AOE damage = corruption/5, clear corruption
         const ruptureDmg = Math.floor(currentCorruption / 5);
@@ -1308,7 +1310,7 @@ export class Game {
       }
     }
     this.kitCooldowns[kitId] = cd;
-    this.hud.showMessage(kdef.name.toUpperCase() + ' USED', 1.5);
+    if (!suppressUsedMessage) this.hud.showMessage(kdef.name.toUpperCase() + ' USED', 1.5);
   }
 
   update(dt: number) {
