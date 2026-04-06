@@ -1224,10 +1224,10 @@ export class Game {
             y: this.player.pos.y + Math.sin(angle) * spawnDist,
           });
           ally.isAlly = true;
-          ally.isAggroed = false;
-          ally.meleeDmg = 0;
-          ally.hp = 8;
-          ally.maxHp = 8;
+          ally.isAggroed = true;
+          ally.meleeDmg = 2;
+          ally.hp = 12;
+          ally.maxHp = 12;
           ally.speed = 160;
           this.enemies.enemies.push(ally);
         }

@@ -214,13 +214,24 @@ export class EnemySystem {
       const toPlayer = v2sub(player.pos, e.pos);
       const distToPlayer = v2len(toPlayer);
 
+      let allyTarget: Enemy | null = null;
+      let allyTargetDist = Infinity;
+      for (const other of this.enemies) {
+        if (!other.isAlly || other.hp <= 0) continue;
+        const d = v2dist(e.pos, other.pos);
+        if (d < allyTargetDist) {
+          allyTargetDist = d;
+          allyTarget = other;
+        }
+      }
+
       // Aggro check
-      if (!e.isAggroed && distToPlayer < e.detection) {
+      if (!e.isAggroed && (distToPlayer < e.detection || allyTargetDist < e.detection)) {
         e.isAggroed = true;
       }
 
       // Leash check (elites never de-aggro)
-      if (!e.isElite && e.isAggroed && v2dist(e.pos, e.aggroOrigin) > e.leash && distToPlayer > e.detection) {
+      if (!e.isElite && e.isAggroed && v2dist(e.pos, e.aggroOrigin) > e.leash && distToPlayer > e.detection && allyTargetDist > e.detection) {
         e.isAggroed = false;
       }
 
@@ -230,8 +241,8 @@ export class EnemySystem {
         continue;
       }
 
-      // Decoy targeting: if decoy is closer than player, move toward decoy
-      let moveTarget = player.pos;
+      // Target selection: nearest ally can draw aggro, otherwise player, then decoys can override
+      let moveTarget = allyTarget && allyTargetDist < distToPlayer ? allyTarget.pos : player.pos;
       if (decoys) {
         for (const dc of decoys) {
           const dcDist = v2dist(e.pos, dc);
@@ -697,15 +708,21 @@ export class EnemySystem {
         e.pos.y += repulseDir.y * overlap;
       }
 
-      // Melee attack, allies never hit the player
-      if (!e.isAlly && distToPlayer < ENEMY_MELEE_RANGE + e.radius + player.radius && e.meleeDmg > 0 && e.meleeCooldown <= 0) {
-        player.takeDamage(e.meleeDmg);
-        e.meleeCooldown = 1.0;
-        // Charge rush knockback: shove player away
-        if (e.behavior === 'charge' && e.phase === 2) {
-          const kbDir = v2norm(v2sub(player.pos, e.pos));
-          player.pos.x = Math.max(player.radius, Math.min(WORLD_W - player.radius, player.pos.x + kbDir.x * 90));
-          player.pos.y = Math.max(player.radius, Math.min(WORLD_H - player.radius, player.pos.y + kbDir.y * 90));
+      // Melee attack against current target, allies never hit the player
+      if (!e.isAlly && e.meleeDmg > 0 && e.meleeCooldown <= 0) {
+        if (allyTarget && allyTargetDist < distToPlayer && allyTargetDist < ENEMY_MELEE_RANGE + e.radius + allyTarget.radius) {
+          allyTarget.hp -= e.meleeDmg;
+          allyTarget.hitFlash = 0.15;
+          e.meleeCooldown = 1.0;
+        } else if (distToPlayer < ENEMY_MELEE_RANGE + e.radius + player.radius) {
+          player.takeDamage(e.meleeDmg);
+          e.meleeCooldown = 1.0;
+          // Charge rush knockback: shove player away
+          if (e.behavior === 'charge' && e.phase === 2) {
+            const kbDir = v2norm(v2sub(player.pos, e.pos));
+            player.pos.x = Math.max(player.radius, Math.min(WORLD_W - player.radius, player.pos.x + kbDir.x * 90));
+            player.pos.y = Math.max(player.radius, Math.min(WORLD_H - player.radius, player.pos.y + kbDir.y * 90));
+          }
         }
       }
 
