@@ -38,6 +38,34 @@ export function pointToSegDist(p: Vec2, a: Vec2, b: Vec2): number {
 export const lineSegHitsCircle = (a: Vec2, b: Vec2, c: Vec2, radius: number): boolean =>
   pointToSegDist(c, a, b) <= radius;
 
+/** Ray vs circle: returns first hit distance t ≥ 0, or -1 if no intersection.
+ *  origin = ray start, dir = unit direction, c = circle center, r = radius. */
+export function rayVsCircleT(origin: Vec2, dir: Vec2, c: Vec2, r: number): number {
+  const ex = origin.x - c.x, ey = origin.y - c.y;
+  const b = ex * dir.x + ey * dir.y;
+  const disc = b * b - (ex * ex + ey * ey - r * r);
+  if (disc < 0) return -1;
+  const sq = Math.sqrt(disc);
+  const t0 = -b - sq;
+  if (t0 >= 0) return t0;
+  const t1 = -b + sq;
+  return t1 >= 0 ? t1 : -1;
+}
+
+/** Ray vs axis-aligned rect [x0,x1]×[y0,y1]: returns hit distance t ≥ 0, or -1 if no intersection. */
+export function rayVsRectT(origin: Vec2, dir: Vec2, x0: number, y0: number, x1: number, y1: number): number {
+  const invDx = Math.abs(dir.x) > 1e-9 ? 1 / dir.x : (dir.x >= 0 ? 1e9 : -1e9);
+  const invDy = Math.abs(dir.y) > 1e-9 ? 1 / dir.y : (dir.y >= 0 ? 1e9 : -1e9);
+  let tx0 = (x0 - origin.x) * invDx, tx1 = (x1 - origin.x) * invDx;
+  if (tx0 > tx1) { const t = tx0; tx0 = tx1; tx1 = t; }
+  let ty0 = (y0 - origin.y) * invDy, ty1 = (y1 - origin.y) * invDy;
+  if (ty0 > ty1) { const t = ty0; ty0 = ty1; ty1 = t; }
+  const tmin = Math.max(tx0, ty0), tmax = Math.min(tx1, ty1);
+  if (tmax < 0 || tmin > tmax) return -1;
+  const t = tmin >= 0 ? tmin : tmax;
+  return t >= 0 ? t : -1;
+}
+
 export const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 export const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 export const randRange = (min: number, max: number) => min + Math.random() * (max - min);

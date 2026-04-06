@@ -5,7 +5,7 @@ import { Player } from './Player';
 import { WeaponSystem } from './Weapons';
 import { EnemySystem, type Enemy, createEnemy } from './Enemies';
 import { HUD } from './HUD';
-import { v2dist, v2, v2sub, v2norm, v2mul, v2len, v2fromAngle, randRange, lineSegHitsCircle } from '../lib/math';
+import { v2dist, v2, v2sub, v2norm, v2mul, v2len, v2fromAngle, randRange, lineSegHitsCircle, rayVsCircleT, rayVsRectT } from '../lib/math';
 import {
   PLAYER_BASE_HP, PLAYER_BASE_SPEED, WORLD_W, WORLD_H,
   PLAYER_COLOR, XP_PER_LEVEL, MAX_LEVEL, POST_CAP_XP
@@ -1348,7 +1348,28 @@ export class Game {
 
     // Auto-fire when enemies in range
     if (this.player.nearestEnemyPos) {
-      this.weapons.fire(this.player);
+      const newBullets = this.weapons.fire(this.player);
+      // Laser beam: ray-cast to trim lineEnd to first enemy or obstacle hit
+      for (const b of newBullets) {
+        if (b.tag !== 'laser_beam' || !b.lineStart || !b.lineEnd) continue;
+        const dx = b.lineEnd.x - b.lineStart.x, dy = b.lineEnd.y - b.lineStart.y;
+        const len = Math.sqrt(dx * dx + dy * dy);
+        if (len < 1) continue;
+        const dir = v2(dx / len, dy / len);
+        let hitT = len;
+        for (const e of this.enemies.enemies) {
+          if (e.hp <= 0) continue;
+          const t = rayVsCircleT(b.lineStart, dir, e.pos, e.radius + 6);
+          if (t >= 0 && t < hitT) hitT = t;
+        }
+        for (const obs of this.map.obstacles) {
+          const t = rayVsRectT(b.lineStart, dir,
+            obs.pos.x - obs.w / 2, obs.pos.y - obs.h / 2,
+            obs.pos.x + obs.w / 2, obs.pos.y + obs.h / 2);
+          if (t >= 0 && t < hitT) hitT = t;
+        }
+        b.lineEnd = v2(b.lineStart.x + dir.x * hitT, b.lineStart.y + dir.y * hitT);
+      }
     }
 
     // Enemies update
@@ -1563,6 +1584,11 @@ export class Game {
         if (bullet.tag === 'plasma_slash') {
           if (bullet.hitSet.has(enemy.id)) continue;
           if (!lineSegHitsCircle(bullet.lineStart!, bullet.lineEnd!, enemy.pos, enemy.radius + 8)) continue;
+          bullet.hitSet.add(enemy.id);
+          dmg = bullet.damage;
+        } else if (bullet.tag === 'laser_beam') {
+          if (bullet.hitSet.has(enemy.id)) continue;
+          if (!lineSegHitsCircle(bullet.lineStart!, bullet.lineEnd!, enemy.pos, enemy.radius + 6)) continue;
           bullet.hitSet.add(enemy.id);
           dmg = bullet.damage;
         } else {
@@ -3049,6 +3075,16 @@ export class Game {
 
     for (const b of this.weapons.bullets) {
       if (!this.camera.isVisible(b.pos.x, b.pos.y, b.radius * 3)) continue;
+      if (b.tag === 'laser_beam' && b.lineStart && b.lineEnd) {
+        const frac = b.life / b.maxLife;
+        g.moveTo(b.lineStart.x, b.lineStart.y).lineTo(b.lineEnd.x, b.lineEnd.y)
+          .stroke({ color: 0x00ffff, width: 10, alpha: frac * 0.18 });
+        g.moveTo(b.lineStart.x, b.lineStart.y).lineTo(b.lineEnd.x, b.lineEnd.y)
+          .stroke({ color: 0x00ffff, width: 3, alpha: frac * 0.9 });
+        g.moveTo(b.lineStart.x, b.lineStart.y).lineTo(b.lineEnd.x, b.lineEnd.y)
+          .stroke({ color: 0xffffff, width: 1, alpha: frac });
+        continue;
+      }
       if (b.tag === 'plasma_slash' && b.lineStart && b.lineEnd && b.aimAngle !== undefined) {
         const frac = b.life / b.maxLife; // 1→0 as it expires
         const progress = 1 - frac;

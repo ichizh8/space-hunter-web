@@ -71,7 +71,7 @@ export class WeaponSystem {
     player.fireCooldown = Math.max(0.02, def.fireRate + this.fireRateBonus);
     if (def.magSize < 999) player.magAmmo--;
 
-    const swingAngle = (def.pattern === 'melee_aoe' || player.weaponId === 'sidearm') ? player.lastMoveAngle : player.aimAngle;
+    const swingAngle = (def.pattern === 'melee_aoe' || def.pattern === 'laser') ? player.lastMoveAngle : player.aimAngle;
     const newBullets = this.createBullets(player.pos, swingAngle, def);
     this.bullets.push(...newBullets);
 
@@ -183,6 +183,19 @@ export class WeaponSystem {
 
       case 'bounce':
         return [makeBullet(angle, { bounces: 3 })];
+
+      case 'laser': {
+        // Instant-hit beam: stationary visual bullet; Game.ts trims lineEnd to first hit via ray cast
+        return [makeBullet(angle, {
+          vel: v2(0, 0),
+          life: 0.13,
+          maxLife: 0.13,
+          tag: 'laser_beam',
+          lineStart: v2(pos.x, pos.y),
+          lineEnd: v2(pos.x + Math.cos(angle) * range, pos.y + Math.sin(angle) * range),
+          piercing: false,
+        })];
+      }
 
       default:
         return [makeBullet(angle)];
