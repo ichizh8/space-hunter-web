@@ -16,7 +16,7 @@ export interface WeaponDef {
 }
 
 export const WEAPON_DEFS: Record<string, WeaponDef> = {
-  sidearm:          { id: 'sidearm',          name: 'Laser Pistol', desc: 'Directional laser beam', fireRate: 0.75, damage: 2.8, bulletSpeed: 420, bulletRadius: 4, color: 0x00ffcc, range: 286, pattern: 'laser',       magSize: 12, reloadTime: 1.5 },
+  sidearm:          { id: 'sidearm',          name: 'Laser Pistol', desc: 'Directional laser beam', fireRate: 1.25, damage: 2.8, bulletSpeed: 420, bulletRadius: 4, color: 0x00ffcc, range: 286, pattern: 'laser',       magSize: 12, reloadTime: 1.5 },
   scatter:          { id: 'scatter',          name: 'Scatter',  desc: 'Close-range burst',         fireRate: 0.8,  damage: 1, bulletSpeed: 360, bulletRadius: 3,  color: 0xff8844, range: 180, pattern: 'scatter',     magSize: 8,  reloadTime: 1.8 },
   lance:            { id: 'lance',            name: 'Lance',    desc: 'Piercing beam',             fireRate: 1.6,  damage: 5, bulletSpeed: 260, bulletRadius: 5,  color: 0x44ddff, range: 500, pattern: 'piercing',    magSize: 4,  reloadTime: 2.0 },
   baton:            { id: 'baton',            name: 'Plasma Sword', desc: 'Energy blade',          fireRate: 0.75, damage: 4, bulletSpeed: 0,   bulletRadius: 40, color: 0x00eeff, range: 115, pattern: 'melee_aoe',   magSize: 999, reloadTime: 0 },
