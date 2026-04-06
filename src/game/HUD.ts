@@ -56,7 +56,7 @@ export class HUD {
     this.halStripDuration = duration;
   }
 
-  draw(player: Player, dt: number, kills: number, elapsed: number, kits: string[], kitCooldowns: Record<string, number> = {}) {
+  draw(player: Player, dt: number, kills: number, elapsed: number, kits: string[], kitCooldowns: Record<string, number> = {}, screenFlash = 0) {
     const g = this.gfx;
     g.clear();
     const L = 16;
@@ -241,6 +241,11 @@ export class HUD {
       this.halStripText.alpha = alpha;
     } else {
       this.halStripText.alpha = 0;
+    }
+
+    // Screen flash overlay (flash trap, etc.)
+    if (screenFlash > 0) {
+      g.rect(0, 0, this.viewW, this.viewH).fill({ color: 0xffffff, alpha: screenFlash * 0.65 });
     }
   }
 }

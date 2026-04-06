@@ -143,7 +143,10 @@ export class Game {
   kitCooldowns: Record<string, number> = {};
 
   // Explosion effects
-  explosions: Array<{ x: number; y: number; radius: number; maxRadius: number; life: number; maxLife: number }> = [];
+  explosions: Array<{ x: number; y: number; radius: number; maxRadius: number; life: number; maxLife: number; type?: string }> = [];
+
+  // Screen flash (used by flash_trap)
+  screenFlash = 0;
 
   // Behavior + biome particles
   particles: Array<{ x: number; y: number; vx: number; vy: number; life: number; maxLife: number; color: number; radius: number }> = [];
@@ -891,7 +894,8 @@ export class Game {
           }
         }
         // Fragile State perk: enemies emerging from stun take 2x (marked in enemy update)
-        this.explosions.push({ x: this.player.pos.x, y: this.player.pos.y, radius: 0, maxRadius: 80, life: 0.3, maxLife: 0.3 });
+        this.explosions.push({ x: this.player.pos.x, y: this.player.pos.y, radius: 0, maxRadius: 120, life: 0.5, maxLife: 0.5, type: 'flash' });
+        this.screenFlash = 0.35;
         break;
       }
       case 'blink_kit': {
@@ -1716,6 +1720,9 @@ export class Game {
       if (ex.life <= 0) this.explosions.splice(i, 1);
     }
 
+    // Decay screen flash
+    if (this.screenFlash > 0) this.screenFlash = Math.max(0, this.screenFlash - dt);
+
     // Update turrets
     for (let i = this.turrets.length - 1; i >= 0; i--) {
       const t = this.turrets[i];
@@ -2386,7 +2393,7 @@ export class Game {
     this.worldLayer.y = -this.camera.y;
 
     // HUD
-    this.hud.draw(this.player, dt, this.totalKills, this.elapsed, this.equippedKits, this.kitCooldowns);
+    this.hud.draw(this.player, dt, this.totalKills, this.elapsed, this.equippedKits, this.kitCooldowns, this.screenFlash);
   }
 
   private onEnemyKilled(enemy: Enemy) {
@@ -2910,6 +2917,13 @@ export class Game {
         g.circle(ex, ey, er * 0.4).fill({ color: 0xff2200, alpha: 0.5 + Math.sin(this.elapsed * 4) * 0.2 });
       }
 
+      // Stunned: white sparkling ring
+      if (e.stunTimer > 0) {
+        const stunAlpha = 0.5 + Math.sin(this.elapsed * 12) * 0.3;
+        g.circle(ex, ey, er * 1.7).stroke({ color: 0xffffff, width: 2.5, alpha: stunAlpha });
+        g.circle(ex, ey, er * 1.3).stroke({ color: 0xbbccff, width: 1, alpha: stunAlpha * 0.6 });
+      }
+
       // Pack member link lines already drawn above in shape block
       // Elite: pulsing glow ring using original creature color
       if (e.isElite) {
@@ -3099,10 +3113,18 @@ export class Game {
     for (const ex of this.explosions) {
       if (!this.camera.isVisible(ex.x, ex.y, ex.maxRadius)) continue;
       const alpha = ex.life / ex.maxLife;
-      g.circle(ex.x, ex.y, ex.radius).fill({ color: 0xffaa00, alpha: alpha * 0.15 });
-      g.circle(ex.x, ex.y, ex.radius * 0.7).fill({ color: 0xff6600, alpha: alpha * 0.3 });
-      g.circle(ex.x, ex.y, ex.radius * 0.3).fill({ color: 0xffffff, alpha: alpha * 0.5 });
-      g.circle(ex.x, ex.y, ex.radius).stroke({ color: 0xff4400, width: 2, alpha: alpha * 0.6 });
+      if (ex.type === 'flash') {
+        // Flash trap: bright white/blue concussive blast
+        g.circle(ex.x, ex.y, ex.radius).fill({ color: 0xeeeeff, alpha: alpha * 0.55 });
+        g.circle(ex.x, ex.y, ex.radius * 0.65).fill({ color: 0xffffff, alpha: alpha * 0.7 });
+        g.circle(ex.x, ex.y, ex.radius * 0.3).fill({ color: 0xffffff, alpha: alpha * 0.95 });
+        g.circle(ex.x, ex.y, ex.radius).stroke({ color: 0x8899ff, width: 2.5, alpha: alpha * 0.9 });
+      } else {
+        g.circle(ex.x, ex.y, ex.radius).fill({ color: 0xffaa00, alpha: alpha * 0.15 });
+        g.circle(ex.x, ex.y, ex.radius * 0.7).fill({ color: 0xff6600, alpha: alpha * 0.3 });
+        g.circle(ex.x, ex.y, ex.radius * 0.3).fill({ color: 0xffffff, alpha: alpha * 0.5 });
+        g.circle(ex.x, ex.y, ex.radius).stroke({ color: 0xff4400, width: 2, alpha: alpha * 0.6 });
+      }
     }
 
     for (const b of this.enemies.enemyBullets) {

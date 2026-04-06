@@ -71,7 +71,7 @@ export class WeaponSystem {
     player.fireCooldown = Math.max(0.02, def.fireRate + this.fireRateBonus);
     if (def.magSize < 999) player.magAmmo--;
 
-    const swingAngle = def.pattern === 'melee_aoe' ? player.lastMoveAngle : player.aimAngle;
+    const swingAngle = (def.pattern === 'melee_aoe' || player.weaponId === 'sidearm') ? player.lastMoveAngle : player.aimAngle;
     const newBullets = this.createBullets(player.pos, swingAngle, def);
     this.bullets.push(...newBullets);
 
