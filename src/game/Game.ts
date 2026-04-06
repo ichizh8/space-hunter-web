@@ -1272,15 +1272,16 @@ export class Game {
         }
         // AOE damage = corruption/5, clear corruption
         const ruptureDmg = Math.floor(currentCorruption / 5);
+        const ruptureRadius = 400;
         for (const e of this.enemies.enemies) {
           if (e.hp <= 0 || e.isAlly) continue;
-          if (v2dist(this.player.pos, e.pos) < 200) {
+          if (v2dist(this.player.pos, e.pos) < ruptureRadius) {
             e.hp -= ruptureDmg;
             e.hitFlash = 0.3;
             if (e.hp <= 0) this.onEnemyKilled(e);
           }
         }
-        this.explosions.push({ x: this.player.pos.x, y: this.player.pos.y, radius: 0, maxRadius: 200, life: 0.3, maxLife: 0.3 });
+        this.explosions.push({ x: this.player.pos.x, y: this.player.pos.y, radius: 0, maxRadius: ruptureRadius, life: 0.3, maxLife: 0.3 });
         // Scatter Field perk: 8 shrapnel bullets
         if (this.hasPerk('scatter_field')) {
           for (let si = 0; si < 8; si++) {
