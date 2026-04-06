@@ -33,6 +33,14 @@ const BEHAVIOR_COLORS: Record<string, number> = {
   lurker: 0xAA44FF, burst: 0xFFFF00, strafe: 0x00FFFF, patrol_river: 0x888888,
 };
 
+/** Blend a hex color toward white at the given strength (0=white, 1=full color). */
+function subtleTint(color: number, strength: number): number {
+  const r = Math.round(0xFF + ((color >> 16 & 0xFF) - 0xFF) * strength);
+  const g = Math.round(0xFF + ((color >> 8  & 0xFF) - 0xFF) * strength);
+  const b = Math.round(0xFF + ((color        & 0xFF) - 0xFF) * strength);
+  return (r << 16) | (g << 8) | b;
+}
+
 // Sprite name -> creature name mapping
 const CREATURE_SPRITE_MAP: Record<string, string> = {
   'Void Leech': 'void_leech',
@@ -2338,7 +2346,7 @@ export class Game {
       this.playerSprite.tint = this.player.hitFlash > 0 ? 0xff2200 : 0xffffff;
     }
 
-    // Behavior tints for sprites
+    // Behavior tints for sprites (subtle: 30% toward behavior color)
     const SPRITE_BEHAVIOR_TINTS: Record<string, number> = {
       charge: 0xFF3333, flank: 0xFF8800, pack: 0x33FF33,
       lurker: 0xAA44FF, burst: 0xFFFF00, strafe: 0x00FFFF,
@@ -2351,7 +2359,8 @@ export class Game {
       spr.x = e.pos.x;
       spr.y = e.pos.y;
       spr.visible = this.camera.isVisible(e.pos.x, e.pos.y, e.radius * 2);
-      const behaviorTint = SPRITE_BEHAVIOR_TINTS[e.behavior] ?? 0xffffff;
+      const rawTint = SPRITE_BEHAVIOR_TINTS[e.behavior] ?? 0xffffff;
+      const behaviorTint = subtleTint(rawTint, 0.3);
       spr.tint = e.hitFlash > 0 ? 0xff4444 : behaviorTint;
 
       // Lurker: semi-transparent + flicker every 2s
@@ -2366,7 +2375,7 @@ export class Game {
       // Scale up apex enemy sprite
       if (e.id === this.apexId) {
         spr.scale.set(3.5);
-        spr.tint = e.hitFlash > 0 ? 0xff4444 : 0xff8800;
+        spr.tint = e.hitFlash > 0 ? 0xff4444 : subtleTint(0xff8800, 0.3);
       }
 
       const eMoving = Math.abs(e.vel.x) > 3 || Math.abs(e.vel.y) > 3;
