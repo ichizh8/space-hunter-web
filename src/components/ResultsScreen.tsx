@@ -30,7 +30,8 @@ export function ResultsScreen() {
   const eliteBonus = result.eliteKills * 150;
   const apexBonus = result.apexKills * 500;
   const contractBonus = result.huntStatus === 'COMPLETED' ? 500 : 0;
-  const timeBonus = result.timeSurvived > 0 && result.timeSurvived < result.parTime ? Math.floor(baseScore * 0.2) : 0;
+  const overParTime = result.parTime > 0 && result.timeSurvived > result.parTime;
+  const timeBonus = result.timeSurvived > 0 && !overParTime ? Math.floor(baseScore * 0.2) : 0;
   let corrBonus = 0;
   let corrDesc = '';
   if (peakC < 16) { corrBonus = Math.floor(baseScore * 0.3); corrDesc = 'Never left CLEAN (+30%)'; }
@@ -65,7 +66,8 @@ export function ResultsScreen() {
         <ScoreRow label="Elite bonus (x150)" value={eliteBonus} />
         <ScoreRow label="Apex bonus (x500)" value={apexBonus} />
         <ScoreRow label="Contract bonus" value={contractBonus} />
-        <ScoreRow label="Time bonus (+20%)" value={timeBonus} />
+        <ScoreRow label={overParTime ? 'Over par time (reward halved)' : 'Time bonus (+20%)'} value={timeBonus} />
+        {overParTime && <p className="text-xs text-[var(--color-accent-red)]">Par time exceeded — contract reward halved</p>}
         <ScoreRow label={corrDesc || 'Corruption bonus'} value={corrBonus} />
 
         <div className="flex justify-between text-lg font-bold text-[var(--color-accent-gold)] pt-2">

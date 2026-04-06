@@ -90,8 +90,8 @@ export function GameCanvas() {
           onDeath: () => {},
           onComplete: () => {},
           onHuntResult: (r) => {
-            // Status is already set by Game.finishHunt — use it directly
-            const status = gameRef.current?.dead ? 'FAILED' : r.totalKills >= (contract?.targetTotal ?? 10) ? 'COMPLETED' : 'FAILED';
+            // Status determined by Game.finishHunt caller; infer from game state
+            const status = gameRef.current?.dead ? 'FAILED' : gameRef.current?.complete ? 'COMPLETED' : 'ABANDONED';
             finishHunt(status, r);
           },
           onWeaponPerkPick: (perks, weaponName, resolve) => {
@@ -115,6 +115,9 @@ export function GameCanvas() {
           holdTime: contract?.holdTime,
           podHp: contract?.podHp,
           cacheCount: contract?.cacheCount,
+          reward: contract?.reward ?? 0,
+          parTime: contract?.parTime ?? 300,
+          difficulty: contract?.difficulty ?? 1,
         }
       );
 

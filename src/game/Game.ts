@@ -242,10 +242,20 @@ export class Game {
   activeBreachIdx = 0;              // void_breach: current breach index
   breachEnemyTimer = 0;             // void_breach: timer for spawning enemies near breach
   breachesSealed = 0;               // void_breach: count of sealed breaches
+  // void_breach: swarms and instability
+  breachSwarmTimer = 15;
+  instabilityZones: Array<{ x: number; y: number; timer: number; maxTimer: number; radius: number }> = [];
+  instabilityTimer = 10;
+  breachEliteTimer = 45;            // void_breach: elite every 45s during holds
 
   podHp = 0;          // payload_escort: pod HP
   podMaxHp = 0;
   podProgress = 0;    // payload_escort: 0->1 delivery progress
+  // payload_escort: winding waypoint path
+  podPath: Array<{ x: number; y: number }> = [];
+  podPathProgress = 0;  // float 0...(podPath.length-1)
+  podSlowZones: Array<{ x: number; y: number; timer: number; radius: number }> = [];
+  podSlowZoneTimer = 20;
 
   cacheCount = 0;     // extraction_run: total caches
   cachesCollected = 0;
@@ -258,6 +268,15 @@ export class Game {
   // Elite spawning
   eliteTimer = 0;
   eliteSpawnedCount = 0;
+
+  // Contract reward / par time (passed via contractExtras)
+  contractReward = 0;
+  contractParTime = 300;
+  contractDifficulty = 1;
+  parTimeWarningSent = false;
+
+  // Hunt: elite kills toward objective (separate from totalKills)
+  eliteKillsForContract = 0;
 
   // Active modifiers
   activeModifiers: string[] = [];
@@ -299,7 +318,7 @@ export class Game {
     hpBonus: number,
     magBonus: number,
     callbacks: GameCallbacks,
-    contractExtras?: { holdTime?: number; podHp?: number; cacheCount?: number },
+    contractExtras?: { holdTime?: number; podHp?: number; cacheCount?: number; reward?: number; parTime?: number; difficulty?: number },
     startingWeapon?: string
   ) {
     this.app = app;
@@ -316,9 +335,13 @@ export class Game {
       this.runKitTiers[kit] = 1;
     }
 
-    // First elite spawn: 90-150s (scaled by difficulty)
-    const depth = Math.min(3, Math.ceil(targetTotal / 10));
-    this.eliteTimer = 90 - depth * 15 + Math.random() * 60;
+    // First elite spawn: 45s for hunt (elite-focused), scaled 90-150s for others
+    if (contractType === 'hunt') {
+      this.eliteTimer = 45;
+    } else {
+      const depth = Math.min(3, Math.ceil(targetTotal / 10));
+      this.eliteTimer = 90 - depth * 15 + Math.random() * 60;
+    }
 
     // Contract-specific init
     if (contractExtras?.holdTime) {
@@ -330,6 +353,15 @@ export class Game {
     }
     if (contractExtras?.cacheCount) {
       this.cacheCount = contractExtras.cacheCount;
+    }
+    if (contractExtras?.reward !== undefined) {
+      this.contractReward = contractExtras.reward;
+    }
+    if (contractExtras?.parTime !== undefined) {
+      this.contractParTime = contractExtras.parTime;
+    }
+    if (contractExtras?.difficulty !== undefined) {
+      this.contractDifficulty = contractExtras.difficulty;
     }
 
     const vw = app.screen.width;
@@ -407,6 +439,9 @@ export class Game {
       // Spawn the apex enemy after a short delay (wave 2)
       this.apexSpawned = false;
     }
+    if (this.contractType === 'payload_escort') {
+      this.spawnPodPath();
+    }
 
     // Input
     this.setupInput();
@@ -437,6 +472,37 @@ export class Game {
         radius: 30,
       });
     }
+  }
+
+  // ── Payload Escort: generate winding waypoint path ──
+  private spawnPodPath() {
+    const WAYPOINTS = 5;
+    const start = { x: 150, y: WORLD_H / 2 };
+    const end   = { x: WORLD_W - 150, y: WORLD_H / 2 };
+    this.podPath = [start];
+    for (let i = 1; i < WAYPOINTS; i++) {
+      const t = i / WAYPOINTS;
+      const baseX = start.x + (end.x - start.x) * t;
+      const baseY = start.y + (end.y - start.y) * t;
+      this.podPath.push({
+        x: Math.max(200, Math.min(WORLD_W - 200, baseX + (Math.random() - 0.5) * 600)),
+        y: Math.max(200, Math.min(WORLD_H - 200, baseY + (Math.random() - 0.5) * 600)),
+      });
+    }
+    this.podPath.push(end);
+    this.podPathProgress = 0;
+    this.podProgress = 0;
+  }
+
+  /** Current world-space pod position interpolated along podPath */
+  getPodPos(): { x: number; y: number } {
+    if (this.podPath.length < 2) return { x: WORLD_W * this.podProgress, y: WORLD_H / 2 };
+    const total = this.podPath.length - 1;
+    const segIdx = Math.min(total - 1, Math.floor(this.podPathProgress));
+    const segT = this.podPathProgress - segIdx;
+    const a = this.podPath[segIdx];
+    const b = this.podPath[segIdx + 1];
+    return { x: a.x + (b.x - a.x) * segT, y: a.y + (b.y - a.y) * segT };
   }
 
   // Ã¢ÂÂÃ¢ÂÂ Void Breach: spawn sequential breach zones Ã¢ÂÂÃ¢ÂÂ
@@ -1116,6 +1182,16 @@ export class Game {
     if (this.dead || this.complete || this.paused) return;
     this.elapsed += dt;
 
+    // Par time warning at 80%
+    if (!this.parTimeWarningSent && this.contractParTime > 0 && this.elapsed >= this.contractParTime * 0.8) {
+      this.parTimeWarningSent = true;
+      this.hud.showMessage('PAR TIME WARNING', 3);
+      if (this.halCooldown <= 0) {
+        this.hud.showHalMessage('Warning: you are approaching the par time. Reward will be halved if exceeded.', 5);
+        this.halCooldown = 6;
+      }
+    }
+
     // Animation frame stepping
     this.animTimer += dt;
     if (this.animTimer >= 1 / this.animFPS) {
@@ -1130,11 +1206,20 @@ export class Game {
       }
     }
 
-    // Speed multipliers: void surge + stim T3 clean
+    // Speed multipliers: void surge + stim T3 clean + instability zone slow
     let speedMult = 1.0;
     if (this.voidSurgeActive) speedMult *= 1.8;
     if (this.stimSpeedTimer > 0) { speedMult *= 1.2; this.stimSpeedTimer -= dt; }
     if (this.familiarSpeedTimer > 0) speedMult *= 1.3;
+    // Instability zone (void_breach): 40% slow while inside
+    if (this.contractType === 'void_breach') {
+      for (const iz of this.instabilityZones) {
+        if (v2dist(this.player.pos, { x: iz.x, y: iz.y }) < iz.radius) {
+          speedMult *= 0.6;
+          break;
+        }
+      }
+    }
     this.player.externalSpeedMult = speedMult;
 
     // Frenzy Aura perk: nearby allies increase fire rate
@@ -1199,12 +1284,13 @@ export class Game {
       this.halReloadSaid = false;
     }
 
-    // HAL: Objective progress
-    if (!this.halHalfSaid && this.targetCount >= Math.floor(this.targetTotal * 0.5) && this.targetTotal > 0 && this.halCooldown <= 0) {
+    // HAL: Objective progress (use elite count for hunt)
+    const progressCount = this.contractType === 'hunt' ? this.eliteKillsForContract : this.targetCount;
+    if (!this.halHalfSaid && progressCount >= Math.floor(this.targetTotal * 0.5) && this.targetTotal > 0 && this.halCooldown <= 0) {
       this.halHalfSaid = true;
       this.hud.showHalMessage(halSay(HAL_OBJECTIVE_HALF), 4);
       this.halCooldown = 6;
-    } else if (!this.halNearSaid && this.targetCount >= Math.floor(this.targetTotal * 0.75) && this.targetTotal > 0 && this.halCooldown <= 0) {
+    } else if (!this.halNearSaid && progressCount >= Math.floor(this.targetTotal * 0.75) && this.targetTotal > 0 && this.halCooldown <= 0) {
       this.halNearSaid = true;
       this.hud.showHalMessage(halSay(HAL_OBJECTIVE_NEAR), 4);
       this.halCooldown = 6;
@@ -1391,16 +1477,15 @@ export class Game {
 
     // Elite special attacks handled inside 'elite' behavior case in Enemies.ts
 
-    // Ã¢ÂÂÃ¢ÂÂ Payload escort: enemies damage pod Ã¢ÂÂÃ¢ÂÂ
+    // ── Payload escort: enemies damage pod ──
     if (this.contractType === 'payload_escort' && this.podHp > 0) {
-      const podX = WORLD_W * this.podProgress;
-      const podY = WORLD_H / 2;
+      const { x: podX, y: podY } = this.getPodPos();
       for (const e of this.enemies.enemies) {
         if (!e.isAggroed) continue;
         const distToPod = v2dist(e.pos, { x: podX, y: podY });
         if (distToPod < 60 + e.radius && e.meleeCooldown <= 0) {
           this.podHp -= e.meleeDmg;
-          e.meleeCooldown = 1.5; // Shared cooldown with player melee
+          e.meleeCooldown = 1.5;
         }
       }
       // Enemy bullets also damage pod
@@ -2027,11 +2112,11 @@ export class Game {
       this.spawnApex();
     }
 
-    // Elite spawn timer
+    // Elite spawn timer (60s fixed for hunt; 45-70s for others)
     this.eliteTimer -= dt;
     if (this.eliteTimer <= 0 && !this.modifierPickPending) {
       this.spawnElite();
-      this.eliteTimer = 45 + Math.random() * 25; // 45-70s between subsequent elites
+      this.eliteTimer = this.contractType === 'hunt' ? 60 : 45 + Math.random() * 25;
     }
 
     // Waves
@@ -2059,6 +2144,13 @@ export class Game {
 
       // Wave-based upgrades removed — level ups from XP are the only trigger
       // (avoids double-stacking with XP level ups early game)
+
+      // Payload escort: extra spawn wave near the pod (double threat near cargo)
+      if (this.contractType === 'payload_escort' && this.podHp > 0) {
+        const podPos = this.getPodPos();
+        const extraCount = Math.max(3, Math.floor(count * 0.5));
+        this.enemies.spawnWave(extraCount, podPos, this.map);
+      }
     }
 
     // Death check
@@ -2077,6 +2169,25 @@ export class Game {
       if (activeBreach && !activeBreach.sealed) {
         const distToBreach = v2dist(this.player.pos, activeBreach.pos);
         this.holdZoneActive = distToBreach < activeBreach.radius;
+
+        // Breach gravity pull: 30px/s toward center for player and enemies
+        const GRAVITY_PULL = 30;
+        const GRAVITY_RANGE = activeBreach.radius * 1.5;
+        if (distToBreach < GRAVITY_RANGE && distToBreach > 5) {
+          const pullDir = v2norm(v2sub(activeBreach.pos, this.player.pos));
+          this.player.pos.x += pullDir.x * GRAVITY_PULL * dt;
+          this.player.pos.y += pullDir.y * GRAVITY_PULL * dt;
+        }
+        for (const e of this.enemies.enemies) {
+          if (e.hp <= 0 || e.isAlly) continue;
+          const ed = v2dist(e.pos, activeBreach.pos);
+          if (ed < GRAVITY_RANGE && ed > 5) {
+            const pullDir = v2norm(v2sub(activeBreach.pos, e.pos));
+            e.pos.x += pullDir.x * GRAVITY_PULL * dt;
+            e.pos.y += pullDir.y * GRAVITY_PULL * dt;
+          }
+        }
+
         if (this.holdZoneActive) {
           activeBreach.holdTimer += dt;
           this.player.corruption = Math.min(100, this.player.corruption + 2.5 * this.player.corruptionResistMult * dt);
@@ -2087,6 +2198,66 @@ export class Game {
             this.breachEnemyTimer = Math.max(3, 6 - this.breachesSealed * 1.5);
             const spawnCount = 3 + this.breachesSealed * 2;
             this.enemies.spawnWave(spawnCount, activeBreach.pos, this.map);
+          }
+
+          // Breach swarms: 5-8 small fast weak enemies every 15s
+          this.breachSwarmTimer -= dt;
+          if (this.breachSwarmTimer <= 0) {
+            this.breachSwarmTimer = 15;
+            const swarmCount = 5 + Math.floor(Math.random() * 4);
+            for (let si = 0; si < swarmCount; si++) {
+              const angle = Math.random() * Math.PI * 2;
+              const spawnDist = activeBreach.radius * (0.3 + Math.random() * 0.4);
+              const spawnPos = {
+                x: activeBreach.pos.x + Math.cos(angle) * spawnDist,
+                y: activeBreach.pos.y + Math.sin(angle) * spawnDist,
+              };
+              const swarm = createEnemy('Void Leech', spawnPos, false);
+              swarm.hp = Math.max(1, Math.floor(swarm.maxHp * 0.3));
+              swarm.maxHp = swarm.hp;
+              swarm.speed = Math.floor(swarm.speed * 1.4);
+              swarm.radius = Math.floor(swarm.radius * 0.7);
+              this.enemies.enemies.push(swarm);
+            }
+          }
+
+          // Breach elite: one every 45s (accelerated vs normal 45-70s)
+          this.breachEliteTimer -= dt;
+          if (this.breachEliteTimer <= 0) {
+            this.breachEliteTimer = 45;
+            this.spawnElite();
+          }
+        }
+
+        // Instability zones: spawn every 10s near active breach, 4s duration
+        this.instabilityTimer -= dt;
+        if (this.instabilityTimer <= 0) {
+          this.instabilityTimer = 10;
+          const angle = Math.random() * Math.PI * 2;
+          const dist = activeBreach.radius * (0.4 + Math.random() * 0.5);
+          this.instabilityZones.push({
+            x: activeBreach.pos.x + Math.cos(angle) * dist,
+            y: activeBreach.pos.y + Math.sin(angle) * dist,
+            timer: 4,
+            maxTimer: 4,
+            radius: 80 + Math.random() * 40,
+          });
+        }
+
+        // Update instability zones: damage + corruption + slow player inside
+        for (let i = this.instabilityZones.length - 1; i >= 0; i--) {
+          const iz = this.instabilityZones[i];
+          iz.timer -= dt;
+          if (iz.timer <= 0) { this.instabilityZones.splice(i, 1); continue; }
+          if (v2dist(this.player.pos, { x: iz.x, y: iz.y }) < iz.radius) {
+            this.player.hp -= 1 * dt;
+            this.player.corruption = Math.min(100, this.player.corruption + 2 * dt);
+            if (this.player.hp <= 0 && !this.dead) {
+              this.dead = true;
+              this.hud.showMessage('YOU DIED', 3);
+              this.hud.showHalMessage(halSay(HAL_PLAYER_DIED), 4);
+              setTimeout(() => this.finishHunt('FAILED'), 2000);
+            }
           }
         }
 
@@ -2109,6 +2280,9 @@ export class Game {
             // Move to next breach
             this.activeBreachIdx = this.breaches.findIndex(b => !b.sealed);
             this.breachEnemyTimer = 4;
+            this.breachSwarmTimer = 15;
+            this.instabilityTimer = 10;
+            this.breachEliteTimer = 45;
             this.hud.showMessage(`BREACH ${this.breachesSealed}/${this.breaches.length} SEALED`, 2);
             if (this.halCooldown <= 0) {
               setTimeout(() => this.hud.showHalMessage('Breach contained. Moving to next rift.', 4), 1000);
@@ -2119,15 +2293,39 @@ export class Game {
       }
     }
 
-    // PAYLOAD ESCORT: pod moves toward exit
+    // PAYLOAD ESCORT: pod moves along winding path toward exit
     if (this.contractType === 'payload_escort' && !this.complete) {
-      const podX = WORLD_W * this.podProgress;
-      const podY = WORLD_H / 2;
-      const podSpeed = 40;
-      const nearPlayer = v2dist(this.player.pos, { x: podX, y: podY }) < 250;
-      if (nearPlayer && this.podHp > 0) {
-        this.podProgress += (podSpeed / WORLD_W) * dt;
+      const podPos = this.getPodPos();
+
+      // Slow zones: spawn every 20s near pod, 5s duration, slow pod 50%
+      this.podSlowZoneTimer -= dt;
+      if (this.podSlowZoneTimer <= 0) {
+        this.podSlowZoneTimer = 20;
+        this.podSlowZones.push({
+          x: podPos.x + (Math.random() - 0.5) * 300,
+          y: podPos.y + (Math.random() - 0.5) * 300,
+          timer: 5,
+          radius: 80,
+        });
       }
+      for (let i = this.podSlowZones.length - 1; i >= 0; i--) {
+        this.podSlowZones[i].timer -= dt;
+        if (this.podSlowZones[i].timer <= 0) this.podSlowZones.splice(i, 1);
+      }
+
+      // Pod base speed 32 (20% slower than original 40), halved by slow zones
+      let podSpeed = 32;
+      for (const sz of this.podSlowZones) {
+        if (v2dist(podPos, { x: sz.x, y: sz.y }) < sz.radius) { podSpeed *= 0.5; break; }
+      }
+
+      const nearPlayer = v2dist(this.player.pos, podPos) < 250;
+      if (nearPlayer && this.podHp > 0) {
+        const segments = Math.max(1, this.podPath.length - 1);
+        this.podPathProgress = Math.min(segments, this.podPathProgress + (podSpeed / 800) * dt);
+        this.podProgress = this.podPathProgress / segments;
+      }
+
       if (this.podProgress >= 1) {
         this.complete = true;
         this.hud.showMessage('POD DELIVERED', 2);
@@ -2141,8 +2339,8 @@ export class Game {
       }
     }
 
-    // HUNT & BOSS HUNT: kill target count
-    if (this.contractType === 'hunt' && this.targetCount >= this.targetTotal && !this.complete) {
+    // HUNT: elite kills only count toward objective
+    if (this.contractType === 'hunt' && this.eliteKillsForContract >= this.targetTotal && !this.complete) {
       this.complete = true;
       this.hud.showMessage('CONTRACT COMPLETE', 2);
       this.hud.showHalMessage(halSay(HAL_CONTRACT_DONE), 5);
@@ -2274,6 +2472,14 @@ export class Game {
     }
     if (enemy.isElite) {
       this.eliteKills++;
+      // Hunt contract: only elites count toward objective
+      if (this.contractType === 'hunt') {
+        this.eliteKillsForContract++;
+        const remaining = Math.max(0, this.targetTotal - this.eliteKillsForContract);
+        if (remaining > 0) {
+          this.hud.showMessage(`ELITE DOWN — ${remaining} LEFT`, 2);
+        }
+      }
       // Stim T3 void: cooldown reset on elite kill
       if ((this.runKitTiers['stim_pack'] || 0) >= 3 && this.kitT3Choices['stim_pack'] === 'void') {
         this.kitCooldowns['stim_pack'] = 0;
@@ -2401,10 +2607,28 @@ export class Game {
     const pAlpha = this.player.iFrames > 0 ? 0.4 : 1;
     const hit = this.player.hitFlash > 0;
 
-    // Ã¢ÂÂÃ¢ÂÂ Payload escort pod rendering Ã¢ÂÂÃ¢ÂÂ
+    // ── Payload escort pod rendering ──
     if (this.contractType === 'payload_escort' && this.podHp > 0) {
-      const podX = WORLD_W * this.podProgress;
-      const podY = WORLD_H / 2;
+      const { x: podX, y: podY } = this.getPodPos();
+
+      // Draw winding path line
+      if (this.podPath.length >= 2) {
+        const seg = Math.max(1, this.podPath.length - 1);
+        const curSegIdx = Math.min(seg - 1, Math.floor(this.podPathProgress));
+        for (let pi = curSegIdx; pi < this.podPath.length - 1; pi++) {
+          const a = this.podPath[pi], b = this.podPath[pi + 1];
+          g.moveTo(a.x, a.y).lineTo(b.x, b.y);
+          g.stroke({ color: 0x4db3e6, width: 1, alpha: 0.2 });
+        }
+      }
+
+      // Draw slow zones (yellow hazard circles)
+      for (const sz of this.podSlowZones) {
+        const fadeIn = Math.min(1, (5 - sz.timer) / 0.5);
+        g.circle(sz.x, sz.y, sz.radius).fill({ color: 0xffcc00, alpha: 0.08 * fadeIn });
+        g.circle(sz.x, sz.y, sz.radius).stroke({ color: 0xffcc00, width: 1.5, alpha: 0.35 * fadeIn });
+      }
+
       g.circle(podX, podY, 20).fill({ color: 0x4db3e6, alpha: 0.8 });
       g.circle(podX, podY, 20).stroke({ color: 0x88ddff, width: 2, alpha: 0.9 });
       g.circle(podX, podY, 30).stroke({ color: 0x4db3e6, width: 1, alpha: 0.3 + Math.sin(this.elapsed * 3) * 0.15 });
@@ -2425,10 +2649,10 @@ export class Game {
         const arrowDist = 120;
         const ax = px + Math.cos(angle) * arrowDist;
         const ay = py + Math.sin(angle) * arrowDist;
-        const sz = 8;
-        g.moveTo(ax + Math.cos(angle) * sz, ay + Math.sin(angle) * sz)
-          .lineTo(ax + Math.cos(angle + 2.5) * sz, ay + Math.sin(angle + 2.5) * sz)
-          .lineTo(ax + Math.cos(angle - 2.5) * sz, ay + Math.sin(angle - 2.5) * sz)
+        const sz2 = 8;
+        g.moveTo(ax + Math.cos(angle) * sz2, ay + Math.sin(angle) * sz2)
+          .lineTo(ax + Math.cos(angle + 2.5) * sz2, ay + Math.sin(angle + 2.5) * sz2)
+          .lineTo(ax + Math.cos(angle - 2.5) * sz2, ay + Math.sin(angle - 2.5) * sz2)
           .closePath().fill({ color: 0x4db3e6, alpha: 0.8 });
       }
     }
@@ -2497,9 +2721,18 @@ export class Game {
           g.circle(bx, by, 6).fill({ color: 0xaa22ff, alpha: 0.15 });
         }
       }
+
+      // Instability zones: pulsing purple hazard circles
+      for (const iz of this.instabilityZones) {
+        const lifeFrac = iz.timer / iz.maxTimer;
+        const pulse = 0.5 + Math.sin(this.elapsed * 6) * 0.2;
+        g.circle(iz.x, iz.y, iz.radius).fill({ color: 0x660088, alpha: 0.12 * lifeFrac });
+        g.circle(iz.x, iz.y, iz.radius).stroke({ color: 0xcc00ff, width: 2, alpha: pulse * lifeFrac });
+        g.circle(iz.x, iz.y, iz.radius * 0.3).fill({ color: 0xcc00ff, alpha: 0.2 * lifeFrac });
+      }
     }
 
-    // Ã¢ÂÂÃ¢ÂÂ Extraction caches rendering Ã¢ÂÂÃ¢ÂÂ
+    // Ã¢ÂÂÃ¢ÂÂ Extraction caches rendering Ã¢ÂÂÃ¢ÂÂ Ã¢ÂÂÃ¢ÂÂ
     if (this.contractType === 'extraction_run') {
       for (const cache of this.caches) {
         if (cache.collected) continue;
@@ -3216,7 +3449,21 @@ export class Game {
   }
 
   finishHunt(status: 'COMPLETED' | 'FAILED' | 'ABANDONED') {
-    const credits = Math.floor(this.totalKills * 5 + (status === 'COMPLETED' ? 50 : 10));
+    // Use contract reward; failed/abandoned gives 20% salvage
+    let credits = status === 'COMPLETED'
+      ? this.contractReward
+      : Math.floor(this.contractReward * 0.2);
+
+    // Par time exceeded: halve reward
+    if (this.contractParTime > 0 && this.elapsed > this.contractParTime) {
+      credits = Math.floor(credits * 0.5);
+    }
+
+    // Hunt diff ≥ 4 COMPLETED: grant +1 Elite Core
+    if (status === 'COMPLETED' && this.contractType === 'hunt' && this.contractDifficulty >= 4) {
+      this.ingredients.push({ id: 'ingredient_elite_core', name: 'Elite Core' });
+    }
+
     this.callbacks.onHuntResult({
       credits,
       corruption: Math.floor(this.player.corruption),
