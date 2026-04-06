@@ -1260,10 +1260,16 @@ export class Game {
         break;
       }
       case 'rupture_kit': {
+        const currentCorruption = this.player.corruption;
+        if (currentCorruption <= 0) {
+          this.kitCooldowns[kitId] = 0;
+          this.hud.showMessage('NO CORRUPTION TO DETONATE', 1.5);
+          return;
+        }
         // AOE damage = corruption/5, clear corruption
-        const ruptureDmg = Math.floor(this.player.corruption / 5);
+        const ruptureDmg = Math.floor(currentCorruption / 5);
         for (const e of this.enemies.enemies) {
-          if (e.hp <= 0) continue;
+          if (e.hp <= 0 || e.isAlly) continue;
           if (v2dist(this.player.pos, e.pos) < 200) {
             e.hp -= ruptureDmg;
             e.hitFlash = 0.3;
@@ -1452,6 +1458,7 @@ export class Game {
     // Find nearest enemy for auto-aim
     let nearestDist = Infinity;
     for (const e of this.enemies.enemies) {
+      if (e.hp <= 0 || e.isAlly) continue;
       const d = v2dist(this.player.pos, e.pos);
       if (d < nearestDist && d < 400) {
         nearestDist = d;

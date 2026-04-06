@@ -687,7 +687,7 @@ export class EnemySystem {
         e.pos.y += repulseDir.y * overlap;
       }
 
-      // Melee attack (skip allies)
+      // Melee attack, allies never hit the player
       if (!e.isAlly && distToPlayer < ENEMY_MELEE_RANGE + e.radius + player.radius && e.meleeDmg > 0 && e.meleeCooldown <= 0) {
         player.takeDamage(e.meleeDmg);
         e.meleeCooldown = 1.0;
@@ -698,6 +698,9 @@ export class EnemySystem {
           player.pos.y = Math.max(player.radius, Math.min(WORLD_H - player.radius, player.pos.y + kbDir.y * 90));
         }
       }
+
+      // Player auto-targeting and projectiles should ignore Pack/Familiar allies, they are friendly summons
+      if (e.isAlly) continue;
 
       // Ranged attack
       if (e.ranged && distToPlayer < e.detection) {
