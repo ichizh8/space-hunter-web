@@ -3,19 +3,30 @@
 import { useState } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { useSaveStore } from '../store/saveStore';
-import { generateContracts, type Contract } from '../data/contracts';
+import { generateContracts, CONTRACT_TYPE_DEFS, CONTRACT_UNLOCK_REP, type Contract } from '../data/contracts';
 import { halSay, HAL_CONTRACT_TYPES } from '../data/hal';
 
 export function ContractBoard() {
-  const [contracts, setContracts] = useState<Contract[]>(() => generateContracts(3));
   const setScreen = useGameStore(s => s.setScreen);
   const setContract = useGameStore(s => s.setContract);
   const save = useSaveStore();
+
+  const reputation = save.reputation ?? {};
+  const maxRep = Math.max(0, ...Object.values(reputation));
+
+  const [contracts, setContracts] = useState<Contract[]>(() => generateContracts(3, reputation));
 
   const accept = (c: Contract) => {
     setContract(c);
     setScreen('loadout');
   };
+
+  const refresh = () => setContracts(generateContracts(3, reputation));
+
+  // Locked types: those not yet unlocked, sorted by threshold
+  const lockedTypes = Object.entries(CONTRACT_UNLOCK_REP)
+    .filter(([, threshold]) => maxRep < threshold)
+    .sort((a, b) => a[1] - b[1]);
 
   return (
     <div className="h-full flex flex-col" style={{ background: 'var(--color-bg-dark)' }}>
@@ -45,6 +56,9 @@ export function ContractBoard() {
             <p className="text-xs uppercase tracking-[2px]" style={{ color: '#' + c.iconColor.toString(16).padStart(6, '0') }}>{c.label}</p>
             <p className="text-lg font-bold mt-1">{c.name}</p>
             <p className="text-sm text-[var(--color-text-secondary)] mt-1">{c.desc}</p>
+            {c.eliteOnly && (
+              <p className="text-xs text-[var(--color-accent-orange)] mt-1 uppercase tracking-wide">Elite targets only</p>
+            )}
             <div className="flex gap-2 mt-3">
               {Array.from({ length: 5 }).map((_, di) => (
                 <div key={di} className="w-3 h-3" style={{ background: di < c.difficulty ? 'var(--color-accent-orange)' : 'var(--color-bg-light)' }} />
@@ -55,11 +69,27 @@ export function ContractBoard() {
             <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-[var(--color-accent-green)] font-bold">ACCEPT →</span>
           </button>
         ))}
+
+        {lockedTypes.length > 0 && (
+          <div className="mt-2">
+            <p className="text-xs uppercase tracking-[2px] text-[var(--color-text-secondary)] opacity-50 mb-2">Locked Contract Types</p>
+            {lockedTypes.map(([type, threshold]) => {
+              const def = CONTRACT_TYPE_DEFS[type];
+              return (
+                <div key={type} className="pixel-card w-full text-left opacity-40 mb-3" style={{ borderLeftWidth: 4, borderLeftColor: '#' + def.iconColor.toString(16).padStart(6, '0') }}>
+                  <p className="text-xs uppercase tracking-[2px]" style={{ color: '#' + def.iconColor.toString(16).padStart(6, '0') }}>{def.label}</p>
+                  <p className="text-sm text-[var(--color-text-secondary)] mt-1">{def.desc}</p>
+                  <p className="text-xs text-[var(--color-text-secondary)] mt-2 uppercase tracking-wide">Unlocked at Rep {threshold}</p>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div className="px-4 pb-4 flex gap-3">
         <button className="pixel-btn flex-1 text-sm" style={{ borderColor: 'var(--color-accent-cyan)', color: 'var(--color-accent-cyan)' }}
-          onClick={() => setContracts(generateContracts(3))}>
+          onClick={refresh}>
           REFRESH
         </button>
         <button className="pixel-btn pixel-btn-ghost flex-1 text-sm" onClick={() => setScreen('hub')}>
