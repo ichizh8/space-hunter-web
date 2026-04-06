@@ -125,7 +125,7 @@ export function generateContracts(count: number = 3, reputation: Record<string, 
         base.podHp = 200 + difficulty * 50;
         break;
       case 'void_breach':
-        base.holdTime = 120 + difficulty * 30;
+        base.holdTime = 30 + difficulty * 10; // per-zone hold in seconds
         base.targetTotal = 0; // no kill target, survive + hold
         break;
       case 'boss_hunt':

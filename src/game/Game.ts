@@ -476,7 +476,7 @@ export class Game {
 
   // ── Payload Escort: generate winding waypoint path ──
   private spawnPodPath() {
-    const WAYPOINTS = 5;
+    const WAYPOINTS = 5 + Math.floor(Math.random() * 3); // 5-7
     const start = { x: 150, y: WORLD_H / 2 };
     const end   = { x: WORLD_W - 150, y: WORLD_H / 2 };
     this.podPath = [start];
@@ -485,8 +485,8 @@ export class Game {
       const baseX = start.x + (end.x - start.x) * t;
       const baseY = start.y + (end.y - start.y) * t;
       this.podPath.push({
-        x: Math.max(200, Math.min(WORLD_W - 200, baseX + (Math.random() - 0.5) * 600)),
-        y: Math.max(200, Math.min(WORLD_H - 200, baseY + (Math.random() - 0.5) * 600)),
+        x: Math.max(200, Math.min(WORLD_W - 200, baseX + (Math.random() - 0.5) * 400)),
+        y: Math.max(200, Math.min(WORLD_H - 200, baseY + (Math.random() - 0.5) * 400)),
       });
     }
     this.podPath.push(end);
@@ -508,7 +508,7 @@ export class Game {
   // Ã¢ÂÂÃ¢ÂÂ Void Breach: spawn sequential breach zones Ã¢ÂÂÃ¢ÂÂ
   private spawnBreaches() {
     const BREACH_COUNT = 3;
-    const perBreachTime = this.holdTime / BREACH_COUNT;
+    const perBreachTime = this.holdTime; // holdTime is already per-zone
     this.breaches = [];
     for (let i = 0; i < BREACH_COUNT; i++) {
       let pos: { x: number; y: number };
@@ -1185,7 +1185,7 @@ export class Game {
     // Par time warning at 80%
     if (!this.parTimeWarningSent && this.contractParTime > 0 && this.elapsed >= this.contractParTime * 0.8) {
       this.parTimeWarningSent = true;
-      this.hud.showMessage('PAR TIME WARNING', 3);
+      this.hud.showMessage('TIME RUNNING OUT', 3);
       if (this.halCooldown <= 0) {
         this.hud.showHalMessage('Warning: you are approaching the par time. Reward will be halved if exceeded.', 5);
         this.halCooldown = 6;
@@ -2215,7 +2215,7 @@ export class Game {
               const swarm = createEnemy('Void Leech', spawnPos, false);
               swarm.hp = Math.max(1, Math.floor(swarm.maxHp * 0.3));
               swarm.maxHp = swarm.hp;
-              swarm.speed = Math.floor(swarm.speed * 1.4);
+              swarm.speed = Math.floor(swarm.speed * 1.5);
               swarm.radius = Math.floor(swarm.radius * 0.7);
               this.enemies.enemies.push(swarm);
             }
@@ -2305,7 +2305,7 @@ export class Game {
           x: podPos.x + (Math.random() - 0.5) * 300,
           y: podPos.y + (Math.random() - 0.5) * 300,
           timer: 5,
-          radius: 80,
+          radius: 100,
         });
       }
       for (let i = this.podSlowZones.length - 1; i >= 0; i--) {
