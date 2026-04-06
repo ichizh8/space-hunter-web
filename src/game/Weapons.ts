@@ -19,8 +19,9 @@ export interface Bullet {
   hitSet: Set<number>; // enemy IDs already hit
   tag?: string;       // optional identifier for special bullet types
   aimAngle?: number;  // aim angle at fire time (used for arc filtering)
-  lineStart?: Vec2;   // line-slash endpoints (plasma_slash)
+  lineStart?: Vec2;   // line-slash endpoints (plasma_slash / laser_beam)
   lineEnd?: Vec2;
+  pulseTimer?: number; // for pulse_cannon: time until next AOE pulse
 }
 
 export class WeaponSystem {
@@ -178,11 +179,25 @@ export class WeaponSystem {
         });
       }
 
+      case 'laser': {
+        const beamLife = 0.12;
+        return [makeBullet(angle, {
+          vel: v2(0, 0),
+          life: beamLife,
+          maxLife: beamLife,
+          radius: 2,
+          lineStart: v2(pos.x, pos.y),
+          lineEnd: v2(pos.x + Math.cos(angle) * range, pos.y + Math.sin(angle) * range),
+          tag: 'laser_beam',
+          piercing: false,
+        })];
+      }
+
       case 'arc_aoe':
         return [makeBullet(angle, { aoeRadius: 80, life: def.range / def.bulletSpeed, radius: 4 })];
 
       case 'bounce':
-        return [makeBullet(angle, { bounces: 3 })];
+        return [makeBullet(angle, { bounces: 3 + this.bounceExtra, pulseTimer: 0.5 })];
 
       case 'laser': {
         // Instant-hit beam: stationary visual bullet; Game.ts trims lineEnd to first hit via ray cast

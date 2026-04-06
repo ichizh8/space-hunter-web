@@ -80,8 +80,20 @@ export class GameMap {
       });
     }
 
-    // Player spawn — center, away from obstacles
+    // Player spawn — center, nudge away from obstacles if needed
     this.spawnPos = v2(WORLD_W / 2, WORLD_H / 2);
+    const PLAYER_R = 18;
+    let spawnFound = !this.isBlocked(this.spawnPos.x, this.spawnPos.y, PLAYER_R);
+    for (let dist = 30; dist <= 300 && !spawnFound; dist += 30) {
+      for (let a = 0; a < Math.PI * 2 && !spawnFound; a += Math.PI / 8) {
+        const tx = WORLD_W / 2 + Math.cos(a) * dist;
+        const ty = WORLD_H / 2 + Math.sin(a) * dist;
+        if (!this.isBlocked(tx, ty, PLAYER_R)) {
+          this.spawnPos = v2(tx, ty);
+          spawnFound = true;
+        }
+      }
+    }
   }
 
   /** Check if point is inside an obstacle */

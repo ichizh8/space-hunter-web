@@ -131,10 +131,12 @@ export function generateContracts(count: number = 3, reputation: Record<string, 
       case 'boss_hunt':
         base.targetTotal = 1; // kill the apex
         break;
-      case 'extraction_run':
-        base.cacheCount = 3;
-        base.targetTotal = 3; // collect 3 caches
+      case 'extraction_run': {
+        const totalCaches = 5 + difficulty * 3; // 8 at d=1, up to 17 at d=4
+        base.cacheCount = totalCaches;
+        base.targetTotal = totalCaches;
         break;
+      }
     }
 
     return base;

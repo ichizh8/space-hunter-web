@@ -5,7 +5,7 @@ import { Player } from './Player';
 import { WeaponSystem } from './Weapons';
 import { EnemySystem, type Enemy, createEnemy } from './Enemies';
 import { HUD } from './HUD';
-import { v2dist, v2, v2sub, v2norm, v2mul, v2len, v2fromAngle, randRange, lineSegHitsCircle, rayVsCircleT, rayVsRectT } from '../lib/math';
+import { v2dist, v2, v2sub, v2norm, v2mul, v2len, v2fromAngle, randRange, lineSegHitsCircle } from '../lib/math';
 import {
   PLAYER_BASE_HP, PLAYER_BASE_SPEED, WORLD_W, WORLD_H,
   PLAYER_COLOR, XP_PER_LEVEL, MAX_LEVEL, POST_CAP_XP
@@ -465,15 +465,14 @@ export class Game {
       let attempts = 0;
       do {
         pos = {
-          x: randRange(200, WORLD_W - 200),
-          y: randRange(200, WORLD_H - 200),
+          x: randRange(300, WORLD_W - 300),
+          y: randRange(300, WORLD_H - 300),
         };
         attempts++;
-        // Ensure caches aren't too close to player or each other
       } while (
-        (v2dist(pos, this.player.pos) < 600 ||
-          this.caches.some(c => v2dist(pos, c.pos) < 400)) &&
-        attempts < 30
+        (v2dist(pos, this.player.pos) < 950 ||
+          this.caches.some(c => v2dist(pos, c.pos) < 700)) &&
+        attempts < 60
       );
       this.caches.push({
         id: nextCacheId++,
@@ -1348,28 +1347,7 @@ export class Game {
 
     // Auto-fire when enemies in range
     if (this.player.nearestEnemyPos) {
-      const newBullets = this.weapons.fire(this.player);
-      // Laser beam: ray-cast to trim lineEnd to first enemy or obstacle hit
-      for (const b of newBullets) {
-        if (b.tag !== 'laser_beam' || !b.lineStart || !b.lineEnd) continue;
-        const dx = b.lineEnd.x - b.lineStart.x, dy = b.lineEnd.y - b.lineStart.y;
-        const len = Math.sqrt(dx * dx + dy * dy);
-        if (len < 1) continue;
-        const dir = v2(dx / len, dy / len);
-        let hitT = len;
-        for (const e of this.enemies.enemies) {
-          if (e.hp <= 0) continue;
-          const t = rayVsCircleT(b.lineStart, dir, e.pos, e.radius + 6);
-          if (t >= 0 && t < hitT) hitT = t;
-        }
-        for (const obs of this.map.obstacles) {
-          const t = rayVsRectT(b.lineStart, dir,
-            obs.pos.x - obs.w / 2, obs.pos.y - obs.h / 2,
-            obs.pos.x + obs.w / 2, obs.pos.y + obs.h / 2);
-          if (t >= 0 && t < hitT) hitT = t;
-        }
-        b.lineEnd = v2(b.lineStart.x + dir.x * hitT, b.lineStart.y + dir.y * hitT);
-      }
+      this.weapons.fire(this.player);
     }
 
     // Enemies update
@@ -1575,20 +1553,68 @@ export class Game {
       }
     }
 
+    // Pulse Cannon: periodic AOE damage pulses during flight
+    for (const b of this.weapons.bullets) {
+      if (b.pulseTimer === undefined || b.life <= 0) continue;
+      b.pulseTimer -= dt;
+      if (b.pulseTimer <= 0) {
+        b.pulseTimer = 0.5;
+        const PULSE_RADIUS = 80;
+        this.explosions.push({ x: b.pos.x, y: b.pos.y, radius: 0, maxRadius: PULSE_RADIUS, life: 0.35, maxLife: 0.35, type: 'pulse_ring' });
+        for (const e of this.enemies.enemies) {
+          if (e.hp <= 0 || e.isAlly) continue;
+          if (v2dist(b.pos, e.pos) < PULSE_RADIUS) {
+            e.hp -= b.damage * 0.5;
+            e.hitFlash = 0.1;
+            e.isAggroed = true;
+            this.damageDealt += b.damage * 0.5;
+            if (e.hp <= 0) this.onEnemyKilled(e);
+          }
+        }
+      }
+    }
+
     // Bullet-enemy collision
     for (const bullet of this.weapons.bullets) {
       if (!bullet.fromPlayer) continue;
+
+      // Laser beam: find nearest enemy on the line, stop there
+      if (bullet.tag === 'laser_beam' && bullet.lineStart && bullet.lineEnd) {
+        let nearestDist = Infinity;
+        let nearestEnemy: Enemy | null = null;
+        for (const enemy of this.enemies.enemies) {
+          if (enemy.hp <= 0 || bullet.hitSet.has(enemy.id)) continue;
+          if (!lineSegHitsCircle(bullet.lineStart, bullet.lineEnd, enemy.pos, enemy.radius + 4)) continue;
+          const d = v2dist(bullet.lineStart, enemy.pos);
+          if (d < nearestDist) { nearestDist = d; nearestEnemy = enemy; }
+        }
+        if (nearestEnemy) {
+          bullet.hitSet.add(nearestEnemy.id);
+          // Shorten beam to stop at hit enemy
+          const dir = v2norm(v2sub(bullet.lineEnd, bullet.lineStart));
+          bullet.lineEnd = v2(nearestEnemy.pos.x - dir.x * nearestEnemy.radius, nearestEnemy.pos.y - dir.y * nearestEnemy.radius);
+          let finalDmg = bullet.damage;
+          if (nearestEnemy.markedTimer > 0) finalDmg = Math.floor(finalDmg * nearestEnemy.markedDmgBonus);
+          if (nearestEnemy.affixes.includes('armored')) finalDmg = Math.max(1, Math.floor(finalDmg * 0.5));
+          if (nearestEnemy.affixes.includes('shielded') && nearestEnemy.shieldHp > 0) {
+            if (nearestEnemy.shieldHp >= finalDmg) { nearestEnemy.shieldHp -= finalDmg; finalDmg = 0; }
+            else { finalDmg -= nearestEnemy.shieldHp; nearestEnemy.shieldHp = 0; }
+          }
+          nearestEnemy.hp -= finalDmg;
+          nearestEnemy.hitFlash = 0.1;
+          nearestEnemy.isAggroed = true;
+          this.damageDealt += bullet.damage;
+          if (nearestEnemy.hp <= 0) this.onEnemyKilled(nearestEnemy);
+        }
+        continue;
+      }
+
       for (const enemy of this.enemies.enemies) {
         // Plasma Sword line-slash: line-segment vs circle, bypass normal circle checkHit
         let dmg: number;
         if (bullet.tag === 'plasma_slash') {
           if (bullet.hitSet.has(enemy.id)) continue;
           if (!lineSegHitsCircle(bullet.lineStart!, bullet.lineEnd!, enemy.pos, enemy.radius + 8)) continue;
-          bullet.hitSet.add(enemy.id);
-          dmg = bullet.damage;
-        } else if (bullet.tag === 'laser_beam') {
-          if (bullet.hitSet.has(enemy.id)) continue;
-          if (!lineSegHitsCircle(bullet.lineStart!, bullet.lineEnd!, enemy.pos, enemy.radius + 6)) continue;
           bullet.hitSet.add(enemy.id);
           dmg = bullet.damage;
         } else {
@@ -3076,11 +3102,14 @@ export class Game {
     for (const b of this.weapons.bullets) {
       if (!this.camera.isVisible(b.pos.x, b.pos.y, b.radius * 3)) continue;
       if (b.tag === 'laser_beam' && b.lineStart && b.lineEnd) {
-        const frac = b.life / b.maxLife;
+        const frac = b.life / b.maxLife; // 1→0
+        // Outer glow
         g.moveTo(b.lineStart.x, b.lineStart.y).lineTo(b.lineEnd.x, b.lineEnd.y)
-          .stroke({ color: 0x00ffff, width: 10, alpha: frac * 0.18 });
+          .stroke({ color: 0x00ffcc, width: 10, alpha: frac * 0.15 });
+        // Mid beam
         g.moveTo(b.lineStart.x, b.lineStart.y).lineTo(b.lineEnd.x, b.lineEnd.y)
-          .stroke({ color: 0x00ffff, width: 3, alpha: frac * 0.9 });
+          .stroke({ color: 0x44ffee, width: 3, alpha: frac * 0.9 });
+        // White core
         g.moveTo(b.lineStart.x, b.lineStart.y).lineTo(b.lineEnd.x, b.lineEnd.y)
           .stroke({ color: 0xffffff, width: 1, alpha: frac });
         continue;
@@ -3188,7 +3217,12 @@ export class Game {
     for (const ex of this.explosions) {
       if (!this.camera.isVisible(ex.x, ex.y, ex.maxRadius)) continue;
       const alpha = ex.life / ex.maxLife;
-      if (ex.type === 'flash') {
+      if (ex.type === 'pulse_ring') {
+        // Pulse cannon AOE ring: cyan expanding ring
+        g.circle(ex.x, ex.y, ex.radius).stroke({ color: 0x44aaff, width: 3, alpha: alpha * 0.85 });
+        g.circle(ex.x, ex.y, ex.radius * 0.7).stroke({ color: 0x88ddff, width: 1.5, alpha: alpha * 0.5 });
+        g.circle(ex.x, ex.y, ex.radius).fill({ color: 0x44aaff, alpha: alpha * 0.06 });
+      } else if (ex.type === 'flash') {
         // Flash trap: bright white/blue concussive blast
         g.circle(ex.x, ex.y, ex.radius).fill({ color: 0xeeeeff, alpha: alpha * 0.55 });
         g.circle(ex.x, ex.y, ex.radius * 0.65).fill({ color: 0xffffff, alpha: alpha * 0.7 });

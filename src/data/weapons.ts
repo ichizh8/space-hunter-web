@@ -16,7 +16,7 @@ export interface WeaponDef {
 }
 
 export const WEAPON_DEFS: Record<string, WeaponDef> = {
-  sidearm:          { id: 'sidearm',          name: 'Laser Pistol', desc: 'Instant-hit laser beam', fireRate: 0.75, damage: 3.9, bulletSpeed: 420, bulletRadius: 4, color: 0x00ffff, range: 286, pattern: 'laser',       magSize: 12, reloadTime: 1.5 },
+  sidearm:          { id: 'sidearm',          name: 'Laser Pistol', desc: 'Directional laser beam', fireRate: 0.75, damage: 2.8, bulletSpeed: 420, bulletRadius: 4, color: 0x00ffcc, range: 286, pattern: 'laser',       magSize: 12, reloadTime: 1.5 },
   scatter:          { id: 'scatter',          name: 'Scatter',  desc: 'Close-range burst',         fireRate: 0.8,  damage: 1, bulletSpeed: 360, bulletRadius: 3,  color: 0xff8844, range: 180, pattern: 'scatter',     magSize: 8,  reloadTime: 1.8 },
   lance:            { id: 'lance',            name: 'Lance',    desc: 'Piercing beam',             fireRate: 1.6,  damage: 5, bulletSpeed: 260, bulletRadius: 5,  color: 0x44ddff, range: 500, pattern: 'piercing',    magSize: 4,  reloadTime: 2.0 },
   baton:            { id: 'baton',            name: 'Plasma Sword', desc: 'Energy blade',          fireRate: 0.75, damage: 4, bulletSpeed: 0,   bulletRadius: 40, color: 0x00eeff, range: 115, pattern: 'melee_aoe',   magSize: 999, reloadTime: 0 },
@@ -24,7 +24,7 @@ export const WEAPON_DEFS: Record<string, WeaponDef> = {
   flamethrower:     { id: 'flamethrower',     name: 'Flamer',   desc: 'Cone fire — burn DoT core', fireRate: 0.07, damage: 0.5, bulletSpeed: 180, bulletRadius: 9, color: 0xff6622, range: 220, pattern: 'cone_stream', magSize: 60, reloadTime: 2.5 },
   grenade_launcher: { id: 'grenade_launcher', name: 'Grenade',  desc: 'Explosive arc',             fireRate: 2.5,  damage: 8, bulletSpeed: 220, bulletRadius: 8,  color: 0xffaa00, range: 300, pattern: 'arc_aoe',     magSize: 2,  reloadTime: 2.0 },
   entropy_cannon:   { id: 'entropy_cannon',   name: 'Void Beam', desc: 'Corruption-scaling beam',  fireRate: 0.08, damage: 0.4, bulletSpeed: 800, bulletRadius: 3, color: 0xaa44ff, range: 250, pattern: 'beam_stream', magSize: 80, reloadTime: 1.0 },
-  pulse_cannon:     { id: 'pulse_cannon',     name: 'Pulse',    desc: 'Bouncing projectile',       fireRate: 1.0,  damage: 3, bulletSpeed: 320, bulletRadius: 5,  color: 0x44aaff, range: 350, pattern: 'bounce',      magSize: 8,  reloadTime: 1.5 },
+  pulse_cannon:     { id: 'pulse_cannon',     name: 'Pulse',    desc: 'Slow orb — AOE pulses in flight', fireRate: 1.0, damage: 3, bulletSpeed: 140, bulletRadius: 7, color: 0x44aaff, range: 550, pattern: 'bounce',      magSize: 8,  reloadTime: 1.5 },
   sniper_carbine:   { id: 'sniper_carbine',   name: 'Sniper',   desc: 'High damage, slow',         fireRate: 2.5,  damage: 8, bulletSpeed: 600, bulletRadius: 3,  color: 0xffffff, range: 600, pattern: 'single',      magSize: 3,  reloadTime: 2.5 },
   chain_rifle:      { id: 'chain_rifle',      name: 'Chain',    desc: 'Rapid suppression',         fireRate: 0.1,  damage: 1, bulletSpeed: 450, bulletRadius: 3,  color: 0x88ffaa, range: 280, pattern: 'single',      magSize: 40, reloadTime: 3.0 },
 };
