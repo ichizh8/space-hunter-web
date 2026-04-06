@@ -14,13 +14,28 @@ export const CONTRACT_TYPE_DEFS: Record<string, ContractTypeDef> = {
 
 export const CONTRACT_TYPES = Object.keys(CONTRACT_TYPE_DEFS);
 
-/** Minimum rep on ANY track to unlock each contract type */
-export const TIER_UNLOCK: Record<string, number> = {
-  hunt:           0,
+export const CONTRACT_UNLOCK_REP: Record<string, number> = {
+  hunt: 0,
   extraction_run: 50,
   payload_escort: 150,
-  void_breach:    350,
-  boss_hunt:      700,
+  void_breach: 350,
+  boss_hunt: 700,
+};
+
+const CONTRACT_REWARDS: Record<string, (diff: number) => number> = {
+  hunt:           (d) => 150 + d * 80,
+  extraction_run: (d) => 200 + d * 70,
+  payload_escort: (d) => 200 + d * 80,
+  void_breach:    (d) => 250 + d * 80,
+  boss_hunt:      (d) => 350 + d * 100,
+};
+
+const CONTRACT_PAR_TIME: Record<string, (diff: number) => number> = {
+  hunt:           (d) => 180 + d * 30,
+  extraction_run: (d) => 240 + d * 30,
+  payload_escort: (d) => 300 + d * 30,
+  void_breach:    (d) => 180 + d * 30,
+  boss_hunt:      (d) => 300 + d * 60,
 };
 
 export interface Contract {
@@ -33,18 +48,16 @@ export interface Contract {
   specialReward: string;
   iconColor: number;
   targetTotal: number;
-  /** Par time in seconds — exceeding it halves reward */
+  /** Par time in seconds (for time bonus on results) */
   parTime: number;
+  /** Hunt targets are elite enemies only */
+  eliteOnly?: boolean;
   /** Payload HP (payload_escort only) */
   podHp?: number;
-  /** Total hold duration in seconds across all 3 breach zones (void_breach only) */
+  /** Hold duration in seconds (void_breach only) */
   holdTime?: number;
   /** Number of caches to collect (extraction_run only) */
   cacheCount?: number;
-  /** If true this contract is locked (not playable yet) */
-  locked?: boolean;
-  /** Rep threshold that unlocks this type */
-  requiredRep?: number;
 }
 
 const CONTRACT_NAMES: Record<string, string[]> = {
@@ -55,15 +68,12 @@ const CONTRACT_NAMES: Record<string, string[]> = {
   extraction_run: ['Cache Sweep', 'Ingredient Run', 'Biome Harvest', 'Supply Scavenge'],
 };
 
-function computeReward(type: string, difficulty: number): number {
-  switch (type) {
-    case 'hunt':           return 150 + difficulty * 80;
-    case 'extraction_run': return 200 + difficulty * 70;
-    case 'payload_escort': return 200 + difficulty * 80;
-    case 'void_breach':    return 250 + difficulty * 80;
-    case 'boss_hunt':      return 350 + difficulty * 100;
-    default:               return difficulty * 50;
-  }
+function getContractDifficulty(avgRep: number): number {
+  if (avgRep < 50) return 1;
+  if (avgRep < 150) return 1 + Math.floor(Math.random() * 2); // 1-2
+  if (avgRep < 350) return 2 + Math.floor(Math.random() * 2); // 2-3
+  if (avgRep < 700) return 3 + Math.floor(Math.random() * 2); // 3-4
+  return 4 + Math.floor(Math.random() * 2); // 4-5
 }
 
 function computeSpecial(type: string, difficulty: number): string {
@@ -72,48 +82,26 @@ function computeSpecial(type: string, difficulty: number): string {
     case 'payload_escort':  return difficulty >= 2 ? '+1 T2 Recipe' : '';
     case 'extraction_run':  return 'All ingredients kept + rep bonus';
     case 'void_breach':     return 'Void Walker rep bonus';
-    case 'hunt':            return difficulty >= 4 ? '+1 Elite Core' : '';
-    default:                return '';
+    default:                return difficulty >= 4 ? '+1 Elite Core' : '';
   }
-}
-
-function computeParTime(type: string, difficulty: number): number {
-  switch (type) {
-    case 'hunt':           return 180 + difficulty * 30;
-    case 'extraction_run': return 240 + difficulty * 30;
-    case 'payload_escort': return 300 + difficulty * 30;
-    case 'void_breach':    return 180 + difficulty * 30;
-    case 'boss_hunt':      return 300 + difficulty * 60;
-    default:               return 300;
-  }
-}
-
-/** Difficulty range based on average rep across all tracks */
-function difficultyRange(avgRep: number): [number, number] {
-  if (avgRep >= 700) return [4, 5];
-  if (avgRep >= 350) return [3, 4];
-  if (avgRep >= 150) return [2, 3];
-  if (avgRep >= 50)  return [1, 2];
-  return [1, 1];
 }
 
 export function generateContracts(count: number = 3, reputation: Record<string, number> = {}): Contract[] {
-  const repValues = Object.values(reputation).map(v => v ?? 0);
-  const maxRep = repValues.length > 0 ? Math.max(...repValues) : 0;
-  const avgRep = repValues.length > 0 ? repValues.reduce((a, b) => a + b, 0) / repValues.length : 0;
+  const maxRep = Math.max(0, ...Object.values(reputation));
+  const avgRep = Object.values(reputation).length > 0
+    ? Object.values(reputation).reduce((a, b) => a + b, 0) / Object.values(reputation).length
+    : 0;
 
-  const [minDiff, maxDiff] = difficultyRange(avgRep);
+  const unlockedTypes = CONTRACT_TYPES.filter(t => maxRep >= (CONTRACT_UNLOCK_REP[t] ?? 0));
+  const pool = unlockedTypes.length > 0 ? unlockedTypes : ['hunt'];
 
-  const unlocked = CONTRACT_TYPES.filter(t => maxRep >= TIER_UNLOCK[t]);
-  const locked   = CONTRACT_TYPES.filter(t => maxRep < TIER_UNLOCK[t]);
-
-  // Pick `count` from unlocked pool (random shuffle)
-  const pool = [...unlocked].sort(() => Math.random() - 0.5).slice(0, count);
-
-  const active: Contract[] = pool.map(type => {
+  const types = [...pool].sort(() => Math.random() - 0.5).slice(0, count);
+  return types.map(type => {
     const def = CONTRACT_TYPE_DEFS[type];
-    const difficulty = minDiff + Math.floor(Math.random() * (maxDiff - minDiff + 1));
+    const difficulty = getContractDifficulty(avgRep);
     const names = CONTRACT_NAMES[type] || ['Unknown Mission'];
+    const rewardFn = CONTRACT_REWARDS[type] ?? ((d) => 150 + d * 80);
+    const parTimeFn = CONTRACT_PAR_TIME[type] ?? ((d) => 180 + d * 30);
 
     const base: Contract = {
       type,
@@ -121,57 +109,34 @@ export function generateContracts(count: number = 3, reputation: Record<string, 
       name: names[Math.floor(Math.random() * names.length)],
       desc: def.desc,
       difficulty,
-      reward: computeReward(type, difficulty),
+      reward: rewardFn(difficulty),
       specialReward: computeSpecial(type, difficulty),
       iconColor: def.iconColor,
-      targetTotal: 0,
-      parTime: computeParTime(type, difficulty),
+      targetTotal: 1 + difficulty,
+      parTime: parTimeFn(difficulty),
     };
 
+    // Contract-type-specific fields
     switch (type) {
       case 'hunt':
-        // Elite kills only; 1+diff elites (diff1=2 elites … diff5=6 elites)
-        base.targetTotal = 1 + difficulty;
+        base.eliteOnly = true;
         break;
       case 'payload_escort':
-        base.podHp = 150 + difficulty * 75;
-        base.targetTotal = 0;
+        base.podHp = 200 + difficulty * 50;
         break;
       case 'void_breach':
-        // Per-zone hold: 30+diff*10s; 3 zones total
-        base.holdTime = (30 + difficulty * 10) * 3;
-        base.targetTotal = 0;
+        base.holdTime = 30 + difficulty * 10; // per-zone hold in seconds
+        base.targetTotal = 0; // no kill target, survive + hold
         break;
       case 'boss_hunt':
-        base.targetTotal = 1;
+        base.targetTotal = 1; // kill the apex
         break;
       case 'extraction_run':
         base.cacheCount = 3;
-        base.targetTotal = 3;
+        base.targetTotal = 3; // collect 3 caches
         break;
     }
 
     return base;
   });
-
-  // Append locked stubs so the board can display them greyed out
-  const lockedStubs: Contract[] = locked.map(type => {
-    const def = CONTRACT_TYPE_DEFS[type];
-    return {
-      type,
-      label: def.label,
-      name: '',
-      desc: def.desc,
-      difficulty: 0,
-      reward: 0,
-      specialReward: '',
-      iconColor: def.iconColor,
-      targetTotal: 0,
-      parTime: 0,
-      locked: true,
-      requiredRep: TIER_UNLOCK[type],
-    };
-  });
-
-  return [...active, ...lockedStubs];
 }
