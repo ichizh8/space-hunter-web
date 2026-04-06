@@ -363,7 +363,7 @@ export class Game {
     this.map.drawStatic(this.mapGfx);
 
     // Spawn initial wave
-    this.enemies.spawnWave(15, this.player.pos, this.map);
+    this.enemies.spawnWave(30, this.player.pos, this.map);
     this.hud.showMessage('HUNT STARTED', 2);
     setTimeout(() => this.hud.showHalMessage(halSay(HAL_HUNT_START), 5), 2500);
 
@@ -1765,11 +1765,11 @@ export class Game {
 
     // Waves
     this.waveTimer -= dt;
-    if (this.waveTimer <= 0 && this.enemies.enemies.length < 50 && !this.modifierPickPending) {
+    if (this.waveTimer <= 0 && this.enemies.enemies.length < 100 && !this.modifierPickPending) {
       this.waveCount++;
-      const count = 10 + this.waveCount * 3 + Math.floor(this.elapsed / 60) * 2;
+      const count = 20 + this.waveCount * 6 + Math.floor(this.elapsed / 60) * 4;
       const prevLen = this.enemies.enemies.length;
-      this.enemies.spawnWave(Math.min(count, 30), this.player.pos, this.map);
+      this.enemies.spawnWave(Math.min(count, 60), this.player.pos, this.map);
       // Time-based enemy scaling: +10% HP per 2min, +5% speed per 3min
       const hpScale = 1 + Math.floor(this.elapsed / 120) * 0.1;
       const spdScale = 1 + Math.floor(this.elapsed / 180) * 0.05;
@@ -1779,7 +1779,7 @@ export class Game {
         e.maxHp = e.hp;
         e.speed = Math.floor(e.speed * spdScale);
       }
-      this.waveTimer = Math.max(8, 20 - this.waveCount * 1.5);
+      this.waveTimer = Math.max(6, 18 - this.waveCount * 1.5);
       this.hud.showMessage(`WAVE ${this.waveCount + 1}`, 1.5);
       if (this.halCooldown <= 0) {
         setTimeout(() => this.hud.showHalMessage(halSay(HAL_WAVE_INCOMING), 3), 600);

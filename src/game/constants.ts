@@ -20,12 +20,12 @@ export const CORR_CLEAN = 15;
 export const CORR_VALLEY = 35;
 export const CORR_CORRUPT = 60;
 
-// XP -- Godot v47 lookup table (~871 total kills to cap)
+// XP -- fast curve (~486 total kills to cap; early levels every 10-15s, max reachable in 6-7min)
 export const MAX_LEVEL = 12;
-export const XP_PER_LEVEL = [0, 5, 10, 18, 28, 42, 60, 82, 108, 138, 170, 210, 210];
+export const XP_PER_LEVEL = [0, 3, 5, 9, 14, 20, 30, 44, 60, 78, 98, 125, 125];
 
-// Post-cap stat drip: every 210 kills after cap grants one buff
-export const POST_CAP_XP = 210;
+// Post-cap stat drip: every 100 kills after cap grants one buff
+export const POST_CAP_XP = 100;
 
 // Combat
 export const ENEMY_MELEE_RANGE = 30;

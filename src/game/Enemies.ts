@@ -198,18 +198,32 @@ export class EnemySystem {
 
       switch (e.behavior) {
         case 'charge':
-          e.vel = v2mul(dirToPlayer, e.speed);
+          {
+            // Enrage below 30% HP: 40% speed boost for desperation charge
+            const rage = e.hp < e.maxHp * 0.3 ? 1.4 : 1.0;
+            // Slight weave to dodge bullets (use flankSide as weave offset)
+            e.flankTimer -= dt;
+            if (e.flankTimer <= 0) {
+              e.flankSide = (Math.random() - 0.5) * 0.25;
+              e.flankTimer = randRange(0.4, 1.0);
+            }
+            const weave = v2(-dirToPlayer.y * e.flankSide, dirToPlayer.x * e.flankSide);
+            const dir = distToPlayer > 100 ? v2norm(v2add(dirToPlayer, weave)) : dirToPlayer;
+            e.vel = v2mul(dir, e.speed * rage);
+          }
           break;
 
         case 'flank':
           e.flankTimer -= dt;
           if (e.flankTimer <= 0) {
             e.flankSide *= -1;
-            e.flankTimer = randRange(1, 2.5);
+            e.flankTimer = randRange(0.8, 2.0);
           }
           {
+            // Arc around the player: mostly perpendicular when far, close aggressively once flanked
+            const flankWeight = distToPlayer < 160 ? 0.15 : 0.75;
             const perp = v2(-dirToPlayer.y * e.flankSide, dirToPlayer.x * e.flankSide);
-            const dir = v2norm(v2add(dirToPlayer, v2mul(perp, 0.6)));
+            const dir = v2norm(v2add(v2mul(dirToPlayer, 1 - flankWeight), v2mul(perp, flankWeight)));
             e.vel = v2mul(dir, e.speed);
           }
           break;
@@ -218,44 +232,75 @@ export class EnemySystem {
           e.burstTimer -= dt;
           if (e.burstTimer <= 0) {
             e.burstActive = !e.burstActive;
-            e.burstTimer = e.burstActive ? 0.8 : randRange(1.5, 3);
+            // Faster, more frequent dashes; shorter pause
+            e.burstTimer = e.burstActive ? 0.45 : randRange(0.6, 1.8);
           }
-          e.vel = e.burstActive ? v2mul(dirToPlayer, e.speed * 2) : v2mul(e.vel, 0.9);
+          e.vel = e.burstActive ? v2mul(dirToPlayer, e.speed * 2.8) : v2mul(e.vel, 0.82);
           break;
 
         case 'strafe':
           e.strafeTimer -= dt;
           if (e.strafeTimer <= 0) {
             e.strafeDir *= -1;
-            e.strafeTimer = randRange(1, 2);
+            e.strafeTimer = randRange(0.7, 1.4);
           }
-          if (distToPlayer < 200) {
-            // Strafe and keep distance
+          if (distToPlayer < 160) {
+            // Too close: hard retreat + strafe
             const perp = v2(-dirToPlayer.y * e.strafeDir, dirToPlayer.x * e.strafeDir);
-            const retreat = v2mul(dirToPlayer, -0.3);
+            const retreat = v2mul(dirToPlayer, -1.0);
             e.vel = v2mul(v2norm(v2add(perp, retreat)), e.speed);
+          } else if (distToPlayer < 380) {
+            // Optimal range: circle aggressively while shooting
+            const perp = v2(-dirToPlayer.y * e.strafeDir, dirToPlayer.x * e.strafeDir);
+            const close = v2mul(dirToPlayer, 0.2); // slight drift inward
+            e.vel = v2mul(v2norm(v2add(perp, close)), e.speed);
           } else {
-            e.vel = v2mul(dirToPlayer, e.speed * 0.5);
+            // Too far: advance to range
+            e.vel = v2mul(dirToPlayer, e.speed * 0.7);
           }
           break;
 
         case 'pack':
-          // Move toward player but stay in a cluster
-          e.vel = v2mul(dirToPlayer, e.speed * (distToPlayer > 150 ? 1 : 0.3));
+          {
+            // Spread members across 4 quadrants to surround player; converge to attack together
+            const angleOffset = (e.id % 4) * (Math.PI / 2);
+            const packAngle = Math.atan2(dirToPlayer.y, dirToPlayer.x) + angleOffset;
+            const spreadDir = v2fromAngle(packAngle, 1);
+            if (distToPlayer > 220) {
+              // Fan out while advancing
+              const dir = v2norm(v2add(v2mul(dirToPlayer, 0.5), v2mul(spreadDir, 0.5)));
+              e.vel = v2mul(dir, e.speed);
+            } else if (distToPlayer > 100) {
+              // Converge and attack from spread angle
+              e.vel = v2mul(dirToPlayer, e.speed * 0.8);
+            } else {
+              // Swarming at close range
+              e.vel = v2mul(dirToPlayer, e.speed * 0.4);
+            }
+          }
           break;
 
         case 'lurker':
-          if (distToPlayer < 150) {
-            e.vel = v2mul(dirToPlayer, e.speed * 1.5); // Fast lunge
+          if (distToPlayer < 130) {
+            // Pounce: massive burst at close range
+            e.vel = v2mul(dirToPlayer, e.speed * 2.4);
+          } else if (distToPlayer < e.detection) {
+            // Stalk: creep silently toward player
+            e.vel = v2mul(dirToPlayer, e.speed * 0.25);
           } else {
-            e.vel = v2mul(e.vel, 0.9); // Dormant
+            e.vel = v2mul(e.vel, 0.9); // Idle
           }
           break;
 
         case 'patrol_river':
-          if (distToPlayer < 250) {
-            e.vel = v2mul(dirToPlayer, e.speed * 0.6);
+          if (distToPlayer < 300) {
+            // Actively pursue at full speed and fire
+            e.vel = v2mul(dirToPlayer, e.speed);
+          } else if (distToPlayer < e.detection) {
+            // Close to firing range
+            e.vel = v2mul(dirToPlayer, e.speed * 0.5);
           } else {
+            // Idle drift along patrol path
             e.vel = v2mul(e.vel, 0.95);
           }
           break;
