@@ -362,8 +362,11 @@ export class EnemySystem {
             e.vel = v2mul(v2fromAngle(e.lockAngle), e.speed * 2.4);
           } else {
             // Retreat or idle at safe range
-            if (distToPlayer < 280) {
+            if (distToPlayer < 240) {
               e.vel = v2mul(v2fromAngle(e.lockAngle), e.speed * 1.1);
+            } else if (distToPlayer > 380) {
+              // Too far — close back in so the burst cycle stays in range
+              e.vel = v2mul(dirToPlayer, e.speed * 0.8);
             } else {
               e.vel = v2mul(e.vel, 0.88); // hold at distance
             }
@@ -424,8 +427,8 @@ export class EnemySystem {
             if (v2dist(other.pos, e.pos) < 200) { hasNearby = true; break; }
           }
           if (!hasNearby && distToPlayer > 80) {
-            // Isolated — back off briefly
-            e.vel = v2mul(v2norm(v2sub(e.pos, player.pos)), e.speed * 0.8);
+            // Isolated — close in aggressively to rejoin the fight
+            e.vel = v2mul(dirToPlayer, e.speed * 1.2);
           } else if (distToPlayer < 70) {
             // Inside attack range — press in
             e.vel = v2mul(dirToPlayer, e.speed * 1.3);
@@ -445,8 +448,13 @@ export class EnemySystem {
           // Phase 2: retreat to a new hide spot
           e.phaseTimer -= dt;
           if (e.phase === 0) {
-            // Dormant — drift slowly, wait for player
-            e.vel = v2mul(e.vel, 0.88);
+            // Creep toward player when far; pounce when close
+            if (distToPlayer > 280) {
+              // Stalk: slow approach so lurker stays in the fight
+              e.vel = v2mul(dirToPlayer, e.speed * 0.3);
+            } else {
+              e.vel = v2mul(e.vel, 0.88); // drift/hide near player
+            }
             if (distToPlayer < 200) {
               e.phase = 1;
               e.phaseTimer = 0.25; // brief wind-up pause
@@ -484,9 +492,9 @@ export class EnemySystem {
           // Unpredictable zigzag patrol; occasionally rushes at player
           e.flankTimer -= dt;
           if (e.flankTimer <= 0) {
-            // Pick a new patrol angle with some bias toward player
+            // Pick a new patrol angle biased toward player (tighter spread so they don't wander)
             const bias = Math.atan2(toTarget.y, toTarget.x);
-            const spread = Math.PI * 0.9;
+            const spread = Math.PI * 0.4;
             e.lockAngle = bias + (Math.random() - 0.5) * spread;
             e.flankTimer = randRange(1.0, 3.0);
           }
