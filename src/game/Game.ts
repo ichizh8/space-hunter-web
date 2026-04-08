@@ -184,8 +184,8 @@ export class Game {
   // Decoys (mirage_kit)
   decoys: Array<{ x: number; y: number; hp: number; life: number; maxLife: number }> = [];
 
-  // Smoke zones (smoke_kit)
-  smokeZones: Array<{ x: number; y: number; radius: number; life: number; maxLife: number; slowing?: boolean; toxic?: boolean }> = [];
+  // Smoke zones (smoke_kit) — extended with mastery-perk fields
+  smokeZones: Array<{ x: number; y: number; radius: number; life: number; maxLife: number; slowing?: boolean; toxic?: boolean; corruptionField?: boolean; pull?: boolean; tickDamage?: number }> = [];
 
   // Gravity wells (anchor_kit)
   gravityWells: Array<{ x: number; y: number; radius: number; life: number; maxLife: number; pullSpeed: number; damageField?: boolean; explodeOnEnd?: boolean; enemiesInside?: number }> = [];
@@ -233,6 +233,10 @@ export class Game {
   ruptureDrainTimer = 2;
   voidTrailDropTimer = 0;
   familiarLeashUsed = false;
+  // Mastery perk runtime state
+  missilesFiredSinceLastBurst = 0; // multi_lock: track every 3rd missile
+  prevPlayerHp = 0;                // feedback: detect when player took damage
+  voidLatchOriginalDamage: Map<number, number> = new Map(); // void_latch: restore meleeDmg on expiry
 
   // Weapon leveling (starts at 1; perks are levels 2-5)
   weaponLevel = 1;
@@ -1373,6 +1377,15 @@ export class Game {
       }
     }
 
+    // Frenzy mastery (scatter void): each enemy within 40px increases fire rate 10%
+    if (this.hasMod('frenzy') && this.player.weaponId === 'scatter' && this.player.fireCooldown > 0) {
+      let nearCount = 0;
+      for (const e of this.enemies.enemies) {
+        if (e.hp > 0 && !e.isAlly && v2dist(this.player.pos, e.pos) < 40) nearCount++;
+      }
+      if (nearCount > 0) this.player.fireCooldown /= (1 + nearCount * 0.1);
+    }
+
     // Player update
     this.player.update(dt, this.map);
     this.peakCorruption = Math.max(this.peakCorruption, this.player.corruption);
@@ -1477,11 +1490,58 @@ export class Game {
 
     // Auto-fire when enemies in range
     if (this.player.nearestEnemyPos) {
+      const prevBulletCount = this.weapons.bullets.length;
       this.weapons.fire(this.player);
+      const newBulletCount = this.weapons.bullets.length - prevBulletCount;
+
+      // Multi-lock mastery (dart clean): every 3rd missile fires 2 simultaneously
+      if (newBulletCount > 0 && this.hasMod('multi_lock') && this.player.weaponId === 'dart') {
+        this.missilesFiredSinceLastBurst++;
+        if (this.missilesFiredSinceLastBurst >= 3) {
+          this.missilesFiredSinceLastBurst = 0;
+          const ref = this.weapons.bullets[this.weapons.bullets.length - 1];
+          if (ref) {
+            const extraAngle = Math.atan2(ref.vel.y, ref.vel.x) + randRange(-0.25, 0.25);
+            const spd = v2len(ref.vel);
+            this.weapons.bullets.push({
+              pos: v2(this.player.pos.x, this.player.pos.y),
+              vel: v2fromAngle(extraAngle, spd),
+              radius: ref.radius, color: ref.color, damage: ref.damage,
+              life: 3.0, maxLife: 3.0, piercing: false, homing: true,
+              bounces: 0, aoeRadius: 0, fromPlayer: true, hitSet: new Set(),
+            });
+          }
+        }
+      }
+
+      // Carpet Bomb mastery (grenade clean): fire 2 grenades side-by-side
+      if (newBulletCount > 0 && this.hasMod('carpet_bomb') && this.player.weaponId === 'grenade_launcher') {
+        const ref = this.weapons.bullets[this.weapons.bullets.length - 1];
+        if (ref && ref.aoeRadius > 0) {
+          const angle2 = Math.atan2(ref.vel.y, ref.vel.x) + 0.15;
+          const spd = v2len(ref.vel);
+          this.weapons.bullets.push({
+            pos: v2(this.player.pos.x, this.player.pos.y),
+            vel: v2fromAngle(angle2, spd),
+            radius: ref.radius, color: ref.color, damage: ref.damage,
+            life: ref.life, maxLife: ref.maxLife, piercing: false, homing: false,
+            bounces: 0, aoeRadius: ref.aoeRadius, fromPlayer: true, hitSet: new Set(),
+          });
+        }
+      }
     }
+
+    // Feedback mastery (scatter void): when player takes damage, heal 1 HP
+    this.prevPlayerHp = this.player.hp;
 
     // Enemies update
     this.enemies.update(dt, this.player, this.map, this.decoys.map(d => ({ x: d.x, y: d.y })));
+
+    // Feedback: detect damage taken this frame and heal it back
+    if (this.hasMod('feedback') && this.player.weaponId === 'scatter'
+        && this.player.hp < this.prevPlayerHp && this.player.hp > 0) {
+      this.player.hp = Math.min(this.player.maxHp, this.player.hp + 1);
+    }
 
     // Process elite charge impacts: screen shake + scorch mark + explosion particles
     for (const impactPos of this.enemies._pendingImpacts) {
@@ -1598,6 +1658,18 @@ export class Game {
       if (e.hp <= 0) continue;
       // Marked timer decay
       if (e.markedTimer > 0) e.markedTimer -= dt;
+      // Parasite DoT (dart void mutation) — 2 dmg/s
+      if (e.parasiteTimer > 0) {
+        e.parasiteTimer -= dt;
+        e.hp -= 2 * dt;
+        e.hitFlash = Math.max(e.hitFlash, 0.04);
+        if (e.hp <= 0) { this.onEnemyKilled(e); continue; }
+        // Restore meleeDmg when parasite expires (void_latch)
+        if (e.parasiteTimer <= 0 && this.voidLatchOriginalDamage.has(e.id)) {
+          e.meleeDmg = this.voidLatchOriginalDamage.get(e.id)!;
+          this.voidLatchOriginalDamage.delete(e.id);
+        }
+      }
       // Fragile State perk: when stun ends, mark for 2x damage 1s
       if (this.hasPerk('fragile_state') && e.stunTimer > 0 && e.stunTimer - dt <= 0) {
         e.markedTimer = 1.0;
@@ -1667,6 +1739,18 @@ export class Game {
 
     // Player bullets update
     this.weapons.update(dt, this.enemies.enemies.map(e => ({ pos: e.pos, id: e.id })));
+
+    // Swarm Chaos mastery (scatter void): pellets bounce off world walls once
+    if (this.hasMod('swarm_chaos') && this.player.weaponId === 'scatter' && this.player.mutated === 'void') {
+      for (const b of this.weapons.bullets) {
+        if (!b.fromPlayer || b.aoeRadius > 0 || b.homing || b.tag || b._wallBounced) continue;
+        const MARGIN = 5;
+        let bounced = false;
+        if (b.pos.x <= MARGIN || b.pos.x >= WORLD_W - MARGIN) { b.vel.x *= -1; bounced = true; }
+        if (b.pos.y <= MARGIN || b.pos.y >= WORLD_H - MARGIN) { b.vel.y *= -1; bounced = true; }
+        if (bounced) b._wallBounced = true;
+      }
+    }
 
     // Plasma Sword: anchor sweep to player's current position every frame
     const _PLASMA_DEG70 = 70 * Math.PI / 180;
@@ -1753,6 +1837,16 @@ export class Game {
         }
         if (dmg > 0) {
           let finalDmg = dmg;
+          // Aimed Shot mastery (lance clean): +50% damage when standing still
+          if (this.hasMod('aimed_shot') && this.player.weaponId === 'lance' && v2len(this.player.vel) < 5) {
+            finalDmg = Math.floor(finalDmg * 1.5);
+          }
+          // Vortex Damage mastery (lance void): +50% damage to enemies inside any gravity well
+          if (this.hasMod('vortex_damage')) {
+            for (const gw of this.gravityWells) {
+              if (v2dist(enemy.pos, { x: gw.x, y: gw.y }) < gw.radius) { finalDmg = Math.floor(finalDmg * 1.5); break; }
+            }
+          }
           // Marked damage bonus
           if (enemy.markedTimer > 0) finalDmg = Math.floor(finalDmg * enemy.markedDmgBonus);
           // Affix: armored halves ranged damage
@@ -1798,9 +1892,56 @@ export class Game {
           if (this.weapons.lifesteal) {
             this.player.hp = Math.min(this.player.hp + 1, this.player.maxHp);
           }
-          // Singularity on hit (lance void)
+          // Singularity on hit (lance void) — mastery perks: nested_vortex (+50% pull), void_attractor (+1s)
           if (this.weapons.singularityOnHit) {
-            this.gravityWells.push({ x: bullet.pos.x, y: bullet.pos.y, radius: 200, life: 2, maxLife: 2, pullSpeed: 120 });
+            const pullSpeed = this.hasMod('nested_vortex') ? 180 : 120;
+            const vortexLife = this.hasMod('void_attractor') ? 3 : 2;
+            this.gravityWells.push({ x: bullet.pos.x, y: bullet.pos.y, radius: 200, life: vortexLife, maxLife: vortexLife, pullSpeed });
+          }
+          // Slow Field on hit (lance clean mutation) — mastery perks: slow_field_persist (+2s), field_expand (+40px)
+          if (this.weapons.slowFieldOnLand && this.player.weaponId === 'lance') {
+            const sfLife = this.hasMod('slow_field_persist') ? 5 : 3;
+            const sfRadius = 80 + (this.hasMod('field_expand') ? 40 : 0);
+            this.smokeZones.push({ x: enemy.pos.x, y: enemy.pos.y, radius: sfRadius, life: sfLife, maxLife: sfLife, slowing: true });
+          }
+          // Stagger mastery (scatter clean): 15% chance to stun 0.5s per pellet
+          if (this.hasMod('stagger') && this.player.weaponId === 'scatter' && Math.random() < 0.15) {
+            enemy.stunTimer = Math.max(enemy.stunTimer, 0.5);
+          }
+          // Contagion mastery (scatter void): chaos pellets spread burn DoT to enemies within 80px
+          if (this.hasMod('contagion') && this.player.weaponId === 'scatter' && this.player.mutated === 'void') {
+            for (const other of this.enemies.enemies) {
+              if (other.id !== enemy.id && other.hp > 0 && !other.isAlly && v2dist(bullet.pos, other.pos) < 80) {
+                other.burnTimer = Math.max(other.burnTimer, 2);
+              }
+            }
+          }
+          // Payload mastery (dart clean): missile explodes on impact 50px AOE
+          if (this.hasMod('payload') && this.player.weaponId === 'dart' && bullet.homing) {
+            const PAYLOAD_R = 50;
+            this.explosions.push({ x: bullet.pos.x, y: bullet.pos.y, radius: 0, maxRadius: PAYLOAD_R, life: 0.3, maxLife: 0.3 });
+            for (const other of this.enemies.enemies) {
+              if (other.id !== enemy.id && other.hp > 0 && !other.isAlly && v2dist(bullet.pos, other.pos) < PAYLOAD_R) {
+                const splashDmg = Math.max(1, Math.floor(bullet.damage * 0.5));
+                other.hp -= splashDmg;
+                other.hitFlash = 0.1;
+                other.isAggroed = true;
+                this.damageDealt += splashDmg;
+                if (other.hp <= 0) this.onEnemyKilled(other);
+              }
+            }
+          }
+          // Parasite on hit (dart void mutation)
+          if (this.weapons.parasiteOnHit && this.player.weaponId === 'dart' && bullet.homing) {
+            const dur = this.weapons.parasiteDuration;
+            if (enemy.parasiteTimer <= 0) {
+              // First application: void_latch reduces meleeDmg 20%
+              if (this.hasMod('void_latch') && !this.voidLatchOriginalDamage.has(enemy.id)) {
+                this.voidLatchOriginalDamage.set(enemy.id, enemy.meleeDmg);
+                enemy.meleeDmg = Math.max(0, Math.floor(enemy.meleeDmg * 0.8));
+              }
+            }
+            enemy.parasiteTimer = Math.max(enemy.parasiteTimer, dur);
           }
           // Corruption on fire (flamethrower void)
           if (this.weapons.corruptionOnFire) {
@@ -1847,8 +1988,30 @@ export class Game {
                 other.hitFlash = 0.1;
                 other.isAggroed = true;
                 this.damageDealt += dmg;
-                if (other.hp <= 0) this.onEnemyKilled(other);
+                // Concussion mastery (grenade clean): stun 1s
+                if (this.hasMod('concussion') && this.player.weaponId === 'grenade_launcher') {
+                  other.stunTimer = Math.max(other.stunTimer, 1.0);
+                }
+                if (other.hp <= 0) {
+                  // Cascade Void mastery: enemy killed inside corruption zone spawns mini zone
+                  if (this.hasMod('cascade_void') && this.player.weaponId === 'grenade_launcher') {
+                    const inCorruptionZone = this.smokeZones.some(sz => sz.corruptionField && v2dist(other.pos, { x: sz.x, y: sz.y }) < sz.radius);
+                    if (inCorruptionZone) {
+                      this.smokeZones.push({ x: other.pos.x, y: other.pos.y, radius: 60, life: 3, maxLife: 3, corruptionField: true, tickDamage: this.hasMod('zone_damage') ? 2 : 0, pull: this.hasMod('void_pull') });
+                    }
+                  }
+                  this.onEnemyKilled(other);
+                }
               }
+            }
+            // Also stun and apply concussion to the directly-hit enemy
+            if (this.hasMod('concussion') && this.player.weaponId === 'grenade_launcher') {
+              enemy.stunTimer = Math.max(enemy.stunTimer, 1.0);
+            }
+            // Void Grenade mutation: leave corruption zone at explosion site
+            if (this.weapons.corruptionZoneOnExplode && this.player.weaponId === 'grenade_launcher') {
+              const czRadius = 80 + (this.hasMod('corr_zone_expand') ? 40 : 0);
+              this.smokeZones.push({ x: bullet.pos.x, y: bullet.pos.y, radius: czRadius, life: 5, maxLife: 5, corruptionField: true, tickDamage: this.hasMod('zone_damage') ? 2 : 0, pull: this.hasMod('void_pull') });
             }
             bullet.life = 0; // consume bullet after explosion
           }
@@ -1925,8 +2088,26 @@ export class Game {
             enemy.hitFlash = 0.1;
             enemy.isAggroed = true;
             this.damageDealt += b.damage;
-            if (enemy.hp <= 0) this.onEnemyKilled(enemy);
+            // Concussion mastery (grenade clean): stun 1s
+            if (this.hasMod('concussion') && this.player.weaponId === 'grenade_launcher') {
+              enemy.stunTimer = Math.max(enemy.stunTimer, 1.0);
+            }
+            if (enemy.hp <= 0) {
+              // Cascade Void mastery: kill inside corruption zone spawns mini zone
+              if (this.hasMod('cascade_void') && this.player.weaponId === 'grenade_launcher') {
+                const inCorruptionZone = this.smokeZones.some(sz => sz.corruptionField && v2dist(enemy.pos, { x: sz.x, y: sz.y }) < sz.radius);
+                if (inCorruptionZone) {
+                  this.smokeZones.push({ x: enemy.pos.x, y: enemy.pos.y, radius: 60, life: 3, maxLife: 3, corruptionField: true, tickDamage: this.hasMod('zone_damage') ? 2 : 0, pull: this.hasMod('void_pull') });
+                }
+              }
+              this.onEnemyKilled(enemy);
+            }
           }
+        }
+        // Void Grenade mutation: leave corruption zone at landing site
+        if (this.weapons.corruptionZoneOnExplode && this.player.weaponId === 'grenade_launcher') {
+          const czRadius = 80 + (this.hasMod('corr_zone_expand') ? 40 : 0);
+          this.smokeZones.push({ x: b.pos.x, y: b.pos.y, radius: czRadius, life: 5, maxLife: 5, corruptionField: true, tickDamage: this.hasMod('zone_damage') ? 2 : 0, pull: this.hasMod('void_pull') });
         }
       }
     }
@@ -2052,8 +2233,8 @@ export class Game {
       for (const e of this.enemies.enemies) {
         if (e.hp <= 0 || e.isAlly) continue;
         if (v2dist(e.pos, { x: sz.x, y: sz.y }) < sz.radius) {
-          // De-aggro
-          e.isAggroed = false;
+          // De-aggro (skip for pure corruption zones so they stay hostile)
+          if (!sz.corruptionField) e.isAggroed = false;
           // T2: slow enemies 40%
           if (sz.slowing) e.speed = CREATURE_DEFS[e.name]?.speed * 0.6 || e.speed * 0.6;
           // T3 void: toxic damage
@@ -2061,6 +2242,24 @@ export class Game {
             e.hp -= Math.max(1, Math.round(dt));
             e.hitFlash = 0.05;
             if (e.hp <= 0) this.onEnemyKilled(e);
+          }
+          // Corruption zone damage (zone_damage mastery / tickDamage field)
+          if (sz.corruptionField && (sz.tickDamage ?? 0) > 0) {
+            e.hp -= (sz.tickDamage!) * dt;
+            e.hitFlash = Math.max(e.hitFlash, 0.04);
+            if (e.hp <= 0) {
+              // Cascade Void: kill inside corruption zone spawns mini zone
+              if (this.hasMod('cascade_void') && this.player.weaponId === 'grenade_launcher') {
+                this.smokeZones.push({ x: e.pos.x, y: e.pos.y, radius: 60, life: 3, maxLife: 3, corruptionField: true, tickDamage: sz.tickDamage, pull: sz.pull });
+              }
+              this.onEnemyKilled(e);
+            }
+          }
+          // Void Pull mastery (grenade void): corruption zone pulls enemies inward
+          if (sz.pull) {
+            const pullDir = v2norm(v2sub({ x: sz.x, y: sz.y }, e.pos));
+            e.pos.x += pullDir.x * 60 * dt;
+            e.pos.y += pullDir.y * 60 * dt;
           }
         } else {
           // Restore speed when leaving smoke
@@ -2708,6 +2907,53 @@ export class Game {
           break;
         }
       }
+    }
+
+    // ── Mastery perk effects on kill ──
+
+    // Missile Burst mastery (dart clean): elite kill fires 2 homing missiles
+    if (!enemy.isAlly && enemy.isElite && this.hasMod('missile_burst') && this.player.weaponId === 'dart') {
+      for (let mb = 0; mb < 2; mb++) {
+        const angle = this.player.aimAngle + randRange(-0.4, 0.4);
+        this.weapons.bullets.push({
+          pos: v2(this.player.pos.x, this.player.pos.y),
+          vel: v2fromAngle(angle, 180),
+          radius: 4, color: 0x44ff66, damage: this.weapons.bonusDamage + 2,
+          life: 3.0, maxLife: 3.0, piercing: false, homing: true,
+          bounces: 0, aoeRadius: 0, fromPlayer: true, hitSet: new Set(),
+        });
+      }
+    }
+
+    // Chain Vortex mastery (lance void): killing a pulled enemy spawns a mini vortex
+    if (!enemy.isAlly && this.hasMod('chain_vortex') && this.player.weaponId === 'lance') {
+      for (const gw of this.gravityWells) {
+        if (v2dist(enemy.pos, { x: gw.x, y: gw.y }) < gw.radius) {
+          this.gravityWells.push({ x: enemy.pos.x, y: enemy.pos.y, radius: 100, life: 2, maxLife: 2, pullSpeed: 80 });
+          break;
+        }
+      }
+    }
+
+    // Rapid Spread mastery (dart void): parasitized enemy death jumps parasite to 2 nearby
+    if (!enemy.isAlly && enemy.parasiteTimer > 0 && this.hasMod('rapid_spread') && this.player.weaponId === 'dart') {
+      let spread = 2;
+      for (const other of this.enemies.enemies) {
+        if (spread <= 0) break;
+        if (other.id !== enemy.id && other.hp > 0 && !other.isAlly && other.parasiteTimer <= 0 && v2dist(enemy.pos, other.pos) < 120) {
+          other.parasiteTimer = this.weapons.parasiteDuration;
+          if (this.hasMod('void_latch') && !this.voidLatchOriginalDamage.has(other.id)) {
+            this.voidLatchOriginalDamage.set(other.id, other.meleeDmg);
+            other.meleeDmg = Math.max(0, Math.floor(other.meleeDmg * 0.8));
+          }
+          spread--;
+        }
+      }
+    }
+
+    // Toxic Cloud mastery (dart void): parasitized enemy death leaves poison cloud 3s
+    if (!enemy.isAlly && enemy.parasiteTimer > 0 && this.hasMod('toxic_cloud') && this.player.weaponId === 'dart') {
+      this.smokeZones.push({ x: enemy.pos.x, y: enemy.pos.y, radius: 60, life: 3, maxLife: 3, toxic: true });
     }
 
     // Multiplier affix: spawn 2 copies at 30% HP
@@ -3982,6 +4228,7 @@ export class Game {
       case 'mastery': {
         this.masteryTaken.push(card.id);
         this.activeModifiers.push(card.id);
+        this.applyMasteryPerk(card.id);
         this.hud.showMessage(`MASTERY: ${card.label}`, 2);
         break;
       }
@@ -4032,6 +4279,45 @@ export class Game {
         break;
       }
     }
+  }
+
+  /** Apply instant stat changes for mastery perks when picked */
+  private applyMasteryPerk(id: string) {
+    // ── SCATTER clean ──
+    if (id === 'tight_spread') { this.weapons.extraPellets += 1; this.weapons.spreadBonus += 0.08; }
+    if (id === 'glass_cannon') {
+      this.weapons.bonusDamage += 3;
+      this.player.maxHp = Math.max(1, this.player.maxHp - 2);
+      this.player.hp = Math.min(this.player.hp, this.player.maxHp);
+    }
+    if (id === 'penetrator') { this.weapons.piercingCount += 1; }
+    // stagger, feedback, swarm_chaos, contagion, frenzy — handled in update/hit loops
+
+    // ── LANCE clean ──
+    if (id === 'chain_null') { this.weapons.piercingCount += 2; }
+    // slow_field_persist, aimed_shot, field_expand — handled in update/hit loops
+
+    // ── LANCE void ──
+    // nested_vortex, vortex_damage, chain_vortex, void_attractor — handled in update/hit loops
+
+    // ── DART clean ──
+    if (id === 'tracking_plus') { this.weapons.missileTrackingMult = 1.5; }
+    if (id === 'payload') { this.weapons.missileAoeOnHit = true; }
+    // missile_burst — handled in onEnemyKilled
+    // multi_lock — handled in fire loop
+
+    // ── DART void ──
+    if (id === 'deep_parasite') { this.weapons.parasiteDuration = 6; }
+    // rapid_spread, toxic_cloud, void_latch — handled in hit/kill loops
+
+    // ── GRENADE LAUNCHER clean ──
+    if (id === 'wide_burst') { this.weapons.aoeRadiusBonus += 30; }
+    if (id === 'barrage') { this.weapons.fireRateBonus -= 0.5; } // 2.5s base * 0.2 = 0.5 reduction
+    // carpet_bomb — handled in fire loop
+    // concussion — handled in explosion loop
+
+    // ── GRENADE LAUNCHER void ──
+    // corr_zone_expand, zone_damage, void_pull, cascade_void — computed inline using hasMod()
   }
 
   /** Check if a modifier is active */

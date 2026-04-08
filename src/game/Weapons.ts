@@ -22,6 +22,7 @@ export interface Bullet {
   lineStart?: Vec2;   // line-slash endpoints (plasma_slash / laser_beam)
   lineEnd?: Vec2;
   pulseTimer?: number; // for pulse_cannon: time until next AOE pulse
+  _wallBounced?: boolean; // swarm_chaos: tracks whether this pellet has already bounced off a wall
 }
 
 export class WeaponSystem {
@@ -39,6 +40,12 @@ export class WeaponSystem {
   bounceRadiusBonus = 0;
   knockback = false;
   fragmentOnHit = false;
+  // Mastery stat bonuses
+  spreadBonus = 0;        // scatter tight_spread: narrows cone
+  aoeRadiusBonus = 0;     // grenade wide_burst: bigger explosion
+  missileTrackingMult = 1.0; // dart tracking_plus: stronger homing
+  missileAoeOnHit = false;   // dart payload: missile explodes on impact
+  parasiteDuration = 4;      // dart deep_parasite: 4s base, 6s with perk
 
   // Mutation flags
   slowFieldOnLand = false;
@@ -115,7 +122,7 @@ export class WeaponSystem {
 
       case 'scatter': {
         const count = 5 + this.extraPellets;
-        const spread = 0.4;
+        const spread = Math.max(0.05, 0.4 - this.spreadBonus); // tight_spread narrows cone
         return Array.from({ length: count }, (_, i) => {
           const a = angle - spread / 2 + (spread / (count - 1)) * i + randRange(-0.05, 0.05);
           return makeBullet(a);
@@ -194,7 +201,7 @@ export class WeaponSystem {
       }
 
       case 'arc_aoe':
-        return [makeBullet(angle, { aoeRadius: 80, life: def.range / def.bulletSpeed, radius: 4 })];
+        return [makeBullet(angle, { aoeRadius: 80 + this.aoeRadiusBonus, life: def.range / def.bulletSpeed, radius: 4 })];
 
       case 'bounce':
         return [makeBullet(angle, { bounces: 3 + this.bounceExtra, pulseTimer: 0.5 })];
@@ -221,7 +228,9 @@ export class WeaponSystem {
         const toTarget = v2norm(v2sub(nearest.pos, b.pos));
         const speed = v2len(b.vel);
         const currentDir = v2norm(b.vel);
-        const blend = v2norm(v2add(v2mul(currentDir, 0.8), v2mul(toTarget, 0.2)));
+        // tracking_plus: +50% tracking weight (0.2 -> 0.3, capped at 0.95)
+        const trackW = Math.min(0.95, 0.2 * this.missileTrackingMult);
+        const blend = v2norm(v2add(v2mul(currentDir, 1 - trackW), v2mul(toTarget, trackW)));
         b.vel = v2mul(blend, speed);
       }
 
