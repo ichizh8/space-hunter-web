@@ -376,6 +376,12 @@ export class Game {
   halHalfSaid = false;
   halNearSaid = false;
 
+  // Mastery perk runtime state
+  entropyShotCount = 0;          // stable_crit: every 5th shot crits 2x
+  corruptionBurstReady = false;  // corruption_burst: at 80+ corruption, next flame hit 5x
+  vcDrainAccum = 0;              // vc_drain: accumulate 0.5 HP per bounce
+  enemyCorruption = new Map<number, number>(); // vc_corrupt / res_aura: per-enemy corruption buildup
+
   constructor(
     app: Application,
     kits: string[],
@@ -1477,7 +1483,11 @@ export class Game {
 
     // Auto-fire when enemies in range
     if (this.player.nearestEnemyPos) {
-      this.weapons.fire(this.player);
+      const newBullets = this.weapons.fire(this.player);
+      // Track entropy cannon shot count for stable_crit
+      if (newBullets.length > 0 && this.player.weaponId === 'entropy_cannon') {
+        this.entropyShotCount++;
+      }
     }
 
     // Enemies update
@@ -1743,18 +1753,24 @@ export class Game {
         if (enemy.hp <= 0 || enemy.isAlly) continue;
         // Plasma Sword line-slash: line-segment vs circle, bypass normal circle checkHit
         let dmg: number;
+        let prevBounces = 0;
         if (bullet.tag === 'plasma_slash') {
           if (bullet.hitSet.has(enemy.id)) continue;
           if (!lineSegHitsCircle(bullet.lineStart!, bullet.lineEnd!, enemy.pos, enemy.radius + 8)) continue;
           bullet.hitSet.add(enemy.id);
           dmg = bullet.damage;
         } else {
+          prevBounces = bullet.bounces;
           dmg = this.weapons.checkHit(bullet, enemy.id, enemy.pos, enemy.radius);
         }
         if (dmg > 0) {
           let finalDmg = dmg;
           // Marked damage bonus
           if (enemy.markedTimer > 0) finalDmg = Math.floor(finalDmg * enemy.markedDmgBonus);
+          // Shatter: frozen (cryo-stunned) enemies take +50% from non-flamethrower sources
+          if (this.hasMod('shatter') && enemy.stunTimer > 0 && this.player.weaponId !== 'flamethrower') {
+            finalDmg = Math.floor(finalDmg * 1.5);
+          }
           // Affix: armored halves ranged damage
           if (enemy.affixes.includes('armored')) finalDmg = Math.max(1, Math.floor(finalDmg * 0.5));
           // Apex phase transition invulnerability
@@ -1766,10 +1782,36 @@ export class Game {
             if (enemy.shieldHp >= finalDmg) { enemy.shieldHp -= finalDmg; finalDmg = 0; }
             else { finalDmg -= enemy.shieldHp; enemy.shieldHp = 0; }
           }
-          // Entropy cannon: corruption-scaling damage always active; Resonance mutation triples the factor
+          // Entropy cannon: corruption-scaling damage always active
           if (this.player.weaponId === 'entropy_cannon') {
-            const scaleMult = this.weapons.corruptionScaling ? 3 : 1;
-            finalDmg *= (1 + scaleMult * this.player.corruption / 30);
+            // res_scaling: x4 multiplier instead of x3; base: x1 (no scaling without mutation)
+            const scaleMult = this.weapons.corruptionScaling ? (this.hasMod('res_scaling') ? 4 : 3) : 1;
+            const enemyCorr = this.enemyCorruption.get(enemy.id) ?? 0;
+            finalDmg *= (1 + scaleMult * this.player.corruption / 30) * (1 + enemyCorr * 0.02);
+            // stable_crit: every 5th shot deals 2x damage
+            if (this.hasMod('stable_crit') && this.entropyShotCount % 5 === 0 && this.entropyShotCount > 0) {
+              finalDmg *= 2;
+            }
+            // res_burst: at 80+ corruption, shots create 40px AOE
+            if (this.hasMod('res_burst') && this.player.corruption >= 80 && !bullet.hitSet.has(-998)) {
+              bullet.hitSet.add(-998);
+              this.explosions.push({ x: bullet.pos.x, y: bullet.pos.y, radius: 0, maxRadius: 40, life: 0.3, maxLife: 0.3 });
+              for (const other of this.enemies.enemies) {
+                if (other.id === enemy.id || other.isAlly || other.hp <= 0) continue;
+                if (v2dist(bullet.pos, other.pos) < 40) {
+                  other.hp -= finalDmg * 0.5;
+                  other.hitFlash = 0.1;
+                  other.isAggroed = true;
+                  this.damageDealt += finalDmg * 0.5;
+                  if (other.hp <= 0) this.onEnemyKilled(other);
+                }
+              }
+            }
+          }
+          // Flamethrower: corruption_burst — at 80+ corruption the next hit deals 5x
+          if (this.player.weaponId === 'flamethrower' && this.hasMod('corruption_burst') && this.corruptionBurstReady) {
+            finalDmg *= 5;
+            this.corruptionBurstReady = false;
           }
           // Execute threshold (sniper clean)
           if (this.weapons.executeThreshold > 0 && enemy.hp > 0 && (enemy.hp / enemy.maxHp) <= this.weapons.executeThreshold) {
@@ -1780,8 +1822,8 @@ export class Game {
           enemy.hitFlash = 0.1;
           enemy.isAggroed = true;
           this.damageDealt += dmg;
-          // Cryo stun (flamethrower clean)
-          if (this.weapons.cryoStun) enemy.stunTimer = 2.0;
+          // Cryo stun (flamethrower clean); deep_freeze upgrades duration 2s → 3s
+          if (this.weapons.cryoStun) enemy.stunTimer = this.hasMod('deep_freeze') ? 3.0 : 2.0;
           // Slow on hit (chain rifle void)
           if (this.weapons.slowOnHit && CREATURE_DEFS[enemy.name]) {
             enemy.speed = Math.max(20, CREATURE_DEFS[enemy.name].speed * 0.7);
@@ -1802,13 +1844,54 @@ export class Game {
           if (this.weapons.singularityOnHit) {
             this.gravityWells.push({ x: bullet.pos.x, y: bullet.pos.y, radius: 200, life: 2, maxLife: 2, pullSpeed: 120 });
           }
-          // Corruption on fire (flamethrower void)
+          // Corruption on fire (flamethrower void); corr_efficiency reduces gain
           if (this.weapons.corruptionOnFire) {
-            this.player.corruption = Math.min(100, this.player.corruption + 0.5);
+            const corrGain = this.hasMod('corr_efficiency') ? 0.25 : 0.5;
+            this.player.corruption = Math.min(100, this.player.corruption + corrGain);
           }
           // Flamethrower burn DoT — always active; Napalm perk upgrades from 2 to 3 dmg/s
           if (this.player.weaponId === 'flamethrower') {
             enemy.burnTimer = 3; // refresh duration; 2 dmg/s base (3 with Napalm)
+          }
+          // Pulse cannon bounce mastery effects
+          if (this.player.weaponId === 'pulse_cannon') {
+            const pulseBounced = !bullet.piercing && bullet.life > 0 && bullet.tag !== 'plasma_slash';
+            const pulseFinalHit = !bullet.piercing && bullet.life <= 0 && prevBounces === 0;
+            if (pulseBounced) {
+              // oc_damage: +2 damage per bounce
+              if (this.hasMod('oc_damage')) bullet.damage += 2;
+              // vc_corrupt: apply corruption buildup to hit enemy (base 2 from voidBounce, 5 with vc_corrupt)
+              if (this.weapons.voidBounce) {
+                const corrAmt = this.hasMod('vc_corrupt') ? 5 : 2;
+                this.enemyCorruption.set(enemy.id, (this.enemyCorruption.get(enemy.id) ?? 0) + corrAmt);
+              }
+              // vc_slow: slow enemy 20% on each bounce
+              if (this.hasMod('vc_slow') && CREATURE_DEFS[enemy.name]) {
+                enemy.speed = Math.max(20, CREATURE_DEFS[enemy.name].speed * 0.8);
+              }
+              // vc_drain: heal 0.5 HP per bounce (every 2 bounces = 1 HP)
+              if (this.hasMod('vc_drain')) {
+                this.vcDrainAccum += 0.5;
+                if (this.vcDrainAccum >= 1) {
+                  this.vcDrainAccum -= 1;
+                  this.player.hp = Math.min(this.player.hp + 1, this.player.maxHp);
+                }
+              }
+            }
+            // oc_chain: final bounce creates 40px AOE explosion
+            if (pulseFinalHit && this.hasMod('oc_chain')) {
+              this.explosions.push({ x: bullet.pos.x, y: bullet.pos.y, radius: 0, maxRadius: 40, life: 0.35, maxLife: 0.35 });
+              for (const other of this.enemies.enemies) {
+                if (other.id === enemy.id || other.isAlly || other.hp <= 0) continue;
+                if (v2dist(bullet.pos, other.pos) < 40) {
+                  other.hp -= bullet.damage;
+                  other.hitFlash = 0.1;
+                  other.isAggroed = true;
+                  this.damageDealt += bullet.damage;
+                  if (other.hp <= 0) this.onEnemyKilled(other);
+                }
+              }
+            }
           }
           // Conductor perk: ricochet off stunned enemies
           if (this.hasPerk('conductor') && enemy.stunTimer > 0 && !(bullet as unknown as { ricocheted?: boolean }).ricocheted) {
@@ -1904,6 +1987,24 @@ export class Game {
         enemy.hitFlash = Math.max(enemy.hitFlash, 0.05);
         if (enemy.hp <= 0) this.onEnemyKilled(enemy);
       }
+    }
+
+    // Mastery per-frame effects
+    // cryo_aura: enemies within 80px of a frozen (cryo-stunned) enemy are slowed 30%
+    if (this.hasMod('cryo_aura')) {
+      for (const e of this.enemies.enemies) {
+        if (e.stunTimer <= 0 || e.isAlly) continue;
+        for (const other of this.enemies.enemies) {
+          if (other.id === e.id || other.isAlly || other.hp <= 0 || other.stunTimer > 0) continue;
+          if (v2dist(e.pos, other.pos) < 80 && CREATURE_DEFS[other.name]) {
+            other.speed = Math.max(20, CREATURE_DEFS[other.name].speed * 0.7);
+          }
+        }
+      }
+    }
+    // corruption_burst: arm the burst flag whenever player corruption >= 80 (resets on use)
+    if (this.hasMod('corruption_burst') && this.player.weaponId === 'flamethrower' && this.player.corruption >= 80) {
+      this.corruptionBurstReady = true;
     }
 
     // Remove dead enemies
@@ -2764,6 +2865,28 @@ export class Game {
     if (this.hasMod('momentum')) {
       this.momentumHits++;
     }
+
+    // Mastery perk kill effects
+    // siphon: flame kill restores 1 HP (enemy still burning)
+    if (this.hasMod('siphon') && enemy.burnTimer > 0 && this.player.weaponId === 'flamethrower') {
+      this.player.hp = Math.min(this.player.hp + 1, this.player.maxHp);
+    }
+    // res_leech: entropy cannon kill at 60+ corruption heals 1 HP
+    if (this.hasMod('res_leech') && this.player.weaponId === 'entropy_cannon' && this.player.corruption >= 60) {
+      this.player.hp = Math.min(this.player.hp + 1, this.player.maxHp);
+    }
+    // res_aura: entropy cannon kill spreads 5 corruption buildup to nearby enemies within 100px
+    if (this.hasMod('res_aura') && this.player.weaponId === 'entropy_cannon') {
+      for (const other of this.enemies.enemies) {
+        if (other.id === enemy.id || other.isAlly || other.hp <= 0) continue;
+        if (v2dist(enemy.pos, other.pos) < 100) {
+          this.enemyCorruption.set(other.id, (this.enemyCorruption.get(other.id) ?? 0) + 5);
+        }
+      }
+    }
+    // Clean up enemy corruption tracking on death
+    this.enemyCorruption.delete(enemy.id);
+
 
     // HAL: first kill
     if (this.totalKills === 1 && this.halCooldown <= 0) {
@@ -3982,6 +4105,15 @@ export class Game {
       case 'mastery': {
         this.masteryTaken.push(card.id);
         this.activeModifiers.push(card.id);
+        // Stat-modifying mastery perks applied at pick time
+        if (card.id === 'cryo_range') this.weapons.rangeBonus += 40;
+        if (card.id === 'void_flames') this.weapons.piercingCount += 1; // flame particles pierce 1 enemy
+        if (card.id === 'stable_focus') this.weapons.fireRateBonus -= 0.012; // ~15% faster (base 0.08s)
+        if (card.id === 'stable_pierce') this.weapons.piercingCount += 2;
+        if (card.id === 'stable_range') this.weapons.rangeBonus += 60;
+        if (card.id === 'oc_speed') this.weapons.bulletSpeedBonus += 35; // 25% of base 140
+        if (card.id === 'oc_range') this.weapons.rangeBonus += 80;
+        if (card.id === 'vc_extra') this.weapons.bounceExtra += 2;
         this.hud.showMessage(`MASTERY: ${card.label}`, 2);
         break;
       }
