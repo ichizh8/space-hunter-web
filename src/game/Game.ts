@@ -234,6 +234,16 @@ export class Game {
   voidTrailDropTimer = 0;
   familiarLeashUsed = false;
 
+  // Baton mastery state
+  batonHitTimes: number[] = [];   // static_charge: track hit timestamps for 3-in-3s trigger
+  batonDrainCounter = 0;          // deep_drain: accumulate drained-enemy count for heal
+  batonVortices: Array<{ x: number; y: number; currentRadius: number; maxRadius: number; life: number; maxLife: number; shockwaveFired: boolean }> = [];
+
+  // Resonance runtime state
+  lastFlashTrapPos: { x: number; y: number } | null = null;
+  droneOverchargeTimer = 0;
+  turretFamiliarHealTimer = 5;
+
   // Weapon leveling (starts at 1; perks are levels 2-5)
   weaponLevel = 1;
   weaponPerkPending = false;
@@ -1020,6 +1030,8 @@ export class Game {
         // Fragile State perk: enemies emerging from stun take 2x (marked in enemy update)
         this.explosions.push({ x: this.player.pos.x, y: this.player.pos.y, radius: 0, maxRadius: 120, life: 0.5, maxLife: 0.5, type: 'flash' });
         this.screenFlash = 0.35;
+        // Save trap position for resonance combos (linked_fuse, trap_aggro)
+        this.lastFlashTrapPos = { x: this.player.pos.x, y: this.player.pos.y };
         break;
       }
       case 'blink_kit': {
@@ -1087,6 +1099,15 @@ export class Game {
             swapEnemy.pos.x = oldPos.x;
             swapEnemy.pos.y = oldPos.y;
           }
+        }
+        // linked_fuse: override blink destination to last triggered flash_trap position
+        if (this.hasMod('linked_fuse') && this.lastFlashTrapPos) {
+          this.player.pos.x = Math.max(0, Math.min(WORLD_W, this.lastFlashTrapPos.x));
+          this.player.pos.y = Math.max(0, Math.min(WORLD_H, this.lastFlashTrapPos.y));
+        }
+        // smoke_blink: drop smoke cloud at blink landing point
+        if (this.hasMod('smoke_blink')) {
+          this.smokeZones.push({ x: this.player.pos.x, y: this.player.pos.y, radius: 150, life: 6, maxLife: 6 });
         }
         break;
       }
@@ -1241,6 +1262,11 @@ export class Game {
           this.player.corruption -= surgeCost;
           this.voidSurgeActive = true;
           this.voidSurgeTimer = 3;
+          // surge_charge: void surge resets charge_kit cooldown instantly
+          if (this.hasMod('surge_charge') && this.equippedKits.includes('charge_kit')) {
+            this.kitCooldowns['charge_kit'] = 0;
+            this.hud.showMessage('CHARGE READY!', 1.5);
+          }
           // T3 void: fire ring of 8 bullets
           if (tier >= 3 && t3Choice === 'void') {
             for (let bi = 0; bi < 8; bi++) {
@@ -1297,6 +1323,11 @@ export class Game {
           }
         }
         this.player.corruption = 0;
+        // void_feedback: rupture instantly recharges void_surge
+        if (this.hasMod('void_feedback') && this.equippedKits.includes('void_surge')) {
+          this.kitCooldowns['void_surge'] = 0;
+          this.hud.showMessage('VOID SURGE READY!', 1.5);
+        }
         break;
       }
       default:
@@ -1477,7 +1508,23 @@ export class Game {
 
     // Auto-fire when enemies in range
     if (this.player.nearestEnemyPos) {
-      this.weapons.fire(this.player);
+      const firedBullets = this.weapons.fire(this.player);
+      // sympathetic_fire: drone fires immediately when player fires (not on timer)
+      if (firedBullets.length > 0 && this.droneActive && this.hasMod('sympathetic_fire')) {
+        let sfBest = 300; let sfTarget: Enemy | null = null;
+        for (const e of this.enemies.enemies) {
+          if (e.hp <= 0 || e.isAlly) continue;
+          const d = v2dist(this.dronePos, e.pos);
+          if (d < sfBest) { sfBest = d; sfTarget = e; }
+        }
+        if (sfTarget) {
+          sfTarget.hp -= 2;
+          sfTarget.hitFlash = 0.15;
+          this.damageDealt += 2;
+          if (sfTarget.hp <= 0) this.onEnemyKilled(sfTarget);
+          this.explosions.push({ x: this.dronePos.x, y: this.dronePos.y, radius: 0, maxRadius: 8, life: 0.1, maxLife: 0.1 });
+        }
+      }
     }
 
     // Enemies update
@@ -1677,7 +1724,7 @@ export class Game {
         b.pos.y = this.player.pos.y;
         const progress = 1 - (b.life / b.maxLife);
         const sweepAngle = b.aimAngle - _PLASMA_DEG70 + progress * (_PLASMA_DEG70 * 2);
-        const outerDist = 110 + this.weapons.radiusBonus;
+        const outerDist = 110 + this.weapons.radiusBonus + (this.hasMod('wide_arc') ? 40 : 0);
         b.lineStart = v2(b.pos.x + Math.cos(sweepAngle) * 15, b.pos.y + Math.sin(sweepAngle) * 15);
         b.lineEnd   = v2(b.pos.x + Math.cos(sweepAngle) * outerDist, b.pos.y + Math.sin(sweepAngle) * outerDist);
       }
@@ -1793,8 +1840,66 @@ export class Game {
             enemy.pos.x += kbDir.x * kbDist;
             enemy.pos.y += kbDir.y * kbDist;
             if (this.weapons.knockback) enemy.stunTimer = Math.max(enemy.stunTimer, 0.5);
+
+            // Arc field on hit (baton clean mutation: Arc Blade)
+            if (this.weapons.slowFieldOnLand) {
+              const fieldDur = this.hasMod('field_persist') ? 5 : 3;
+              this.smokeZones.push({ x: enemy.pos.x, y: enemy.pos.y, radius: 80, life: fieldDur, maxLife: fieldDur, slowing: true });
+              // field_chain: jump damage to nearest other enemy within 120px
+              if (this.hasMod('field_chain')) {
+                let fcBest = 120; let fcTarget: Enemy | null = null;
+                for (const other of this.enemies.enemies) {
+                  if (other === enemy || other.hp <= 0 || other.isAlly) continue;
+                  const fcD = v2dist(enemy.pos, other.pos);
+                  if (fcD < fcBest) { fcBest = fcD; fcTarget = other; }
+                }
+                if (fcTarget) {
+                  const jumpDmg = Math.max(1, Math.floor(bullet.damage * 0.5));
+                  fcTarget.hp -= jumpDmg;
+                  fcTarget.hitFlash = 0.1;
+                  this.damageDealt += jumpDmg;
+                  if (fcTarget.hp <= 0) this.onEnemyKilled(fcTarget);
+                }
+              }
+            }
+
+            // Void vortex spawn on hit (baton void mutation: Consuming Vortex)
+            if (this.weapons.lifesteal) {
+              const vortexLife = this.hasMod('vortex_speed') ? 1.0 : 1.5;
+              this.batonVortices.push({ x: enemy.pos.x, y: enemy.pos.y, currentRadius: 0, maxRadius: 80, life: vortexLife, maxLife: vortexLife, shockwaveFired: false });
+            }
+
+            // deep_drain: heal 1 HP per 2 enemies hit/drained
+            if (this.hasMod('deep_drain')) {
+              this.batonDrainCounter++;
+              if (this.batonDrainCounter >= 2) {
+                this.batonDrainCounter -= 2;
+                this.player.hp = Math.min(this.player.hp + 1, this.player.maxHp);
+              }
+            }
+
+            // static_charge: 3rd hit in 3s fires free AOE pulse at player
+            if (this.hasMod('static_charge')) {
+              this.batonHitTimes.push(this.elapsed);
+              this.batonHitTimes = this.batonHitTimes.filter(t => this.elapsed - t <= 3);
+              if (this.batonHitTimes.length >= 3) {
+                this.batonHitTimes = [];
+                const SC_RADIUS = 80;
+                this.explosions.push({ x: this.player.pos.x, y: this.player.pos.y, radius: 0, maxRadius: SC_RADIUS, life: 0.35, maxLife: 0.35 });
+                for (const other of this.enemies.enemies) {
+                  if (other.hp <= 0 || other.isAlly) continue;
+                  if (v2dist(this.player.pos, other.pos) < SC_RADIUS) {
+                    other.hp -= 3;
+                    other.hitFlash = 0.2;
+                    this.damageDealt += 3;
+                    if (other.hp <= 0) this.onEnemyKilled(other);
+                  }
+                }
+                this.hud.showMessage('STATIC CHARGE!', 1);
+              }
+            }
           }
-          // Lifesteal (baton void)
+          // Lifesteal (baton void) — base per-hit heal
           if (this.weapons.lifesteal) {
             this.player.hp = Math.min(this.player.hp + 1, this.player.maxHp);
           }
@@ -1993,6 +2098,16 @@ export class Game {
         }
       }
     }
+    // turret_familiar: heal player 1 HP / 5s while turret AND familiar are both active
+    if (this.hasMod('turret_familiar') && this.familiarActive && this.turrets.length > 0) {
+      this.turretFamiliarHealTimer -= dt;
+      if (this.turretFamiliarHealTimer <= 0) {
+        this.turretFamiliarHealTimer = 5;
+        this.player.hp = Math.min(this.player.hp + 1, this.player.maxHp);
+      }
+    } else {
+      this.turretFamiliarHealTimer = Math.min(this.turretFamiliarHealTimer + dt, 5);
+    }
 
     // Update decoys
     for (let i = this.decoys.length - 1; i >= 0; i--) {
@@ -2001,6 +2116,15 @@ export class Game {
       if (dc.life <= 0 || dc.hp <= 0) {
         this.decoys.splice(i, 1);
         continue;
+      }
+      // trap_aggro: decoy auto-moves toward last flash trap position
+      if (this.hasMod('trap_aggro') && this.lastFlashTrapPos) {
+        const trapD = v2dist({ x: dc.x, y: dc.y }, this.lastFlashTrapPos);
+        if (trapD > 20) {
+          const trapDir = v2norm(v2sub(this.lastFlashTrapPos, { x: dc.x, y: dc.y }));
+          dc.x += trapDir.x * 80 * dt;
+          dc.y += trapDir.y * 80 * dt;
+        }
       }
       // Magnet Decoy perk: pull enemies within 120px
       if (this.hasPerk('magnet_decoy')) {
@@ -2089,6 +2213,10 @@ export class Game {
           }
           this.explosions.push({ x: gwEnd.x, y: gwEnd.y, radius: 0, maxRadius: gwEnd.radius * 0.5, life: 0.3, maxLife: 0.3 });
         }
+        // overcharge_drone: drone fires 2x faster for 5s after anchor expires
+        if (this.hasMod('overcharge_drone') && this.droneActive) {
+          this.droneOverchargeTimer = 5;
+        }
         this.gravityWells.splice(i, 1);
         continue;
       }
@@ -2098,9 +2226,11 @@ export class Game {
         if (e.hp <= 0 || e.isAlly) continue;
         const d = v2dist(e.pos, { x: gw.x, y: gw.y });
         if (d < gw.radius && d > 5) {
+          // chain_anchor: tethered (chain-stunned) enemies pulled 2x faster
+          const pullForce = (this.hasMod('chain_anchor') && e.stunTimer > 0) ? gw.pullSpeed * 2 : gw.pullSpeed;
           const pullDir = v2norm(v2sub({ x: gw.x, y: gw.y }, e.pos));
-          e.pos.x += pullDir.x * gw.pullSpeed * dt;
-          e.pos.y += pullDir.y * gw.pullSpeed * dt;
+          e.pos.x += pullDir.x * pullForce * dt;
+          e.pos.y += pullDir.y * pullForce * dt;
           enemyCount++;
           // T3 clean: damage field
           if (gw.damageField) {
@@ -2112,15 +2242,52 @@ export class Game {
       gw.enemiesInside = Math.max(gw.enemiesInside || 0, enemyCount);
     }
 
+    // Update baton vortices (Consuming Vortex mutation + mastery perks)
+    for (let i = this.batonVortices.length - 1; i >= 0; i--) {
+      const vt = this.batonVortices[i];
+      vt.life -= dt;
+      if (vt.life <= 0) { this.batonVortices.splice(i, 1); continue; }
+      const vtProgress = 1 - (vt.life / vt.maxLife);
+      vt.currentRadius = vt.maxRadius * vtProgress;
+      for (const e of this.enemies.enemies) {
+        if (e.hp <= 0 || e.isAlly) continue;
+        const vd = v2dist(e.pos, { x: vt.x, y: vt.y });
+        if (vd < vt.currentRadius && vd > 5) {
+          // hunger_field: pull enemies toward vortex center
+          if (this.hasMod('hunger_field')) {
+            const vtPull = v2norm(v2sub({ x: vt.x, y: vt.y }, e.pos));
+            e.pos.x += vtPull.x * 60 * dt;
+            e.pos.y += vtPull.y * 60 * dt;
+          }
+        }
+      }
+      // overload_void: shockwave when vortex reaches max size
+      if (!vt.shockwaveFired && vtProgress >= 0.95 && this.hasMod('overload_void')) {
+        vt.shockwaveFired = true;
+        const shockR = vt.maxRadius * 1.5;
+        this.explosions.push({ x: vt.x, y: vt.y, radius: 0, maxRadius: shockR, life: 0.3, maxLife: 0.3 });
+        for (const e of this.enemies.enemies) {
+          if (e.hp <= 0 || e.isAlly) continue;
+          if (v2dist(e.pos, { x: vt.x, y: vt.y }) < shockR) {
+            e.hp -= 4;
+            e.hitFlash = 0.2;
+            this.damageDealt += 4;
+            if (e.hp <= 0) this.onEnemyKilled(e);
+          }
+        }
+      }
+    }
+
     // Update drone
     if (this.droneActive) {
       const orbitAngle = this.elapsed * 2.0 % (Math.PI * 2);
       this.dronePos = { x: this.player.pos.x + Math.cos(orbitAngle) * 50, y: this.player.pos.y + Math.sin(orbitAngle) * 50 };
       this.droneInterceptTimer = Math.max(0, this.droneInterceptTimer - dt);
+      if (this.droneOverchargeTimer > 0) this.droneOverchargeTimer -= dt;
       // Drone attack
       this.droneFireTimer -= dt;
       if (this.droneFireTimer <= 0) {
-        this.droneFireTimer = 2.5;
+        this.droneFireTimer = (this.droneOverchargeTimer > 0) ? 1.25 : 2.5;
         let droneBestDist = 200;
         let droneBestEnemy: Enemy | null = null;
         for (const e of this.enemies.enemies) {
@@ -2266,6 +2433,13 @@ export class Game {
         }
         case 'delivering': {
           this.applyFamiliarBuff(this.familiarBuffToken, durationMult);
+          // familiar_bond: buff summoned pack allies +30% speed on delivery
+          if (this.hasMod('familiar_bond')) {
+            for (const e of this.enemies.enemies) {
+              if (!e.isAlly) continue;
+              e.speed = Math.min(e.speed * 1.3, 210);
+            }
+          }
           this.familiarGlowColor = 0x9933ff;
           this.familiarCooldown = cooldownTime;
           this.familiarState = 'idle';
