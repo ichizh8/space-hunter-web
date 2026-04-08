@@ -133,14 +133,15 @@ export class EnemySystem {
       do {
         pos = v2(randRange(100, WORLD_W - 100), randRange(100, WORLD_H - 100));
         attempts++;
-      } while (v2dist(pos, playerPos) < 600 && attempts < 30);
+      } while (v2dist(pos, playerPos) < 500 && attempts < 30);
 
       // Pick creature from biome pool
       const spawnBiome = biome || map.getBiome(pos.x, pos.y);
       const pool = BIOME_POOLS[spawnBiome] || BIOME_POOLS.open;
       const name = pick(pool);
       const def = CREATURE_DEFS[name];
-      const aggroed = Math.random() < 0.6;
+      // All wave enemies start aggroed -- they exist to fight, not to idle
+      const aggroed = true;
 
       if (def?.behavior === 'pack') {
         // Spawn a cluster of 3-5 pack enemies together
@@ -150,13 +151,19 @@ export class EnemySystem {
             (Math.random() - 0.5) * 80,
             (Math.random() - 0.5) * 80,
           );
-          this.enemies.push(createEnemy(name, v2add(pos, offset), aggroed));
+          const packEnemy = createEnemy(name, v2add(pos, offset), aggroed);
+          // Leash from player position so enemies can always close the gap
+          packEnemy.aggroOrigin = v2(playerPos.x, playerPos.y);
+          this.enemies.push(packEnemy);
         }
         // Spawning a pack counts as one wave slot; skip remaining pack members
         continue;
       }
 
-      this.enemies.push(createEnemy(name, pos, aggroed));
+      const enemy = createEnemy(name, pos, aggroed);
+      // Leash measured from player position so far spawns always pursue
+      enemy.aggroOrigin = v2(playerPos.x, playerPos.y);
+      this.enemies.push(enemy);
     }
   }
 
@@ -230,6 +237,12 @@ export class EnemySystem {
       // Aggro check
       if (!e.isAggroed && (distToPlayer < e.detection || allyTargetDist < e.detection)) {
         e.isAggroed = true;
+        e.aggroOrigin = v2(player.pos.x, player.pos.y);
+      }
+
+      // Refresh aggroOrigin when enemy can see the player — prevents leash expiring mid-chase
+      if (e.isAggroed && distToPlayer < e.detection) {
+        e.aggroOrigin = v2(player.pos.x, player.pos.y);
       }
 
       // Leash check (elites never de-aggro)

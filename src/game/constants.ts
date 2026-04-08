@@ -29,7 +29,7 @@ export const POST_CAP_XP = 80;
 
 // Combat
 export const ENEMY_MELEE_RANGE = 30;
-export const ENEMY_LEASH_DEFAULT = 600;
+export const ENEMY_LEASH_DEFAULT = 1500;
 export const BULLET_MAX_COUNT = 200;
 
 // Waves
