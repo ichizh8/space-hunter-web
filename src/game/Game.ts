@@ -1530,7 +1530,6 @@ export class Game {
 
     // Auto-fire when enemies in range
     if (this.player.nearestEnemyPos) {
-<<<<<<< HEAD
       // killcam mastery: skip fire cooldown for next shot after a sidearm kill
       if (this.hasMod('killcam') && this.killcamReady && this.player.weaponId === 'sidearm') {
         this.player.fireCooldown = 0;
@@ -1609,10 +1608,10 @@ export class Game {
             life: ref.life, maxLife: ref.maxLife, piercing: false, homing: false,
             bounces: 0, aoeRadius: ref.aoeRadius, fromPlayer: true, hitSet: new Set(),
           });
-=======
-      const firedBullets = this.weapons.fire(this.player);
+        }
+      }
       // sympathetic_fire: drone fires immediately when player fires (not on timer)
-      if (firedBullets.length > 0 && this.droneActive && this.hasMod('sympathetic_fire')) {
+      if (_fired.length > 0 && this.droneActive && this.hasMod('sympathetic_fire')) {
         let sfBest = 300; let sfTarget: Enemy | null = null;
         for (const e of this.enemies.enemies) {
           if (e.hp <= 0 || e.isAlly) continue;
@@ -1625,7 +1624,6 @@ export class Game {
           this.damageDealt += 2;
           if (sfTarget.hp <= 0) this.onEnemyKilled(sfTarget);
           this.explosions.push({ x: this.dronePos.x, y: this.dronePos.y, radius: 0, maxRadius: 8, life: 0.1, maxLife: 0.1 });
->>>>>>> claude/brave-keller
         }
       }
     }
