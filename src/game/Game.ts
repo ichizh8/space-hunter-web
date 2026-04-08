@@ -185,7 +185,7 @@ export class Game {
   decoys: Array<{ x: number; y: number; hp: number; life: number; maxLife: number }> = [];
 
   // Smoke zones (smoke_kit)
-  smokeZones: Array<{ x: number; y: number; radius: number; life: number; maxLife: number; slowing?: boolean; toxic?: boolean }> = [];
+  smokeZones: Array<{ x: number; y: number; radius: number; life: number; maxLife: number; slowing?: boolean; toxic?: boolean; corrupting?: boolean }> = [];
 
   // Gravity wells (anchor_kit)
   gravityWells: Array<{ x: number; y: number; radius: number; life: number; maxLife: number; pullSpeed: number; damageField?: boolean; explodeOnEnd?: boolean; enemiesInside?: number }> = [];
@@ -375,6 +375,11 @@ export class Game {
   halKillsSinceStreak = 0;
   halHalfSaid = false;
   halNearSaid = false;
+
+  // Mastery perk runtime state
+  killcamReady = false;        // killcam: skip cooldown on next sidearm shot after a kill
+  sidearmShotCount = 0;        // overheat: fires extra fragments on every 10th sidearm shot
+  chainRifleShotCount = 0;     // pm_crit: crit every 5th shot; sp_burst: AOE slow every 20th
 
   constructor(
     app: Application,
@@ -1477,7 +1482,46 @@ export class Game {
 
     // Auto-fire when enemies in range
     if (this.player.nearestEnemyPos) {
-      this.weapons.fire(this.player);
+      // killcam mastery: skip fire cooldown for next shot after a sidearm kill
+      if (this.hasMod('killcam') && this.killcamReady && this.player.weaponId === 'sidearm') {
+        this.player.fireCooldown = 0;
+        this.killcamReady = false;
+      }
+      const _fired = this.weapons.fire(this.player);
+      if (_fired.length > 0) {
+        // overheat mastery: every 10th sidearm shot auto-fires an extra fragment burst
+        if (this.player.weaponId === 'sidearm' && this.hasMod('overheat')) {
+          this.sidearmShotCount++;
+          if (this.sidearmShotCount % 10 === 0) {
+            const ang = this.player.aimAngle;
+            for (let _i = 0; _i < 5; _i++) {
+              const a = ang + (Math.random() - 0.5) * 1.5;
+              this.weapons.bullets.push({
+                pos: { x: this.player.pos.x, y: this.player.pos.y },
+                vel: { x: Math.cos(a) * 280, y: Math.sin(a) * 280 },
+                radius: 3, color: 0xaa44ff, damage: 2,
+                life: 0.5, maxLife: 0.5,
+                piercing: false, homing: this.hasMod('fragment_magnet'), bounces: 0, aoeRadius: 0,
+                fromPlayer: true, hitSet: new Set(), tag: 'fragment',
+              });
+            }
+          }
+        }
+        // chain rifle shot counting for pm_crit and sp_burst
+        if (this.player.weaponId === 'chain_rifle') {
+          this.chainRifleShotCount++;
+          // pm_crit mastery: every 5th precision-mode shot crits (2x damage)
+          if (this.hasMod('pm_crit') && this.player.mutated === 'clean' && this.chainRifleShotCount % 5 === 0) {
+            for (const b of _fired) b.damage *= 2;
+          }
+          // sp_burst mastery: every 20th suppressor bullet creates 100px AOE slow zone
+          if (this.hasMod('sp_burst') && this.player.mutated === 'void' && this.chainRifleShotCount % 20 === 0) {
+            const b0 = _fired[0];
+            this.smokeZones.push({ x: b0.pos.x, y: b0.pos.y, radius: 100, life: 2, maxLife: 2, slowing: true } as typeof this.smokeZones[number]);
+            this.explosions.push({ x: b0.pos.x, y: b0.pos.y, radius: 0, maxRadius: 100, life: 0.4, maxLife: 0.4 });
+          }
+        }
+      }
     }
 
     // Enemies update
@@ -1612,6 +1656,15 @@ export class Game {
           e.pos.y += dragDir.y * 20 * dt;
         }
       }
+      // sp_corrupt mastery: chain rifle void slowed enemies take 3 dmg/s corruption DoT
+      if (this.hasMod('sp_corrupt') && this.player.weaponId === 'chain_rifle' && this.player.mutated === 'void' && !e.isAlly) {
+        const _baseSpd2 = CREATURE_DEFS[e.name]?.speed ?? e.speed;
+        if (e.speed < _baseSpd2 * 0.95) {
+          e.hp -= 3 * dt;
+          e.hitFlash = Math.max(e.hitFlash, 0.05);
+          if (e.hp <= 0) this.onEnemyKilled(e);
+        }
+      }
       // Skip affix processing for non-elites
       if (e.affixes.length === 0) continue;
       // Teleporter: blink toward player every 8s
@@ -1667,6 +1720,22 @@ export class Game {
 
     // Player bullets update
     this.weapons.update(dt, this.enemies.enemies.map(e => ({ pos: e.pos, id: e.id })));
+
+    // vs_trail/vs_slow mastery: sniper void bullet drops corruption trail zones each frame
+    if (this.player.weaponId === 'sniper_carbine' && this.player.mutated === 'void') {
+      const trailLife = this.hasMod('vs_trail') ? 4 : 2;
+      const trailSlowing = this.hasMod('vs_slow');
+      for (const _tb of this.weapons.bullets) {
+        if (_tb.tag !== 'sniper_trail') continue;
+        if (Math.random() < 0.25) { // ~15 zones/s at 60fps — sparse enough to avoid spam
+          this.smokeZones.push({
+            x: _tb.pos.x, y: _tb.pos.y, radius: 22,
+            life: trailLife, maxLife: trailLife,
+            slowing: trailSlowing, corrupting: true,
+          } as typeof this.smokeZones[number]);
+        }
+      }
+    }
 
     // Plasma Sword: anchor sweep to player's current position every frame
     const _PLASMA_DEG70 = 70 * Math.PI / 180;
@@ -1725,16 +1794,39 @@ export class Game {
           bullet.lineEnd = v2(nearestEnemy.pos.x - dir.x * nearestEnemy.radius, nearestEnemy.pos.y - dir.y * nearestEnemy.radius);
           let finalDmg = bullet.damage;
           if (nearestEnemy.markedTimer > 0) finalDmg = Math.floor(finalDmg * nearestEnemy.markedDmgBonus);
-          if (nearestEnemy.affixes.includes('armored')) finalDmg = Math.max(1, Math.floor(finalDmg * 0.5));
+          // headhunter mastery: +50% damage vs elites for sidearm
+          if (this.hasMod('headhunter') && nearestEnemy.isElite) finalDmg = Math.floor(finalDmg * 1.5);
+          // armor_pierce mastery: sidearm shots ignore the 'armored' affix
+          if (nearestEnemy.affixes.includes('armored') && !this.hasMod('armor_pierce')) finalDmg = Math.max(1, Math.floor(finalDmg * 0.5));
           if (nearestEnemy.affixes.includes('shielded') && nearestEnemy.shieldHp > 0) {
             if (nearestEnemy.shieldHp >= finalDmg) { nearestEnemy.shieldHp -= finalDmg; finalDmg = 0; }
             else { finalDmg -= nearestEnemy.shieldHp; nearestEnemy.shieldHp = 0; }
           }
           nearestEnemy.hp -= finalDmg;
           nearestEnemy.hitFlash = 0.1;
-          nearestEnemy.isAggroed = true;
+          // suppressor mastery: sidearm shots don't aggro undetected enemies
+          if (!this.hasMod('suppressor') || nearestEnemy.isAggroed) nearestEnemy.isAggroed = true;
           this.damageDealt += bullet.damage;
-          if (nearestEnemy.hp <= 0) this.onEnemyKilled(nearestEnemy);
+          if (nearestEnemy.hp <= 0) {
+            this.onEnemyKilled(nearestEnemy);
+            // killcam mastery: next shot fires instantly after a sidearm kill
+            if (this.hasMod('killcam')) this.killcamReady = true;
+          }
+          // Entropy Gun (void sidearm) fragment spawn on hit
+          if (this.weapons.fragmentOnHit) {
+            const hitAngle = Math.atan2(nearestEnemy.pos.y - bullet.lineStart!.y, nearestEnemy.pos.x - bullet.lineStart!.x);
+            for (let _fi = 0; _fi < 3; _fi++) {
+              const fa = hitAngle + (Math.random() - 0.5) * Math.PI;
+              this.weapons.bullets.push({
+                pos: { x: nearestEnemy.pos.x, y: nearestEnemy.pos.y },
+                vel: { x: Math.cos(fa) * 240, y: Math.sin(fa) * 240 },
+                radius: 3, color: 0x9933ff, damage: Math.max(1, Math.floor(bullet.damage * 0.4)),
+                life: 0.45, maxLife: 0.45,
+                piercing: false, homing: this.hasMod('fragment_magnet'), bounces: 0, aoeRadius: 0,
+                fromPlayer: true, hitSet: new Set(), tag: 'fragment',
+              });
+            }
+          }
         }
         continue;
       }
@@ -1771,6 +1863,17 @@ export class Game {
             const scaleMult = this.weapons.corruptionScaling ? 3 : 1;
             finalDmg *= (1 + scaleMult * this.player.corruption / 30);
           }
+          // vs_damage mastery: sniper void shots deal +4 damage to enemies inside corruption trail
+          if (this.hasMod('vs_damage') && bullet.tag === 'sniper_trail') {
+            if (this.smokeZones.some(sz => sz.corrupting && v2dist(enemy.pos, { x: sz.x, y: sz.y }) < sz.radius)) {
+              finalDmg += 4;
+            }
+          }
+          // sp_damage mastery: chain rifle void +1 damage to slowed enemies
+          if (this.hasMod('sp_damage') && this.player.weaponId === 'chain_rifle' && this.player.mutated === 'void') {
+            const _baseSpd = CREATURE_DEFS[enemy.name]?.speed ?? enemy.speed;
+            if (enemy.speed < _baseSpd * 0.95) finalDmg += 1;
+          }
           // Execute threshold (sniper clean)
           if (this.weapons.executeThreshold > 0 && enemy.hp > 0 && (enemy.hp / enemy.maxHp) <= this.weapons.executeThreshold) {
             enemy.hp = 0;
@@ -1782,9 +1885,33 @@ export class Game {
           this.damageDealt += dmg;
           // Cryo stun (flamethrower clean)
           if (this.weapons.cryoStun) enemy.stunTimer = 2.0;
-          // Slow on hit (chain rifle void)
+          // Slow on hit (chain rifle void); sp_slow mastery raises cap from 70% to 30% base speed
           if (this.weapons.slowOnHit && CREATURE_DEFS[enemy.name]) {
-            enemy.speed = Math.max(20, CREATURE_DEFS[enemy.name].speed * 0.7);
+            const _slowMult = this.hasMod('sp_slow') ? 0.3 : 0.7;
+            enemy.speed = Math.max(20, CREATURE_DEFS[enemy.name].speed * _slowMult);
+          }
+          // vs_burst mastery: sniper void headshot on elite creates 60px corruption burst
+          if (this.hasMod('vs_burst') && bullet.tag === 'sniper_trail' && this.player.mutated === 'void' && enemy.isElite) {
+            this.smokeZones.push({ x: enemy.pos.x, y: enemy.pos.y, radius: 60, life: 2, maxLife: 2, corrupting: true } as typeof this.smokeZones[number]);
+            this.explosions.push({ x: enemy.pos.x, y: enemy.pos.y, radius: 0, maxRadius: 60, life: 0.3, maxLife: 0.3 });
+          }
+          // cascade mastery: fragments spawn 2 mini-fragments on hit (not on already-cascaded fragments)
+          if (this.hasMod('cascade') && bullet.tag === 'fragment') {
+            for (let _ci = 0; _ci < 2; _ci++) {
+              const _ca = Math.random() * Math.PI * 2;
+              this.weapons.bullets.push({
+                pos: { x: enemy.pos.x, y: enemy.pos.y },
+                vel: { x: Math.cos(_ca) * 180, y: Math.sin(_ca) * 180 },
+                radius: 2, color: 0x6611cc, damage: Math.max(1, Math.floor(bullet.damage * 0.5)),
+                life: 0.3, maxLife: 0.3,
+                piercing: false, homing: false, bounces: 0, aoeRadius: 0,
+                fromPlayer: true, hitSet: new Set(), tag: 'fragment_cascaded',
+              });
+            }
+          }
+          // entropy_field mastery: fragment hits leave a 0.5s damage patch
+          if (this.hasMod('entropy_field') && (bullet.tag === 'fragment' || bullet.tag === 'fragment_cascaded')) {
+            this.smokeZones.push({ x: enemy.pos.x, y: enemy.pos.y, radius: 18, life: 0.5, maxLife: 0.5, toxic: true } as typeof this.smokeZones[number]);
           }
           // Baton base knockback (55px) — core identity; Shockwave perk upgrades to 100px + stun
           if (this.player.weaponId === 'baton') {
@@ -1854,6 +1981,10 @@ export class Game {
           }
           if (enemy.hp <= 0) {
             this.onEnemyKilled(enemy);
+            // ks_chain mastery: sniper kill resets fire cooldown
+            if (this.hasMod('ks_chain') && bullet.tag === 'sniper_trail') {
+              this.player.fireCooldown = 0;
+            }
           }
         }
       }
@@ -2054,8 +2185,11 @@ export class Game {
         if (v2dist(e.pos, { x: sz.x, y: sz.y }) < sz.radius) {
           // De-aggro
           e.isAggroed = false;
-          // T2: slow enemies 40%
-          if (sz.slowing) e.speed = CREATURE_DEFS[e.name]?.speed * 0.6 || e.speed * 0.6;
+          // T2: slow enemies 40% (corrupting trail zones slow 30% via vs_slow)
+          if (sz.slowing) {
+            const _sm = sz.corrupting ? 0.7 : 0.6;
+            e.speed = CREATURE_DEFS[e.name]?.speed * _sm || e.speed * _sm;
+          }
           // T3 void: toxic damage
           if (sz.toxic) {
             e.hp -= Math.max(1, Math.round(dt));
@@ -3982,6 +4116,29 @@ export class Game {
       case 'mastery': {
         this.masteryTaken.push(card.id);
         this.activeModifiers.push(card.id);
+        // Apply instant stat changes for mastery perks that modify weapon system values
+        if (card.id === 'marksman_reload' && this.player.mutated === 'clean') {
+          // Quick Draw: -50% reload time for Marksman Rifle
+          this.player.reloadTimeMult = Math.max(0.1, this.player.reloadTimeMult * 0.5);
+        } else if (card.id === 'ks_reload') {
+          // Quick Scope: -40% sniper reload time
+          this.player.reloadTimeMult = Math.max(0.1, this.player.reloadTimeMult * 0.6);
+        } else if (card.id === 'ks_execute') {
+          // Execute: raise killshot threshold from 20% to 30%
+          this.weapons.executeThreshold = Math.max(this.weapons.executeThreshold, 0.3);
+        } else if (card.id === 'ks_crit') {
+          // Vital Shot: headshot (crit) zone +15px — expand bullet radius so sniper hits more centrally
+          this.weapons.radiusBonus = (this.weapons.radiusBonus ?? 0) + 15;
+        } else if (card.id === 'pm_damage') {
+          // Heavy Rounds: +2 damage in precision mode
+          this.weapons.bonusDamage = (this.weapons.bonusDamage ?? 0) + 2;
+        } else if (card.id === 'pm_pierce') {
+          // AP Rounds: precision shots pierce 1 enemy
+          this.weapons.piercingCount = (this.weapons.piercingCount ?? 0) + 1;
+        } else if (card.id === 'pm_range') {
+          // Extended Barrel: +60px range
+          this.weapons.rangeBonus = (this.weapons.rangeBonus ?? 0) + 60;
+        }
         this.hud.showMessage(`MASTERY: ${card.label}`, 2);
         break;
       }
