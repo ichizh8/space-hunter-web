@@ -20,7 +20,7 @@ import {
 } from '../game/rooms/RoomRuntime';
 import type { RoomJSON } from '../editor/editorStore';
 
-type ModalKind = 'workbench' | 'kits' | 'hal' | 'fullmenu' | null;
+type ModalKind = 'workbench' | 'kits' | 'hal' | 'kitchen' | 'launch_blocked' | 'fullmenu' | null;
 
 const HUB_JSON = hubRoomJson as unknown as RoomJSON;
 
@@ -47,6 +47,15 @@ export function HubRoomScreen() {
     registerAction('open_workbench', () => setModal('workbench'));
     registerAction('open_kit_locker', () => setModal('kits'));
     registerAction('open_hal_console', () => setModal('hal'));
+    registerAction('open_kitchen', () => setModal('kitchen'));
+    registerAction('open_launch', () => {
+      const contract = useGameStore.getState().currentContract;
+      if (contract) {
+        setScreen('loadout');
+      } else {
+        setModal('launch_blocked');
+      }
+    });
   }, [setScreen]);
 
   // Boot the room runtime once
@@ -201,6 +210,20 @@ export function HubRoomScreen() {
               </p>
             </div>
           )}
+        </Modal>
+      )}
+      {modal === 'kitchen' && (
+        <Modal title="KITCHEN" onClose={() => setModal(null)}>
+          <p className="text-sm text-[var(--color-text-secondary)] text-center tracking-[1px]">
+            Kitchen coming soon
+          </p>
+        </Modal>
+      )}
+      {modal === 'launch_blocked' && (
+        <Modal title="DEPLOY" onClose={() => setModal(null)}>
+          <p className="text-sm text-[var(--color-text-secondary)] text-center tracking-[1px]">
+            Select a contract first
+          </p>
         </Modal>
       )}
       {modal === 'fullmenu' && (
