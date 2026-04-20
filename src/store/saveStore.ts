@@ -230,7 +230,7 @@ export const useSaveStore = create<SaveState & SaveActions>()(
           pantry: { rift_dust: 99, void_crystal: 99, cave_moss: 99, river_silt: 99, elite_core: 99 },
           reputation: 1200,
           planetClearance: { kepler: 10, tidal: 10, void_reach: 10, furnace: 10 },
-          ingredientInventory: { ...s.ingredientInventory },
+          ingredientInventory: { scrap_metal: 99, mineral_dust: 99, circuit_chips: 99, reactor_core: 99, nano_fiber: 99, wardens_heart: 99, bio_gel: 99, coral_fragment: 99, salt_crystal: 99, bioluminescent_extract: 99, deep_pearl: 99, leviathan_scale: 99, void_sap: 99, crystal_shards: 99, corruption_spores: 99, living_tissue: 99, rift_amber: 99, hollow_core: 99, slag_chunk: 99, magma_glass: 99, heat_coil: 99, molten_core: 99, obsidian_shard: 99, forge_heart: 99 },
           unlockedWeapons: ALL_WEAPONS,
           unlockedKits: ALL_KITS,
           kitTiers,

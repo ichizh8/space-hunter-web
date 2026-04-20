@@ -2,7 +2,8 @@
 import { useState, useMemo } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { useSaveStore } from '../store/saveStore';
-import { RECIPES, BONUS_DESCS, TRACK_ORDER, REP_THRESHOLDS } from '../data/recipes';
+import { REP_THRESHOLDS } from '../data/recipes';
+import { KitchenScreen } from './KitchenScreen';
 import { KIT_DEFS, KIT_TREE_SECTIONS, KIT_SLOT_COSTS, checkKitPrereqs, getPrereqText } from '../data/kits';
 import {
   halSay, HAL_GREETINGS, HAL_FIRST_VISIT, HAL_PRE_CONTRACT,
@@ -47,13 +48,6 @@ const WEAPON_UNLOCK_DEFS = [
   { id: 'sniper_carbine', name: 'Sniper Carbine', desc: 'Contractor rep weapon', cost: 220 },
   { id: 'chain_rifle', name: 'Chain Rifle', desc: 'Scrapper rep weapon', cost: 200 },
 ];
-
-const TRACK_COLORS: Record<string, string> = {
-  contractor: '#44cc44',
-  void_walker: '#aa44ff',
-  tactician: '#4d80e6',
-  scrapper: '#ff8844',
-};
 
 const PANTRY_COLORS: Record<string, string> = {
   rift_dust: '#e6cc4d',
@@ -220,62 +214,8 @@ export function ShipTab({ save, huntResult, onContracts }: {
       })()}
 
       <SectionHeader text="KITCHEN" color="var(--color-accent-red)" />
-      <KitchenSection save={save} />
+      <KitchenScreen />
     </>
-  );
-}
-
-function KitchenSection({ save }: { save: ReturnType<typeof useSaveStore.getState> }) {
-  const cookRecipe = useSaveStore(s => s.cookRecipe);
-
-  const canAfford = (cost: Record<string, number>) => {
-    for (const [k, v] of Object.entries(cost)) {
-      if ((save.pantry[k] ?? 0) < v) return false;
-    }
-    return true;
-  };
-
-  const isUnlocked = (recipe: typeof RECIPES[string]) => {
-    if (recipe.tier === 1) return true;
-    if (recipe.tier === 2) return save.unlockedRecipes.includes(recipe.id) || save.getRepTier() >= 1;
-    return save.unlockedRecipes.includes(recipe.id);
-  };
-
-  return (
-    <div className="space-y-3">
-      {TRACK_ORDER.map(track => {
-        const color = TRACK_COLORS[track];
-        const trackRecipes = Object.values(RECIPES).filter(r => r.track === track);
-        const unlocked = trackRecipes.filter(r => isUnlocked(r));
-        const locked = trackRecipes.length - unlocked.length;
-
-        return (
-          <div key={track}>
-            <span className="text-sm font-bold" style={{ color }}>{track.replace('_', ' ')}</span>
-            {unlocked.map(r => {
-              const affordable = canAfford(r.cost);
-              const costStr = Object.entries(r.cost).map(([k, v]) => `${k.replace('_', ' ')} x${v}`).join(', ');
-              return (
-                <div key={r.id} className="pixel-card flex items-center gap-3 mt-2 py-3">
-                  <div className="flex-1">
-                    <p className={`text-sm ${affordable ? '' : 'opacity-40'}`}>{r.displayName}</p>
-                    <p className="text-xs text-[var(--color-text-secondary)] mt-1">{costStr} +{r.rep}rep {r.bonus ? BONUS_DESCS[r.bonus] : ''}</p>
-                  </div>
-                  <button
-                    className="pixel-btn text-sm py-2 px-4"
-                    style={{ borderColor: color, color }}
-                    disabled={!affordable}
-                    onClick={() => cookRecipe(r.cost, r.track, r.rep, r.bonus)}>
-                    Cook
-                  </button>
-                </div>
-              );
-            })}
-            {locked > 0 && <p className="text-xs text-[var(--color-text-muted)] mt-1">+ {locked} locked</p>}
-          </div>
-        );
-      })}
-    </div>
   );
 }
 
