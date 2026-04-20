@@ -234,6 +234,38 @@ function pickFromPool(pool: UpgradeCard[]): UpgradeCard | undefined {
 // ── Public API ──
 
 /**
+ * Generate a single guaranteed rare-or-better card for an elite door reward.
+ * Falls back to a rare fallback if the pool contains no rare/legendary options.
+ */
+export function generateEliteDoorReward(
+  state: ProgressionState,
+  runPath?: RunPathState,
+): UpgradeCard {
+  const allCards = [
+    ...buildWeaponCards(state, runPath),
+    ...buildKitCards(state),
+  ].filter(c => c.rarity === 'rare' || c.rarity === 'legendary');
+
+  if (allCards.length > 0) {
+    const weights = allCards.map(c => RARITY_WEIGHT[c.rarity] * TYPE_WEIGHT[c.type]);
+    return weightedPick(allCards, weights);
+  }
+
+  // Fallback: any rare modifier or a generic elite cache card
+  const rareMods = buildModifierCards(state).filter(c => c.rarity === 'rare');
+  if (rareMods.length > 0) return rareMods[0];
+
+  return {
+    type: 'fallback',
+    id: 'elite_cache',
+    rarity: 'rare',
+    icon: '★',
+    label: 'Elite Cache',
+    desc: '+200 credits and rare salvage',
+  };
+}
+
+/**
  * Generate a 2-3 card upgrade screen for between-room door rewards.
  *
  * Guarantees one weapon card, one kit card, and (if either pool is non-empty

@@ -10,15 +10,59 @@ import type { RuntimeDoor } from '../../game/rooms/types';
 import crates01 from '../../data/rooms/hunt/pool/crates_01.json';
 import crates02 from '../../data/rooms/hunt/pool/crates_02.json';
 import extraction from '../../data/rooms/hunt/fixed/extraction.json';
+import voidHulkArena from '../../data/rooms/hunt/elite/void_hulk_arena.json';
+import phaseHunterCover from '../../data/rooms/hunt/elite/phase_hunter_cover.json';
+import broodMotherNest from '../../data/rooms/hunt/elite/brood_mother_nest.json';
 import { registerAction } from '../../game/rooms/ActionRegistry';
 import { useGameStore } from '../../store/gameStore';
 
 // Index of rooms keyed by their `id` so doors can link via `nextPool`.
 const ROOM_INDEX: Record<string, RoomJSON> = {
-  hunt_pool_crates_01: crates01 as unknown as RoomJSON,
-  hunt_pool_crates_02: crates02 as unknown as RoomJSON,
-  hunt_fixed_extraction: extraction as unknown as RoomJSON,
+  hunt_pool_crates_01:           crates01       as unknown as RoomJSON,
+  hunt_pool_crates_02:           crates02       as unknown as RoomJSON,
+  hunt_fixed_extraction:         extraction     as unknown as RoomJSON,
+  hunt_elite_void_hulk_arena:    voidHulkArena  as unknown as RoomJSON,
+  hunt_elite_phase_hunter_cover: phaseHunterCover as unknown as RoomJSON,
+  hunt_elite_brood_mother_nest:  broodMotherNest as unknown as RoomJSON,
 };
+
+const ELITE_DOORS: Array<{ nextPool: string; eliteType: string }> = [
+  { nextPool: 'hunt_elite_void_hulk_arena',    eliteType: 'Void Hulk'    },
+  { nextPool: 'hunt_elite_phase_hunter_cover', eliteType: 'Phase Hunter' },
+  { nextPool: 'hunt_elite_brood_mother_nest',  eliteType: 'Brood Mother' },
+];
+
+// Inject a second (elite) door alongside the normal exit, from room 3 onward.
+// Never injects into elite rooms themselves (they already have their own exits).
+function maybeInjectEliteDoor(json: RoomJSON, roomsCleared: number): RoomJSON {
+  if (roomsCleared < 2) return json;
+  if (json.id.startsWith('hunt_elite_')) return json;
+  if (Math.random() > 0.4) return json;
+
+  const chosen = ELITE_DOORS[Math.floor(Math.random() * ELITE_DOORS.length)];
+  const normalDoor = json.entities.find(e => e.type === 'door');
+  const elitePos = normalDoor
+    ? { x: normalDoor.pos.x, y: normalDoor.pos.y + 130 }
+    : { x: json.size.w - 60, y: json.size.h - 120 };
+
+  return {
+    ...json,
+    entities: [
+      ...json.entities,
+      {
+        id: 'elite_door_injected',
+        type: 'door' as const,
+        pos: elitePos,
+        radius: 45,
+        rewardTag: 'elite',
+        nextPool: chosen.nextPool,
+        requiresCleared: true,
+        label: `[Elite] ${chosen.eliteType}`,
+        eliteType: chosen.eliteType,
+      },
+    ],
+  };
+}
 
 const START_ROOM_ID = 'hunt_pool_crates_01';
 
@@ -90,11 +134,12 @@ export default function RunDemoPage() {
     const container = containerRef.current;
     if (!container || outcome !== 'running') return;
 
-    const json = ROOM_INDEX[currentRoomId];
-    if (!json) {
+    const rawJson = ROOM_INDEX[currentRoomId];
+    if (!rawJson) {
       console.error('[run-demo] unknown room id', currentRoomId);
       return;
     }
+    const json = maybeInjectEliteDoor(rawJson, runStateRef.current.roomsCleared);
 
     // Small delay so a previous runtime finishes cleanup
     let cancelled = false;

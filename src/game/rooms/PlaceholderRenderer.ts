@@ -2,6 +2,7 @@ import type * as PIXI from 'pixi.js';
 import type { LoadedRoom, Vec2 } from './types';
 import type { InteractionTarget } from './InteractionSystem';
 import type { CombatState } from './CombatRuntime';
+import { ELITE_OVERRIDES } from '../../data/elites';
 import {
   COL_BG,
   COL_GRID,
@@ -139,29 +140,71 @@ export function drawRoom(
     const { sx, sy } = toS(d.pos.x, d.pos.y);
     const r = r2s(d.radius);
     const locked = d.requiresCleared && !room.cleared;
-    const color = locked ? COL_DOOR_LOCK : COL_DOOR;
+    const isElite = !!d.eliteType;
+    const eliteColor = isElite
+      ? (ELITE_OVERRIDES[d.eliteType!]?.color ?? 0xcc4400)
+      : null;
+    const color = locked ? COL_DOOR_LOCK : isElite ? eliteColor! : COL_DOOR;
     gfx
       .moveTo(sx, sy - r)
       .lineTo(sx + r, sy)
       .lineTo(sx, sy + r)
       .lineTo(sx - r, sy)
       .closePath()
-      .fill({ color, alpha: locked ? 0.2 : 0.4 })
-      .stroke({ width: 1.5, color, alpha: 0.95 });
+      .fill({ color, alpha: locked ? 0.2 : isElite ? 0.55 : 0.4 })
+      .stroke({ width: isElite ? 2.5 : 1.5, color, alpha: 0.95 });
     if (target && target.kind === 'door' && target.ref.id === d.id) {
       gfx.circle(sx, sy, r + 6).stroke({ width: 2, color: COL_HILIGHT, alpha: 0.9 });
     }
 
+    // Elite silhouette: skull + crown drawn above the door
+    if (isElite && !locked) {
+      const ec = eliteColor!;
+      // Skull body circle
+      const skullY = sy - r - 22;
+      gfx.circle(sx, skullY, 10).fill({ color: ec, alpha: 0.75 });
+      gfx.circle(sx, skullY, 10).stroke({ width: 1.5, color: 0xffffff, alpha: 0.35 });
+      // Eye dots
+      gfx.circle(sx - 3.5, skullY - 1, 2).fill({ color: 0xffffff, alpha: 0.9 });
+      gfx.circle(sx + 3.5, skullY - 1, 2).fill({ color: 0xffffff, alpha: 0.9 });
+      // Crown above skull (3 peaks)
+      const crownBase = skullY - 10;
+      gfx
+        .moveTo(sx - 9, crownBase)
+        .lineTo(sx - 9, crownBase - 8)
+        .lineTo(sx - 4, crownBase - 4)
+        .lineTo(sx,     crownBase - 10)
+        .lineTo(sx + 4, crownBase - 4)
+        .lineTo(sx + 9, crownBase - 8)
+        .lineTo(sx + 9, crownBase)
+        .closePath()
+        .fill({ color: 0xffcc00, alpha: 0.9 })
+        .stroke({ width: 1, color: 0xffee88, alpha: 0.7 });
+    }
+
     // Card preview: floats above the door when unlocked and reward is assigned
     if (!locked && d.rewardCard) {
-      const border = RARITY_BORDER[d.rewardCard.rarity] ?? 0xcccccc;
+      const border = isElite ? 0xffcc00 : (RARITY_BORDER[d.rewardCard.rarity] ?? 0xcccccc);
       const cw = 74, ch = 34;
       const cx = sx - cw / 2;
-      const cy = sy - r - 10 - ch;
+      // Push card higher if elite silhouette is drawn
+      const cy = isElite ? sy - r - 60 - ch : sy - r - 10 - ch;
       gfx.rect(cx, cy, cw, ch).fill({ color: 0x080818, alpha: 0.9 });
-      gfx.rect(cx, cy, cw, ch).stroke({ width: 1.5, color: border, alpha: 0.95 });
-      // Rarity gem
-      gfx.circle(cx + 13, cy + ch / 2, 4).fill({ color: border, alpha: 1 });
+      gfx.rect(cx, cy, cw, ch).stroke({ width: isElite ? 2 : 1.5, color: border, alpha: 0.95 });
+      // Gem (star-shaped for elite, circle for regular)
+      if (isElite) {
+        // Small diamond gem
+        const gx = cx + 13, gy = cy + ch / 2, gs = 5;
+        gfx
+          .moveTo(gx, gy - gs)
+          .lineTo(gx + gs, gy)
+          .lineTo(gx, gy + gs)
+          .lineTo(gx - gs, gy)
+          .closePath()
+          .fill({ color: 0xffcc00, alpha: 1 });
+      } else {
+        gfx.circle(cx + 13, cy + ch / 2, 4).fill({ color: border, alpha: 1 });
+      }
     }
   }
 

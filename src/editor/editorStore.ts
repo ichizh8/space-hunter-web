@@ -298,6 +298,7 @@ export interface RoomJSON {
     rewardTag?: string;
     nextPool?: string;
     requiresCleared?: boolean;
+    eliteType?: string;
   }>;
 
   spawnZones: Array<{

@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "id": "hunt_elite_void_hulk_arena",
+  "name": "Void Hulk Arena",
+  "kind": "pool",
+  "biome": "void_waste",
+  "contractTags": ["hunt"],
+  "difficulty": 4,
+  "size": { "w": 1600, "h": 1100 },
+
+  "terrain": {
+    "caves": [],
+    "voidPools": [
+      { "pos": { "x": 400,  "y": 200  }, "radius": 80 },
+      { "pos": { "x": 1200, "y": 900  }, "radius": 80 },
+      { "pos": { "x": 800,  "y": 550  }, "radius": 60 }
+    ],
+    "obstacles": [],
+    "rivers": []
+  },
+
+  "playerSpawn": { "x": 100, "y": 550 },
+
+  "entities": [
+    {
+      "id": "door_exit",
+      "type": "door",
+      "pos": { "x": 1540, "y": 550 },
+      "radius": 45,
+      "rewardTag": "mystery",
+      "nextPool": "hunt_pool_crates_02",
+      "requiresCleared": true,
+      "label": "Exit"
+    }
+  ],
+
+  "spawnZones": [
+    {
+      "id": "sz_boss",
+      "rect": { "x": 650, "y": 400, "w": 300, "h": 300 },
+      "poolTag": "elite_void_hulk",
+      "budget": 1
+    },
+    {
+      "id": "sz_minions",
+      "rect": { "x": 300, "y": 150, "w": 1000, "h": 800 },
+      "poolTag": "elite_minions",
+      "budget": 10
+    }
+  ],
+
+  "triggers": [
+    {
+      "id": "tr_start",
+      "rect": { "x": 200, "y": 0, "w": 1400, "h": 1100 },
+      "on": "enter",
+      "actions": ["spawn_all_zones", "lock_doors"]
+    },
+    {
+      "id": "tr_clear",
+      "on": "all_enemies_dead",
+      "actions": ["unlock_doors"]
+    }
+  ],
+
+  "waves": [],
+  "modifiers": [],
+  "mode": "combat"
+}

@@ -19,7 +19,7 @@ import {
 } from './CombatRuntime';
 import { evaluateTriggers } from './TriggerSystem';
 import { PLAYER_BASE_SPEED, PLAYER_BASE_HP, JOY_MAX_DIST, JOY_DEADZONE } from '../constants';
-import { generateDoorRewards } from '../../data/upgrades';
+import { generateDoorRewards, generateEliteDoorReward } from '../../data/upgrades';
 import type { ProgressionState, RunPathState } from '../../data/upgrades';
 
 type PlayerDir =
@@ -347,19 +347,26 @@ export async function createRoomRuntime(
 
         if (opts.progressionState) {
           const doorList = room.doors.filter(d => !d.consumed);
+          const regularDoors = doorList.filter(d => !d.eliteType);
           const rewards = generateDoorRewards(
             opts.progressionState,
-            doorList.length,
+            regularDoors.length,
             opts.runPathState,
           );
           const rarityColor: Record<string, string> = {
             common: '#cccccc', rare: '#4499ff', legendary: '#ffcc00',
           };
           doorList.forEach((door, i) => {
-            const card = rewards[i]?.[0];
+            let card;
+            if (door.eliteType) {
+              card = generateEliteDoorReward(opts.progressionState!, opts.runPathState);
+            } else {
+              const regularIdx = regularDoors.indexOf(door);
+              card = rewards[regularIdx]?.[0];
+            }
             if (!card) return;
             door.rewardCard = card;
-            const col = rarityColor[card.rarity] ?? '#cccccc';
+            const col = door.eliteType ? '#ffcc00' : (rarityColor[card.rarity] ?? '#cccccc');
             const iconText = new PIXI.Text(card.icon, { fontSize: 14, fill: col });
             const shortLabel = card.label.length > 13 ? card.label.slice(0, 12) + '\u2026' : card.label;
             const labelText = new PIXI.Text(shortLabel, { fontSize: 8, fill: '#bbbbbb' });
@@ -397,9 +404,13 @@ export async function createRoomRuntime(
     const newPrompt = target
       ? target.kind === 'interactable'
         ? target.ref.prompt
-        : target.ref.rewardCard
-          ? `Press E: Take — ${target.ref.rewardCard.label}`
-          : `Press E: Enter — ${target.ref.rewardTag}`
+        : target.ref.eliteType
+          ? target.ref.rewardCard
+            ? `Press E: [ELITE] ${target.ref.eliteType} — ${target.ref.rewardCard.label}`
+            : `Press E: [ELITE] ${target.ref.eliteType} — rare reward guaranteed`
+          : target.ref.rewardCard
+            ? `Press E: Take — ${target.ref.rewardCard.label}`
+            : `Press E: Enter — ${target.ref.rewardTag}`
       : null;
     if (newPrompt !== currentPrompt) {
       currentPrompt = newPrompt;

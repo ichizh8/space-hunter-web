@@ -52,6 +52,30 @@ const ARCHETYPES: Record<string, Omit<Enemy, 'id' | 'pos' | 'attackCooldown'>> =
     radius: 14,
     color: 0xcc4444,
   },
+  void_hulk: {
+    archetype: 'void_hulk',
+    hp: 150, maxHp: 150,
+    speed: 50,
+    damage: 3,
+    radius: 28,
+    color: 0x660099,
+  },
+  phase_hunter: {
+    archetype: 'phase_hunter',
+    hp: 60, maxHp: 60,
+    speed: 130,
+    damage: 2,
+    radius: 13,
+    color: 0x33cccc,
+  },
+  brood_mother: {
+    archetype: 'brood_mother',
+    hp: 180, maxHp: 180,
+    speed: 35,
+    damage: 2,
+    radius: 30,
+    color: 0x996633,
+  },
   runner: {
     archetype: 'runner',
     hp: 6, maxHp: 6,
@@ -86,6 +110,14 @@ const POOL_MIX: Record<string, Array<{ archetype: string; weight: number }>> = {
     { archetype: 'runner', weight: 2 },
     { archetype: 'tank',   weight: 2 },
   ],
+  elite_minions: [
+    { archetype: 'grunt',  weight: 3 },
+    { archetype: 'runner', weight: 2 },
+    { archetype: 'tank',   weight: 2 },
+  ],
+  elite_void_hulk:    [{ archetype: 'void_hulk',    weight: 1 }],
+  elite_phase_hunter: [{ archetype: 'phase_hunter', weight: 1 }],
+  elite_brood_mother: [{ archetype: 'brood_mother', weight: 1 }],
   // fallback
   default: [{ archetype: 'grunt', weight: 1 }],
 };

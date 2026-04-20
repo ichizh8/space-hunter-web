@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "id": "hunt_elite_phase_hunter_cover",
+  "name": "Phase Hunter Corridors",
+  "kind": "pool",
+  "biome": "cave",
+  "contractTags": ["hunt"],
+  "difficulty": 4,
+  "size": { "w": 1600, "h": 1100 },
+
+  "terrain": {
+    "caves": [
+      { "pos": { "x": 800, "y": 550 }, "radius": 200 }
+    ],
+    "voidPools": [],
+    "obstacles": [
+      { "pos": { "x": 350,  "y": 280  }, "w": 120, "h": 32, "obsType": 0 },
+      { "pos": { "x": 350,  "y": 820  }, "w": 120, "h": 32, "obsType": 0 },
+      { "pos": { "x": 650,  "y": 200  }, "w": 32,  "h": 200, "obsType": 0 },
+      { "pos": { "x": 650,  "y": 700  }, "w": 32,  "h": 200, "obsType": 0 },
+      { "pos": { "x": 950,  "y": 280  }, "w": 120, "h": 32, "obsType": 0 },
+      { "pos": { "x": 950,  "y": 820  }, "w": 120, "h": 32, "obsType": 0 },
+      { "pos": { "x": 1250, "y": 200  }, "w": 32,  "h": 200, "obsType": 0 },
+      { "pos": { "x": 1250, "y": 700  }, "w": 32,  "h": 200, "obsType": 0 },
+      { "pos": { "x": 500,  "y": 550  }, "w": 64,  "h": 64,  "obsType": 0 },
+      { "pos": { "x": 1100, "y": 550  }, "w": 64,  "h": 64,  "obsType": 0 }
+    ],
+    "rivers": []
+  },
+
+  "playerSpawn": { "x": 100, "y": 550 },
+
+  "entities": [
+    {
+      "id": "door_exit",
+      "type": "door",
+      "pos": { "x": 1540, "y": 550 },
+      "radius": 45,
+      "rewardTag": "mystery",
+      "nextPool": "hunt_pool_crates_02",
+      "requiresCleared": true,
+      "label": "Exit"
+    }
+  ],
+
+  "spawnZones": [
+    {
+      "id": "sz_boss",
+      "rect": { "x": 700, "y": 450, "w": 200, "h": 200 },
+      "poolTag": "elite_phase_hunter",
+      "budget": 1
+    },
+    {
+      "id": "sz_minions_n",
+      "rect": { "x": 300, "y": 100, "w": 900, "h": 300 },
+      "poolTag": "elite_minions",
+      "budget": 6
+    },
+    {
+      "id": "sz_minions_s",
+      "rect": { "x": 300, "y": 700, "w": 900, "h": 300 },
+      "poolTag": "elite_minions",
+      "budget": 6
+    }
+  ],
+
+  "triggers": [
+    {
+      "id": "tr_start",
+      "rect": { "x": 200, "y": 0, "w": 1400, "h": 1100 },
+      "on": "enter",
+      "actions": ["spawn_all_zones", "lock_doors"]
+    },
+    {
+      "id": "tr_clear",
+      "on": "all_enemies_dead",
+      "actions": ["unlock_doors"]
+    }
+  ],
+
+  "waves": [],
+  "modifiers": [],
+  "mode": "combat"
+}
