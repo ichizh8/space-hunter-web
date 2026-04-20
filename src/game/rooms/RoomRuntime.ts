@@ -1,6 +1,6 @@
 'use client';
 
-import type { Texture, Sprite } from 'pixi.js';
+import type { Texture, Sprite, Text } from 'pixi.js';
 import type { RoomJSON } from '../../editor/editorStore';
 import type { LoadedRoom, Vec2, RuntimeDoor } from './types';
 import { loadRoom } from './RoomLoader';
@@ -19,6 +19,8 @@ import {
 } from './CombatRuntime';
 import { evaluateTriggers } from './TriggerSystem';
 import { PLAYER_BASE_SPEED, PLAYER_BASE_HP, JOY_MAX_DIST, JOY_DEADZONE } from '../constants';
+import { generateDoorRewards } from '../../data/upgrades';
+import type { ProgressionState, RunPathState } from '../../data/upgrades';
 
 type PlayerDir =
   | 'east' | 'south-east' | 'south' | 'south-west'
@@ -51,6 +53,8 @@ export interface RoomRuntimeOptions {
   zoom?: number;
   combat?: boolean;
   initialPlayerPos?: Vec2;  // override room.playerSpawn (e.g. preserve across navigations)
+  progressionState?: ProgressionState;
+  runPathState?: RunPathState;
   onInteract?: (target: InteractionTarget) => void;
   onPromptChange?: (prompt: string | null) => void;
   onDoorUse?: (door: RuntimeDoor) => void;
@@ -132,6 +136,9 @@ export async function createRoomRuntime(
     app.stage.addChild(playerSprite);
   }
   let playerDir: PlayerDir = 'south';
+
+  type DoorCardText = { icon: Text; label: Text };
+  const doorCardTexts = new Map<string, DoorCardText>();
 
   const room = loadRoom(json);
 
@@ -337,6 +344,31 @@ export async function createRoomRuntime(
       // Emit HUD + clear/death events
       if (!roomClearedFired && room.cleared) {
         roomClearedFired = true;
+
+        if (opts.progressionState) {
+          const doorList = room.doors.filter(d => !d.consumed);
+          const rewards = generateDoorRewards(
+            opts.progressionState,
+            doorList.length,
+            opts.runPathState,
+          );
+          const rarityColor: Record<string, string> = {
+            common: '#cccccc', rare: '#4499ff', legendary: '#ffcc00',
+          };
+          doorList.forEach((door, i) => {
+            const card = rewards[i]?.[0];
+            if (!card) return;
+            door.rewardCard = card;
+            const col = rarityColor[card.rarity] ?? '#cccccc';
+            const iconText = new PIXI.Text(card.icon, { fontSize: 14, fill: col });
+            const shortLabel = card.label.length > 13 ? card.label.slice(0, 12) + '\u2026' : card.label;
+            const labelText = new PIXI.Text(shortLabel, { fontSize: 8, fill: '#bbbbbb' });
+            app.stage.addChild(iconText);
+            app.stage.addChild(labelText);
+            doorCardTexts.set(door.id, { icon: iconText, label: labelText });
+          });
+        }
+
         opts.onRoomCleared?.();
       }
       if (!playerDeathFired && combat.player.hp <= 0) {
@@ -365,7 +397,9 @@ export async function createRoomRuntime(
     const newPrompt = target
       ? target.kind === 'interactable'
         ? target.ref.prompt
-        : `Press E: Enter — reward ${target.ref.rewardTag}`
+        : target.ref.rewardCard
+          ? `Press E: Take — ${target.ref.rewardCard.label}`
+          : `Press E: Enter — ${target.ref.rewardTag}`
       : null;
     if (newPrompt !== currentPrompt) {
       currentPrompt = newPrompt;
@@ -396,6 +430,31 @@ export async function createRoomRuntime(
       opts.combat ? mouse : null,
       /* drawPlayerCircle */ playerSprite === null
     );
+
+    // Position door card text overlays (icon + label above each unlocked door)
+    {
+      const W = app.renderer.width;
+      const H = app.renderer.height;
+      for (const [doorId, texts] of doorCardTexts) {
+        const door = room.doors.find(d => d.id === doorId);
+        if (!door || door.consumed) {
+          texts.icon.visible = false;
+          texts.label.visible = false;
+          continue;
+        }
+        const sx = (door.pos.x - camera.x) * camera.zoom + W / 2;
+        const sy = (door.pos.y - camera.y) * camera.zoom + H / 2;
+        const r = door.radius * camera.zoom;
+        const ch = 34;
+        const cardTop = sy - r - 10 - ch;
+        texts.icon.x = Math.round(sx - 32);
+        texts.icon.y = Math.round(cardTop + 8);
+        texts.label.x = Math.round(sx - 14);
+        texts.label.y = Math.round(cardTop + 22);
+        texts.icon.visible = true;
+        texts.label.visible = true;
+      }
+    }
 
     // Joystick overlay
     if (joy.active) {
@@ -450,6 +509,11 @@ export async function createRoomRuntime(
       ro.disconnect();
       app.ticker.remove(tickerFn);
       playerSprite?.destroy();
+      for (const texts of doorCardTexts.values()) {
+        texts.icon.destroy();
+        texts.label.destroy();
+      }
+      doorCardTexts.clear();
       // Remove ONLY our canvas (not all children) — another instance may
       // be mounted in the same container during StrictMode double-effects.
       const ourCanvas = app.canvas;
