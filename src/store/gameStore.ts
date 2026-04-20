@@ -30,6 +30,7 @@ export interface GameState {
   roomsCleared: number;
   runCorruption: number;
   weaponMutated: boolean;
+  weaponMutationType: string;
 }
 
 export interface GameActions {
@@ -42,10 +43,10 @@ export interface GameActions {
   setRunPath: (path: RunPath) => void;
   incrementRoomsCleared: () => void;
   applyCorruptionDrift: () => void;
-  triggerMutation: () => void;
+  applyMutation: (type: string) => void;
 }
 
-export const useGameStore = create<GameState & GameActions>((set, get) => ({
+export const useGameStore = create<GameState & GameActions>((set) => ({
   screen: 'hub',
   currentContract: null,
   startingWeapon: 'sidearm',
@@ -55,6 +56,7 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
   roomsCleared: 0,
   runCorruption: 0,
   weaponMutated: false,
+  weaponMutationType: '',
 
   setScreen: (screen) => set({ screen }),
   setContract: (contract) => set({ currentContract: contract }),
@@ -67,7 +69,5 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
   applyCorruptionDrift: () => set(s => ({
     runCorruption: s.runCorruption + (s.runPath === 'clean' ? -3 : 5),
   })),
-  triggerMutation: () => {
-    if (get().roomsCleared >= 4) set({ weaponMutated: true });
-  },
+  applyMutation: (type) => set({ weaponMutated: true, weaponMutationType: type }),
 }));

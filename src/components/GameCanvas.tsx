@@ -4,14 +4,18 @@ import { useRef, useEffect, useCallback, useState } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { useSaveStore } from '../store/saveStore';
 import { ModifierPicker, UpgradePicker, KitT3Choice } from './ModifierPicker';
+import { ForkScreen } from './ForkScreen';
 import type { ModifierDef } from '../data/modifiers';
 import type { UpgradeCard } from '../data/upgrades';
+import type { RunPath } from '../store/gameStore';
 
 export function GameCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<import('../game/Game').Game | null>(null);
   const setScreen = useGameStore(s => s.setScreen);
   const setHuntResult = useGameStore(s => s.setHuntResult);
+  const setRunPath = useGameStore(s => s.setRunPath);
+  const applyMutation = useGameStore(s => s.applyMutation);
   const contract = useGameStore(s => s.currentContract);
   const weapon = useGameStore(s => s.startingWeapon);
   const kits = useSaveStore(s => s.equippedKits);
@@ -32,6 +36,10 @@ export function GameCanvas() {
   // Kit T3 path choice state
   const [kitT3, setKitT3] = useState<{ kitId: string; kitName: string } | null>(null);
   const kitT3ResolveRef = useRef<((path: 'clean' | 'void') => void) | null>(null);
+
+  // Fork choice state (clean/void path selection after room 1)
+  const [forkChoice, setForkChoice] = useState<{ weaponId: string } | null>(null);
+  const forkChoiceResolveRef = useRef<((path: RunPath) => void) | null>(null);
 
   const finishHunt = useCallback((status: 'COMPLETED' | 'FAILED' | 'ABANDONED', result: Parameters<typeof setHuntResult>[0] extends infer R ? Omit<R, 'contractName' | 'huntStatus' | 'parTime'> : never) => {
     setHuntResult({
@@ -108,6 +116,13 @@ export function GameCanvas() {
             setKitT3({ kitId, kitName });
             kitT3ResolveRef.current = resolve;
           },
+          onForkChoice: (weaponId, resolve) => {
+            setForkChoice({ weaponId });
+            forkChoiceResolveRef.current = resolve;
+          },
+          onMutationApplied: (path) => {
+            applyMutation(path);
+          },
         },
         {
           holdTime: contract?.holdTime,
@@ -183,6 +198,13 @@ export function GameCanvas() {
     kitT3ResolveRef.current = null;
   };
 
+  const handleForkPick = (path: RunPath) => {
+    setForkChoice(null);
+    setRunPath(path);
+    forkChoiceResolveRef.current?.(path);
+    forkChoiceResolveRef.current = null;
+  };
+
   return (
     <div className="h-full w-full relative">
       <div ref={containerRef} className="h-full w-full" />
@@ -202,6 +224,12 @@ export function GameCanvas() {
               ))}
             </div>
           </div>
+        </div>
+      )}
+      {/* Fork choice overlay (shown after room 1 clear) */}
+      {forkChoice && (
+        <div className="absolute inset-0 z-50">
+          <ForkScreen weaponId={forkChoice.weaponId} onSelect={handleForkPick} />
         </div>
       )}
       {/* New upgrade picker overlay */}
