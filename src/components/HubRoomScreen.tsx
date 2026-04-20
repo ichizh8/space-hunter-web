@@ -162,7 +162,7 @@ export function HubRoomScreen() {
           className="absolute top-2 right-2 text-[10px] pointer-events-none"
           style={{ color: 'var(--color-text-muted)' }}
         >
-          WASD + E
+          TOUCH / WASD + E
         </div>
       </div>
 
