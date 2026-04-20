@@ -1,45 +1,93 @@
 {
   "schemaVersion": 1,
   "id": "hub_base_station",
-  "name": "Base Station",
+  "name": "The Cockpit",
   "kind": "hub",
   "biome": "void_waste",
   "contractTags": [],
   "difficulty": 0,
-  "size": { "w": 1200, "h": 900 },
+  "size": { "w": 900, "h": 600 },
 
   "terrain": {
     "caves": [],
     "voidPools": [],
     "obstacles": [
-      { "pos": { "x": 150, "y": 100 }, "w": 20, "h": 800, "obsType": 0 },
-      { "pos": { "x": 1050, "y": 100 }, "w": 20, "h": 800, "obsType": 0 },
-      { "pos": { "x": 600, "y": 50 }, "w": 900, "h": 20, "obsType": 0 },
-      { "pos": { "x": 600, "y": 850 }, "w": 900, "h": 20, "obsType": 0 }
+      { "pos": { "x": 450, "y": 10  }, "w": 900, "h": 20, "obsType": 0 },
+      { "pos": { "x": 450, "y": 590 }, "w": 900, "h": 20, "obsType": 0 },
+      { "pos": { "x": 10,  "y": 300 }, "w": 20,  "h": 580, "obsType": 0 },
+      { "pos": { "x": 890, "y": 300 }, "w": 20,  "h": 580, "obsType": 0 },
+
+      { "pos": { "x": 198, "y": 215 }, "w": 355, "h": 20, "obsType": 0 },
+      { "pos": { "x": 703, "y": 215 }, "w": 355, "h": 20, "obsType": 0 },
+      { "pos": { "x": 198, "y": 415 }, "w": 355, "h": 20, "obsType": 0 },
+      { "pos": { "x": 703, "y": 415 }, "w": 355, "h": 20, "obsType": 0 },
+
+      { "pos": { "x": 345, "y": 248 }, "w": 20, "h": 65, "obsType": 0 },
+      { "pos": { "x": 345, "y": 383 }, "w": 20, "h": 65, "obsType": 0 },
+      { "pos": { "x": 555, "y": 248 }, "w": 20, "h": 65, "obsType": 0 },
+      { "pos": { "x": 555, "y": 383 }, "w": 20, "h": 65, "obsType": 0 },
+
+      { "pos": { "x": 375, "y": 125 }, "w": 20, "h": 180, "obsType": 0 },
+      { "pos": { "x": 525, "y": 125 }, "w": 20, "h": 180, "obsType": 0 },
+
+      { "pos": { "x": 375, "y": 438 }, "w": 20, "h": 45, "obsType": 0 },
+      { "pos": { "x": 375, "y": 538 }, "w": 20, "h": 55, "obsType": 0 },
+      { "pos": { "x": 525, "y": 438 }, "w": 20, "h": 45, "obsType": 0 },
+      { "pos": { "x": 525, "y": 538 }, "w": 20, "h": 55, "obsType": 0 }
     ],
     "rivers": []
   },
 
-  "playerSpawn": { "x": 200, "y": 450 },
+  "playerSpawn": { "x": 450, "y": 295 },
 
   "entities": [
     {
       "id": "e_contract_board",
       "type": "interactable",
       "kind": "contract_board",
-      "pos": { "x": 600, "y": 220 },
+      "pos": { "x": 450, "y": 120 },
       "radius": 60,
       "prompt": "Contract Board",
       "action": "open_contract_board",
       "label": "Contracts"
     },
     {
+      "id": "e_launch",
+      "type": "interactable",
+      "kind": "launch_pad",
+      "pos": { "x": 175, "y": 315 },
+      "radius": 60,
+      "prompt": "Deploy",
+      "action": "open_launch",
+      "label": "Launch"
+    },
+    {
+      "id": "e_hal_console",
+      "type": "interactable",
+      "kind": "hal_console",
+      "pos": { "x": 450, "y": 345 },
+      "radius": 60,
+      "prompt": "HAL Console",
+      "action": "open_hal_console",
+      "label": "HAL"
+    },
+    {
+      "id": "e_kitchen",
+      "type": "interactable",
+      "kind": "kitchen",
+      "pos": { "x": 720, "y": 315 },
+      "radius": 60,
+      "prompt": "Kitchen",
+      "action": "open_kitchen",
+      "label": "Kitchen"
+    },
+    {
       "id": "e_workbench",
       "type": "interactable",
       "kind": "workbench",
-      "pos": { "x": 320, "y": 680 },
+      "pos": { "x": 200, "y": 490 },
       "radius": 60,
-      "prompt": "Workbench (Upgrades)",
+      "prompt": "Workbench",
       "action": "open_workbench",
       "label": "Workbench"
     },
@@ -47,21 +95,11 @@
       "id": "e_kit_locker",
       "type": "interactable",
       "kind": "kit_locker",
-      "pos": { "x": 880, "y": 680 },
+      "pos": { "x": 695, "y": 490 },
       "radius": 60,
       "prompt": "Kit Locker",
       "action": "open_kit_locker",
       "label": "Kits"
-    },
-    {
-      "id": "e_hal_console",
-      "type": "interactable",
-      "kind": "hal_console",
-      "pos": { "x": 950, "y": 300 },
-      "radius": 60,
-      "prompt": "HAL Console",
-      "action": "open_hal_console",
-      "label": "HAL"
     }
   ],
 
