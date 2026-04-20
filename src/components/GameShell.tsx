@@ -3,7 +3,7 @@
 import { useGameStore } from '../store/gameStore';
 import { useSaveStore } from '../store/saveStore';
 import { useEffect, lazy, Suspense } from 'react';
-import { HubScreen } from './HubScreen';
+import { HubRoomScreen } from './HubRoomScreen';
 import { ContractBoard } from './ContractBoard';
 import { LoadoutScreen } from './LoadoutScreen';
 import { ResultsScreen } from './ResultsScreen';
@@ -25,7 +25,7 @@ export function GameShell() {
 
   return (
     <div className="h-screen w-full max-w-[540px] mx-auto relative overflow-hidden" style={{ fontFamily: 'var(--font-pixel)' }}>
-      {screen === 'hub' && <HubScreen />}
+      {screen === 'hub' && <HubRoomScreen />}
       {screen === 'contracts' && <ContractBoard />}
       {screen === 'loadout' && <LoadoutScreen />}
       {screen === 'hunt' && (

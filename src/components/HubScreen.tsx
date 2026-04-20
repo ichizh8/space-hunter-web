@@ -126,7 +126,7 @@ export function HubScreen() {
   );
 }
 
-function HalMessage({ message }: { message: string }) {
+export function HalMessage({ message }: { message: string }) {
   return (
     <div className="pixel-card relative overflow-hidden" style={{ borderColor: 'var(--color-hal-dim)' }}>
       <div className="absolute top-0 left-0 w-1 h-full bg-[var(--color-hal-red)] hal-pulse" />
@@ -147,7 +147,7 @@ function SectionHeader({ text, color = 'var(--color-accent-cyan)' }: { text: str
   );
 }
 
-function ShipTab({ save, huntResult, onContracts }: {
+export function ShipTab({ save, huntResult, onContracts }: {
   save: ReturnType<typeof useSaveStore.getState>;
   huntResult: ReturnType<typeof useGameStore.getState>['huntResult'];
   onContracts: () => void;
@@ -286,7 +286,7 @@ function KitchenSection({ save }: { save: ReturnType<typeof useSaveStore.getStat
   );
 }
 
-function UpgradesTab({ save }: { save: ReturnType<typeof useSaveStore.getState> }) {
+export function UpgradesTab({ save }: { save: ReturnType<typeof useSaveStore.getState> }) {
   const buyUpgrade = useSaveStore(s => s.buyUpgrade);
   const unlockWeapon = useSaveStore(s => s.unlockWeapon);
 
@@ -360,7 +360,7 @@ function UpgradesTab({ save }: { save: ReturnType<typeof useSaveStore.getState> 
   );
 }
 
-function KitsTab({ save }: { save: ReturnType<typeof useSaveStore.getState> }) {
+export function KitsTab({ save }: { save: ReturnType<typeof useSaveStore.getState> }) {
   const unlockKit = useSaveStore(s => s.unlockKit);
   const upgradeKitTier = useSaveStore(s => s.upgradeKitTier);
   const assignKit = useSaveStore(s => s.assignKit);
