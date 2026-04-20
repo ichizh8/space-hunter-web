@@ -6,6 +6,7 @@ import { WeaponSystem } from './Weapons';
 import { EnemySystem, type Enemy, createEnemy } from './Enemies';
 import { HUD } from './HUD';
 import { DropSystem, type DropCapsule, type DropType } from './DropSystem';
+import { SpawnManager } from './SpawnManager';
 import { v2dist, v2, v2sub, v2norm, v2mul, v2len, v2fromAngle, randRange, lineSegHitsCircle } from '../lib/math';
 import {
   PLAYER_BASE_HP, PLAYER_BASE_SPEED, WORLD_W, WORLD_H,
@@ -15,11 +16,10 @@ import { CREATURE_DEFS } from '../data/creatures';
 import { type ModifierDef } from '../data/modifiers';
 import { WEAPON_DEFS, WEAPON_LEVEL_PERKS, WEAPON_MUTATIONS } from '../data/weapons';
 import { KIT_DEFS } from '../data/kits';
-import { ELITE_TYPES, APEX_TYPES, ELITE_OVERRIDES, ELITE_EPITHETS, rollAffixes } from '../data/elites';
 import { type UpgradeCard, type ProgressionState, generateUpgrades } from '../data/upgrades';
 import {
   halSay,
-  HAL_HUNT_START, HAL_WAVE_INCOMING, HAL_FIRST_KILL, HAL_KILL_STREAK,
+  HAL_HUNT_START, HAL_FIRST_KILL, HAL_KILL_STREAK,
   HAL_ELITE_SPAWNED, HAL_LOW_HP, HAL_CRITICAL_HP, HAL_TOOK_DAMAGE,
   HAL_CORRUPTION_VALLEY, HAL_CORRUPTION_CORRUPT, HAL_CORRUPTION_VOID,
   HAL_OBJECTIVE_HALF, HAL_OBJECTIVE_NEAR, HAL_LEVEL_UP,
@@ -87,7 +87,6 @@ interface ExtractionCache {
   radius: number;
 }
 
-let nextCacheId = 1;
 
 
 export interface GameCallbacks {
@@ -279,6 +278,7 @@ export class Game {
   cacheCount = 0;     // extraction_run: total caches
   cachesCollected = 0;
   caches: ExtractionCache[] = [];  // extraction_run: spawned cache positions
+  nextCacheId = 1;
 
   // Boss hunt state
   apexSpawned = false; // boss_hunt: has the apex target been spawned?
@@ -357,6 +357,9 @@ export class Game {
 
   // Drop capsules
   dropSystem = new DropSystem();
+
+  // Spawn management
+  spawnManager!: SpawnManager;
 
   // HAL event tracking
   halCooldown = 0;
@@ -476,6 +479,7 @@ export class Game {
     }
     this.enemies = new EnemySystem();
     this.hud = new HUD(vw, vh);
+    this.spawnManager = new SpawnManager();
 
     // Build scene graph
     this.worldLayer = new Container();
@@ -524,67 +528,17 @@ export class Game {
 
     // Ã¢ÂÂÃ¢ÂÂ Contract-specific setup Ã¢ÂÂÃ¢ÂÂ
     if (this.contractType === 'void_breach') {
-      this.spawnBreaches();
+      this.spawnManager.spawnBreaches(this);
     }
     if (this.contractType === 'extraction_run') {
-      this.spawnCaches();
-    }
-    if (this.contractType === 'boss_hunt') {
-      // Spawn the apex enemy after a short delay (wave 2)
-      this.apexSpawned = false;
+      this.spawnManager.spawnCaches(this);
     }
     if (this.contractType === 'payload_escort') {
-      this.spawnPodPath();
+      this.spawnManager.spawnPodPath(this);
     }
 
     // Input
     this.setupInput();
-  }
-
-  // Ã¢ÂÂÃ¢ÂÂ Extraction: spawn caches across the map Ã¢ÂÂÃ¢ÂÂ
-  private spawnCaches() {
-    this.caches = [];
-    for (let i = 0; i < this.cacheCount; i++) {
-      let pos: { x: number; y: number };
-      let attempts = 0;
-      do {
-        pos = {
-          x: randRange(300, WORLD_W - 300),
-          y: randRange(300, WORLD_H - 300),
-        };
-        attempts++;
-      } while (
-        (v2dist(pos, this.player.pos) < 950 ||
-          this.caches.some(c => v2dist(pos, c.pos) < 700)) &&
-        attempts < 60
-      );
-      this.caches.push({
-        id: nextCacheId++,
-        pos,
-        collected: false,
-        radius: 30,
-      });
-    }
-  }
-
-  // ── Payload Escort: generate winding waypoint path ──
-  private spawnPodPath() {
-    const WAYPOINTS = 5 + Math.floor(Math.random() * 3); // 5-7
-    const start = { x: 150, y: WORLD_H / 2 };
-    const end   = { x: WORLD_W - 150, y: WORLD_H / 2 };
-    this.podPath = [start];
-    for (let i = 1; i < WAYPOINTS; i++) {
-      const t = i / WAYPOINTS;
-      const baseX = start.x + (end.x - start.x) * t;
-      const baseY = start.y + (end.y - start.y) * t;
-      this.podPath.push({
-        x: Math.max(200, Math.min(WORLD_W - 200, baseX + (Math.random() - 0.5) * 400)),
-        y: Math.max(200, Math.min(WORLD_H - 200, baseY + (Math.random() - 0.5) * 400)),
-      });
-    }
-    this.podPath.push(end);
-    this.podPathProgress = 0;
-    this.podProgress = 0;
   }
 
   /** Current world-space pod position interpolated along podPath */
@@ -596,161 +550,6 @@ export class Game {
     const a = this.podPath[segIdx];
     const b = this.podPath[segIdx + 1];
     return { x: a.x + (b.x - a.x) * segT, y: a.y + (b.y - a.y) * segT };
-  }
-
-  // Ã¢ÂÂÃ¢ÂÂ Void Breach: spawn sequential breach zones Ã¢ÂÂÃ¢ÂÂ
-  private spawnBreaches() {
-    const BREACH_COUNT = 3;
-    const perBreachTime = this.holdTime; // holdTime is already per-zone
-    this.breaches = [];
-    for (let i = 0; i < BREACH_COUNT; i++) {
-      let pos: { x: number; y: number };
-      let attempts = 0;
-      do {
-        pos = {
-          x: randRange(300, WORLD_W - 300),
-          y: randRange(300, WORLD_H - 300),
-        };
-        attempts++;
-      } while (
-        (v2dist(pos, this.player.pos) < 500 ||
-          this.breaches.some(b => v2dist(pos, b.pos) < 600)) &&
-        attempts < 30
-      );
-      this.breaches.push({
-        id: i,
-        pos,
-        sealed: false,
-        holdTimer: 0,
-        holdTime: perBreachTime,
-        radius: 250,
-      });
-    }
-    this.activeBreachIdx = 0;
-    this.breachesSealed = 0;
-    this.hud.showMessage(`BREACH 1/${BREACH_COUNT} DETECTED`, 2);
-  }
-
-  // Ã¢ÂÂÃ¢ÂÂ Boss Hunt: spawn an apex enemy Ã¢ÂÂÃ¢ÂÂ
-  private spawnApex() {
-    if (this.apexSpawned) return;
-    this.apexSpawned = true;
-
-    // Spawn far from player
-    let pos: { x: number; y: number };
-    let attempts = 0;
-    do {
-      pos = {
-        x: randRange(200, WORLD_W - 200),
-        y: randRange(200, WORLD_H - 200),
-      };
-      attempts++;
-    } while (v2dist(pos, this.player.pos) < 800 && attempts < 30);
-
-    // Pick apex type from APEX_TYPES
-    const apexType = APEX_TYPES[Math.floor(Math.random() * APEX_TYPES.length)];
-    this.apexName = apexType;
-
-    const apex = createEnemy('Cave Lurker', pos, true);
-    apex.name = apexType;
-    apex.hp = 300 + this.contractDifficulty * 50;
-    apex.maxHp = apex.hp;
-    apex.speed = 110;
-    apex.meleeDmg = 6;
-    apex.radius = 40;
-    apex.detection = 9999;
-    apex.behavior = 'elite';
-    apex.isElite = true;
-    apex.isTarget = true;
-    apex.leash = 9999;
-    apex.eliteAttackTimer = 1.5;
-    apex.eliteAttackCycle = 0;
-    apex.eliteChargeTimer = 0;
-    this.apexId = apex.id;
-    this.apexPhase = 1;
-    this.apexAttackTimer = 3;
-    this.apexPackTimer = 25;
-    this.apexShieldTimer = 30;
-    this.apexInstabilityTimer = 8;
-    this.enemies.enemies.push(apex);
-
-    this.hud.showMessage(`${apexType.toUpperCase()} DETECTED`, 3);
-    this.shakeTimer = 0.4;
-    this.shakeAmt = 6;
-    if (this.halCooldown <= 0) {
-      setTimeout(() => this.hud.showHalMessage(halSay(HAL_ELITE_SPAWNED), 4), 1500);
-      this.halCooldown = 6;
-    }
-  }
-
-  private spawnElite() {
-    this.eliteSpawnedCount++;
-    // Cycle through elite types, 30% chance random instead
-    let eliteIdx = (this.eliteSpawnedCount - 1) % ELITE_TYPES.length;
-    if (Math.random() < 0.3) eliteIdx = Math.floor(Math.random() * ELITE_TYPES.length);
-    const eliteType = ELITE_TYPES[eliteIdx];
-    const epithet = ELITE_EPITHETS[Math.floor(Math.random() * ELITE_EPITHETS.length)];
-    const displayName = `${eliteType} ${epithet}`;
-
-    // Spawn far from player; elite will use long-range charge to close in
-    const spawnAngle = Math.random() * Math.PI * 2;
-    const spawnDist = 600 + Math.random() * 300;
-    const pos = {
-      x: Math.max(100, Math.min(WORLD_W - 100, this.player.pos.x + Math.cos(spawnAngle) * spawnDist)),
-      y: Math.max(100, Math.min(WORLD_H - 100, this.player.pos.y + Math.sin(spawnAngle) * spawnDist)),
-    };
-
-    // Base stats scaled by time
-    const depth = Math.min(3, Math.ceil(this.targetTotal / 10));
-    const hpScale = 1.0 + (depth - 1) * 0.5 + this.eliteSpawnedCount * 0.2;
-    const overrides = ELITE_OVERRIDES[eliteType] || {};
-    const baseHp = Math.floor((overrides.hp || 20) * hpScale);
-    const baseSpeed = overrides.speed ?? (55 + depth * 10);
-    const baseRadius = overrides.radius ?? 20;
-    const baseDmg = overrides.meleeDmg ?? (2 + depth);
-
-    // Elite spawns at real position and charges in with long-range charge
-    const elite = createEnemy('Void Leech', v2(pos.x, pos.y), true);
-    elite.name = eliteType;
-    elite.hp = baseHp;
-    elite.maxHp = baseHp;
-    elite.speed = baseSpeed;
-    elite.radius = baseRadius;
-    elite.meleeDmg = baseDmg;
-    elite.color = overrides.color ?? 0xffdd11;
-    elite.detection = 9999;
-    elite.leash = 99999;
-    elite.isElite = true;
-    elite.behavior = 'elite';
-    elite.eliteChargeTimer = 0; // ready to charge immediately on spawn
-    elite.eliteAttackTimer = randRange(4, 8);
-
-    // Roll affixes
-    let affixCount = 1;
-    if (this.elapsed > 600) affixCount = 2 + Math.floor(Math.random() * 2); // 2-3
-    else if (this.elapsed > 300) affixCount = 1 + Math.floor(Math.random() * 2); // 1-2
-    const affixes = rollAffixes(affixCount);
-    elite.affixes = affixes;
-
-    // Apply affix stat modifications
-    for (const affix of affixes) {
-      switch (affix) {
-        case 'extra_fast': elite.speed *= 1.5; break;
-        case 'shielded': elite.shieldHp = Math.floor(elite.maxHp * 0.3); break;
-        case 'teleporter': elite.tpTimer = 8; break;
-        case 'magnetic': elite.magneticTimer = 5; break;
-        case 'armored': break; // checked on damage
-        case 'berserker': break; // checked on update
-        default: break;
-      }
-    }
-
-    this.enemies.enemies.push(elite);
-    this.hud.showMessage(`ELITE: ${displayName}`, 2.5);
-    if (this.halCooldown <= 0) {
-      setTimeout(() => this.hud.showHalMessage(halSay(HAL_ELITE_SPAWNED), 4), 1000);
-      this.halCooldown = 6;
-    }
   }
 
   private async loadSprites() {
@@ -2919,55 +2718,11 @@ export class Game {
       }
     }
 
-    // Ã¢ÂÂÃ¢ÂÂ Boss Hunt: spawn apex after wave 2 Ã¢ÂÂÃ¢ÂÂ
-    if (this.contractType === 'boss_hunt') {
-      if (!this.apexSpawned && this.waveCount >= 2) {
-        this.spawnApex();
-      }
-      if (this.apexSpawned) {
-        this.updateApexBoss(dt);
-      }
-    }
-
-    // Elite spawn timer (60s fixed for hunt; 45-70s for others)
-    this.eliteTimer -= dt;
-    if (this.eliteTimer <= 0 && !this.modifierPickPending) {
-      this.spawnElite();
-      this.eliteTimer = this.contractType === 'hunt' ? 60 : 45 + Math.random() * 25;
-    }
-
-    // Waves
-    this.waveTimer -= dt;
-    if (this.waveTimer <= 0 && this.enemies.enemies.length < 100 && !this.modifierPickPending) {
-      this.waveCount++;
-      const count = 20 + this.waveCount * 6 + Math.floor(this.elapsed / 60) * 4;
-      const prevLen = this.enemies.enemies.length;
-      this.enemies.spawnWave(Math.min(count, 60), this.player.pos, this.map);
-      // Time-based enemy scaling: +10% HP per 2min, +5% speed per 3min
-      const hpScale = 1 + Math.floor(this.elapsed / 120) * 0.1;
-      const spdScale = 1 + Math.floor(this.elapsed / 180) * 0.05;
-      for (let ei = prevLen; ei < this.enemies.enemies.length; ei++) {
-        const e = this.enemies.enemies[ei];
-        e.hp = Math.floor(e.hp * hpScale);
-        e.maxHp = e.hp;
-        e.speed = Math.floor(e.speed * spdScale);
-      }
-      this.waveTimer = Math.max(6, 18 - this.waveCount * 1.5);
-      this.hud.showMessage(`WAVE ${this.waveCount + 1}`, 1.5);
-      if (this.halCooldown <= 0) {
-        setTimeout(() => this.hud.showHalMessage(halSay(HAL_WAVE_INCOMING), 3), 600);
-        this.halCooldown = 5;
-      }
-
-      // Wave-based upgrades removed — level ups from XP are the only trigger
-      // (avoids double-stacking with XP level ups early game)
-
-      // Payload escort: extra spawn wave near the pod (double threat near cargo)
-      if (this.contractType === 'payload_escort' && this.podHp > 0) {
-        const podPos = this.getPodPos();
-        const extraCount = Math.max(3, Math.floor(count * 0.5));
-        this.enemies.spawnWave(extraCount, podPos, this.map);
-      }
+    // Spawn timers: waves, elites, apex
+    this.spawnManager.update(dt, this);
+    // Boss Hunt: run apex boss behavior (separate from spawning)
+    if (this.contractType === 'boss_hunt' && this.apexSpawned) {
+      this.updateApexBoss(dt);
     }
 
     // ── Dash update ──
@@ -3102,7 +2857,7 @@ export class Game {
           this.breachEliteTimer -= dt;
           if (this.breachEliteTimer <= 0) {
             this.breachEliteTimer = 45;
-            this.spawnElite();
+            this.spawnManager.spawnElite(this);
           }
         }
 
@@ -3494,7 +3249,7 @@ export class Game {
       this.hud.showMessage(phaseNames[newPhase - 1] ?? `PHASE ${newPhase}`, 3);
       // Phase 3: spawn 1 elite minion
       if (newPhase === 3) {
-        this.spawnElite();
+        this.spawnManager.spawnElite(this);
         this.apexInstabilityTimer = 4;
       }
     }
