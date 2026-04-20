@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "id": "hub_base_station",
+  "name": "Base Station",
+  "kind": "hub",
+  "biome": "void_waste",
+  "contractTags": [],
+  "difficulty": 0,
+  "size": { "w": 1200, "h": 900 },
+
+  "terrain": {
+    "caves": [],
+    "voidPools": [],
+    "obstacles": [
+      { "pos": { "x": 150, "y": 100 }, "w": 20, "h": 800, "obsType": 0 },
+      { "pos": { "x": 1050, "y": 100 }, "w": 20, "h": 800, "obsType": 0 },
+      { "pos": { "x": 600, "y": 50 }, "w": 900, "h": 20, "obsType": 0 },
+      { "pos": { "x": 600, "y": 850 }, "w": 900, "h": 20, "obsType": 0 }
+    ],
+    "rivers": []
+  },
+
+  "playerSpawn": { "x": 200, "y": 450 },
+
+  "entities": [
+    {
+      "id": "e_contract_board",
+      "type": "interactable",
+      "kind": "contract_board",
+      "pos": { "x": 600, "y": 220 },
+      "radius": 60,
+      "prompt": "Press E: Contract Board",
+      "action": "open_contract_board",
+      "label": "Contracts"
+    },
+    {
+      "id": "e_workbench",
+      "type": "interactable",
+      "kind": "workbench",
+      "pos": { "x": 320, "y": 680 },
+      "radius": 60,
+      "prompt": "Press E: Workbench (Upgrades)",
+      "action": "open_workbench",
+      "label": "Workbench"
+    },
+    {
+      "id": "e_kit_locker",
+      "type": "interactable",
+      "kind": "kit_locker",
+      "pos": { "x": 880, "y": 680 },
+      "radius": 60,
+      "prompt": "Press E: Kit Locker",
+      "action": "open_kit_locker",
+      "label": "Kits"
+    },
+    {
+      "id": "e_hal_console",
+      "type": "interactable",
+      "kind": "hal_console",
+      "pos": { "x": 950, "y": 300 },
+      "radius": 60,
+      "prompt": "Press E: HAL Console",
+      "action": "open_hal_console",
+      "label": "HAL"
+    }
+  ],
+
+  "spawnZones": [],
+  "triggers": [],
+  "waves": [],
+  "modifiers": [],
+  "mode": "exploration"
+}

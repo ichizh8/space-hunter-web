@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "id": "hunt_fixed_extraction",
+  "name": "Extraction Pad",
+  "kind": "fixed",
+  "biome": "void_waste",
+  "contractTags": ["hunt"],
+  "difficulty": 0,
+  "size": { "w": 900, "h": 700 },
+
+  "terrain": {
+    "caves": [],
+    "voidPools": [],
+    "obstacles": [
+      { "pos": { "x": 80, "y": 350 }, "w": 20, "h": 650, "obsType": 0 },
+      { "pos": { "x": 820, "y": 350 }, "w": 20, "h": 650, "obsType": 0 },
+      { "pos": { "x": 450, "y": 40 }, "w": 720, "h": 20, "obsType": 0 },
+      { "pos": { "x": 450, "y": 660 }, "w": 720, "h": 20, "obsType": 0 }
+    ],
+    "rivers": []
+  },
+
+  "playerSpawn": { "x": 150, "y": 350 },
+
+  "entities": [
+    {
+      "id": "e_extract_terminal",
+      "type": "interactable",
+      "kind": "extract_terminal",
+      "pos": { "x": 680, "y": 350 },
+      "radius": 70,
+      "prompt": "Press E: Complete Extraction",
+      "action": "complete_extraction",
+      "label": "Extract"
+    }
+  ],
+
+  "spawnZones": [],
+  "triggers": [],
+  "waves": [],
+  "modifiers": [],
+  "mode": "exploration"
+}

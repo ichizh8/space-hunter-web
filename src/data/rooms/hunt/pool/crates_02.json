@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "id": "hunt_pool_crates_02",
+  "name": "Collapsed Tunnel",
+  "kind": "pool",
+  "biome": "void_waste",
+  "contractTags": ["hunt"],
+  "difficulty": 2,
+  "size": { "w": 1400, "h": 1000 },
+
+  "terrain": {
+    "caves": [
+      { "pos": { "x": 700, "y": 500 }, "radius": 180 }
+    ],
+    "voidPools": [
+      { "pos": { "x": 300, "y": 800 }, "radius": 70 },
+      { "pos": { "x": 1100, "y": 200 }, "radius": 70 }
+    ],
+    "obstacles": [
+      { "pos": { "x": 500, "y": 200 }, "w": 60, "h": 200, "obsType": 0 },
+      { "pos": { "x": 900, "y": 800 }, "w": 60, "h": 200, "obsType": 0 }
+    ],
+    "rivers": []
+  },
+
+  "playerSpawn": { "x": 100, "y": 500 },
+
+  "entities": [
+    {
+      "id": "door_exit",
+      "type": "door",
+      "pos": { "x": 1340, "y": 500 },
+      "radius": 45,
+      "rewardTag": "credits",
+      "nextPool": "hunt_fixed_extraction",
+      "requiresCleared": true,
+      "label": "Extract"
+    }
+  ],
+
+  "spawnZones": [
+    {
+      "id": "sz_n",
+      "rect": { "x": 400, "y": 100, "w": 600, "h": 300 },
+      "poolTag": "hunt_tier2",
+      "budget": 4
+    },
+    {
+      "id": "sz_s",
+      "rect": { "x": 400, "y": 600, "w": 600, "h": 300 },
+      "poolTag": "hunt_tier2",
+      "budget": 4
+    }
+  ],
+
+  "triggers": [
+    {
+      "id": "tr_start",
+      "rect": { "x": 200, "y": 0, "w": 1200, "h": 1000 },
+      "on": "enter",
+      "actions": ["spawn_all_zones", "lock_doors"]
+    },
+    {
+      "id": "tr_clear",
+      "on": "all_enemies_dead",
+      "actions": ["unlock_doors"]
+    }
+  ],
+
+  "waves": [],
+  "modifiers": [],
+  "mode": "combat"
+}
