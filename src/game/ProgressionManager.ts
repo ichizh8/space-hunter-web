@@ -4,8 +4,7 @@ import { CREATURE_DEFS } from '../data/creatures';
 import { WEAPON_DEFS, WEAPON_MUTATIONS } from '../data/weapons';
 import { KIT_DEFS } from '../data/kits';
 import { v2, v2fromAngle, v2dist, randRange } from '../lib/math';
-import { halSay, HAL_FIRST_KILL, HAL_ELITE_SPAWNED, HAL_LEVEL_UP } from '../data/hal';
-import { MAX_LEVEL, XP_PER_LEVEL, POST_CAP_XP } from './constants';
+import { halSay, HAL_FIRST_KILL, HAL_ELITE_SPAWNED } from '../data/hal';
 import type { Game } from './Game';
 
 export class ProgressionManager {
@@ -94,7 +93,6 @@ export class ProgressionManager {
 
     game.totalKills++;
     game.targetCount++;
-    game.player.essenceCollected++;
     game.halKillsSinceStreak++;
     game.halKillStreakTimer = 4;
 
@@ -105,9 +103,6 @@ export class ProgressionManager {
     }
     if (game.hasMod('void_drain') && isVoidEnemy) {
       game.player.corruption = Math.max(0, game.player.corruption - 3);
-    }
-    if (game.hasMod('scavenger')) {
-      game.player.essenceCollected++;
     }
     if (game.hasMod('vamp')) {
       game.killsSinceLastHeal++;
@@ -172,32 +167,6 @@ export class ProgressionManager {
       // Stim T3 void: cooldown reset on elite kill
       if ((game.runKitTiers['stim_pack'] || 0) >= 3 && game.kitT3Choices['stim_pack'] === 'void') {
         game.kitCooldowns['stim_pack'] = 0;
-      }
-    }
-
-    // Check level up
-    if (game.player.level < MAX_LEVEL) {
-      const threshold = XP_PER_LEVEL[game.player.level] ?? 999;
-      if (game.player.essenceCollected >= threshold) {
-        game.player.level++;
-        game.player.essenceCollected -= threshold;
-        game.hud.showMessage(`LEVEL ${game.player.level}!`, 1.5);
-        setTimeout(() => game.hud.showHalMessage(halSay(HAL_LEVEL_UP), 4), 1000);
-        game.player.maxHp += 1;
-        game.player.hp = Math.min(game.player.hp + 1, game.player.maxHp);
-        game.pendingLevelUpPicks++;
-      }
-    } else {
-      // Post-cap stat drip: every POST_CAP_XP kills, grant one buff
-      if (game.player.essenceCollected >= POST_CAP_XP) {
-        game.player.essenceCollected -= POST_CAP_XP;
-        game.postCapIndex = (game.postCapIndex + 1) % 4;
-        switch (game.postCapIndex) {
-          case 0: game.player.speed += 5; game.hud.showMessage('+SPEED', 1); break;
-          case 1: game.weapons.fireRateBonus -= 0.02; game.hud.showMessage('+FIRE RATE', 1); break;
-          case 2: game.weapons.bulletSpeedBonus += 15; game.hud.showMessage('+PROJ SPEED', 1); break;
-          case 3: game.hud.showMessage('+RELOAD', 1); break; // reload bonus applied in weapon system
-        }
       }
     }
 

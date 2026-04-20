@@ -20,13 +20,6 @@ export const CORR_CLEAN = 15;
 export const CORR_VALLEY = 35;
 export const CORR_CORRUPT = 60;
 
-// XP -- fast feel: level 5-6 by ~2 min, max in ~6-7 min (~528 total kills to cap)
-export const MAX_LEVEL = 12;
-export const XP_PER_LEVEL = [0, 4, 7, 12, 19, 28, 38, 50, 65, 82, 101, 122, 122];
-
-// Post-cap stat drip: every 80 kills after cap grants one buff
-export const POST_CAP_XP = 80;
-
 // Combat
 export const ENEMY_MELEE_RANGE = 30;
 export const ENEMY_LEASH_DEFAULT = 1500;
@@ -56,6 +49,5 @@ export const COL_VOID_POOL = 0x2a0a3a;
 export const COL_OBSTACLE = 0x222233;
 export const COL_HP_BG = 0x4d1919;
 export const COL_HP_FILL = 0x33e633;
-export const COL_XP_FILL = 0x8000e6;
 export const COL_AMMO_READY = 0xe6cc33;
 export const COL_AMMO_RELOAD = 0xe66633;
