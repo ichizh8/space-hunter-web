@@ -38,7 +38,7 @@ Game loop: ShipHub -> ContractBoard (3 random contracts) -> Loadout -> Hunt -> R
 - Laser pistol: instant ray-cast beam, +40% damage, +30% range
 - Pulse cannon: slower fire rate, AOE pulses
 - Sniper: faster bullet, trail VFX, 4-round mag
-- Hub upgrades rework: scanner, thrusters, salvage, emergency protocol (% bonuses)
+- Hub upgrades rework: thrusters, salvage, emergency protocol (% bonuses)
 - World drop capsules (7 types), collect cache rebalance
 - Apex boss 3-phase rework (300-550 HP)
 - Wave scaling: initial 30, hard cap 60, faster time-based scaling

@@ -176,7 +176,7 @@ export class GameMap {
       gfx.circle(star.x, star.y, star.size).fill({ color: 0xffffff, alpha: star.brightness * 0.6 });
     }
 
-    // Scanner grid — thin red/blue lines (HAL terminal feel)
+    // World grid — thin lines (HAL terminal feel)
     for (let x = 0; x <= WORLD_W; x += GRID_STEP) {
       gfx.moveTo(x, 0).lineTo(x, WORLD_H).stroke({ color: 0xff2200, width: 0.5, alpha: 0.06 });
     }
