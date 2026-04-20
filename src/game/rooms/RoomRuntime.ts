@@ -18,7 +18,7 @@ import {
   type CombatState,
 } from './CombatRuntime';
 import { evaluateTriggers } from './TriggerSystem';
-import { PLAYER_BASE_SPEED, PLAYER_BASE_HP } from '../constants';
+import { PLAYER_BASE_SPEED, PLAYER_BASE_HP, JOY_MAX_DIST, JOY_DEADZONE } from '../constants';
 
 type PlayerDir =
   | 'east' | 'south-east' | 'south' | 'south-west'
@@ -155,6 +155,7 @@ export async function createRoomRuntime(
 
   const keys = new Set<string>();
   let lastE = false;
+  const joy = { active: false, baseX: 0, baseY: 0, knobX: 0, knobY: 0, dirX: 0, dirY: 0 };
   let currentPrompt: string | null = null;
   let paused = false;
   const mouse = { x: player.x, y: player.y };  // world coords
@@ -175,6 +176,53 @@ export async function createRoomRuntime(
   };
   window.addEventListener('keydown', onKeyDown);
   window.addEventListener('keyup', onKeyUp);
+
+  const onTouchStart = (e: TouchEvent) => {
+    if (paused) return;
+    e.preventDefault();
+    const t = e.touches[0];
+    const rect = app.canvas.getBoundingClientRect();
+    joy.baseX = t.clientX - rect.left;
+    joy.baseY = t.clientY - rect.top;
+    joy.knobX = joy.baseX;
+    joy.knobY = joy.baseY;
+    joy.dirX = 0;
+    joy.dirY = 0;
+    joy.active = true;
+  };
+  const onTouchMove = (e: TouchEvent) => {
+    if (!joy.active) return;
+    e.preventDefault();
+    const t = e.touches[0];
+    const rect = app.canvas.getBoundingClientRect();
+    const tx = t.clientX - rect.left;
+    const ty = t.clientY - rect.top;
+    const dx = tx - joy.baseX;
+    const dy = ty - joy.baseY;
+    const dist = Math.hypot(dx, dy);
+    if (dist < JOY_DEADZONE) {
+      joy.dirX = 0;
+      joy.dirY = 0;
+    } else {
+      const normX = dx / dist;
+      const normY = dy / dist;
+      const clamped = Math.min(dist, JOY_MAX_DIST);
+      joy.knobX = joy.baseX + normX * clamped;
+      joy.knobY = joy.baseY + normY * clamped;
+      joy.dirX = normX * (clamped / JOY_MAX_DIST);
+      joy.dirY = normY * (clamped / JOY_MAX_DIST);
+    }
+  };
+  const onTouchEnd = (e: TouchEvent) => {
+    e.preventDefault();
+    joy.active = false;
+    joy.dirX = 0;
+    joy.dirY = 0;
+  };
+  app.canvas.addEventListener('touchstart', onTouchStart, { passive: false });
+  app.canvas.addEventListener('touchmove', onTouchMove, { passive: false });
+  app.canvas.addEventListener('touchend', onTouchEnd, { passive: false });
+  app.canvas.addEventListener('touchcancel', onTouchEnd, { passive: false });
 
   const screenToWorld = (sx: number, sy: number) => {
     const W = app.renderer.width;
@@ -234,14 +282,18 @@ export async function createRoomRuntime(
     // Movement
     let dx = 0;
     let dy = 0;
-    if (keys.has('w') || keys.has('arrowup'))    dy -= 1;
-    if (keys.has('s') || keys.has('arrowdown'))  dy += 1;
-    if (keys.has('a') || keys.has('arrowleft'))  dx -= 1;
-    if (keys.has('d') || keys.has('arrowright')) dx += 1;
-    const len = Math.hypot(dx, dy);
-    if (len > 0) {
-      dx /= len;
-      dy /= len;
+    if (joy.active && Math.hypot(joy.dirX, joy.dirY) > 0.1) {
+      dx = joy.dirX;
+      dy = joy.dirY;
+    } else {
+      if (keys.has('w') || keys.has('arrowup'))    dy -= 1;
+      if (keys.has('s') || keys.has('arrowdown'))  dy += 1;
+      if (keys.has('a') || keys.has('arrowleft'))  dx -= 1;
+      if (keys.has('d') || keys.has('arrowright')) dx += 1;
+      const len = Math.hypot(dx, dy);
+      if (len > 0) { dx /= len; dy /= len; }
+    }
+    if (dx !== 0 || dy !== 0) {
       playerDir = dirFromAngle(Math.atan2(dy, dx));
     }
     player.x += dx * PLAYER_BASE_SPEED * dt;
@@ -329,6 +381,14 @@ export async function createRoomRuntime(
       /* drawPlayerCircle */ playerSprite === null
     );
 
+    // Joystick overlay
+    if (joy.active) {
+      gfx.circle(joy.baseX, joy.baseY, 70).stroke({ color: 0xff2200, alpha: 0.18, width: 1.5 });
+      gfx.circle(joy.baseX, joy.baseY, 45).stroke({ color: 0xff2200, alpha: 0.12, width: 1 });
+      gfx.circle(joy.knobX, joy.knobY, 18).fill({ color: 0xff2200, alpha: 0.22 });
+      gfx.circle(joy.knobX, joy.knobY, 18).stroke({ color: 0xff4400, alpha: 0.55, width: 2.5 });
+    }
+
     // Position/facing of the player sprite (if loaded)
     if (playerSprite) {
       const W = app.renderer.width;
@@ -353,6 +413,9 @@ export async function createRoomRuntime(
         keys.clear();
         lastE = true;
         mouseDown = false;
+        joy.active = false;
+        joy.dirX = 0;
+        joy.dirY = 0;
       } else {
         lastE = false;
       }
@@ -364,6 +427,10 @@ export async function createRoomRuntime(
       app.canvas.removeEventListener('pointerdown', onPointerDown);
       app.canvas.removeEventListener('pointerup', onPointerUp);
       app.canvas.removeEventListener('pointerleave', onPointerUp);
+      app.canvas.removeEventListener('touchstart', onTouchStart);
+      app.canvas.removeEventListener('touchmove', onTouchMove);
+      app.canvas.removeEventListener('touchend', onTouchEnd);
+      app.canvas.removeEventListener('touchcancel', onTouchEnd);
       ro.disconnect();
       app.ticker.remove(tickerFn);
       playerSprite?.destroy();
