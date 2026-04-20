@@ -7,7 +7,10 @@ import {
   serializeLevel,
   newWaveId,
   type ToolMode,
-  type SerializedLevel,
+  type RoomKind,
+  type EditorEntity,
+  type RoomJSON,
+  type LegacySerializedLevel,
 } from '../../editor/editorStore';
 import { CREATURE_NAMES } from '../../data/creatures';
 
@@ -25,13 +28,127 @@ const TOOLS: { id: ToolMode; label: string; color: string }[] = [
   { id: 'obstacle',     label: 'Obstacle',     color: '#445566' },
   { id: 'enemy',        label: 'Enemy Spawn',  color: '#cc3333' },
   { id: 'player_spawn', label: 'Player Spawn', color: '#00ccff' },
-  { id: 'zone',         label: 'Zone',         color: '#ffcc00' },
+  { id: 'interactable', label: 'Interactable', color: '#ffcc00' },
+  { id: 'spawn_zone',   label: 'Spawn Zone',   color: '#ff6644' },
+  { id: 'trigger_zone', label: 'Trigger Zone', color: '#ffaa44' },
+  { id: 'door',         label: 'Door',         color: '#44ccff' },
 ];
+
+const ROOM_KINDS: { id: RoomKind; label: string }[] = [
+  { id: 'arena',      label: 'Arena (big map)' },
+  { id: 'hub',        label: 'Hub' },
+  { id: 'fixed',      label: 'Fixed' },
+  { id: 'pool',       label: 'Pool' },
+  { id: 'chain_link', label: 'Chain Link' },
+];
+
+const BIOMES = ['void_waste', 'crater_field', 'ruin_city', 'ice_crypt', 'crystal_garden'];
 
 const WAVE_PALETTE = [
   '#e67e22', '#3498db', '#2ecc71', '#9b59b6',
   '#e74c3c', '#1abc9c', '#f39c12', '#8e44ad',
 ];
+
+// ---- Room Metadata Panel ---------------------------------------------------
+function RoomMetadataPanel() {
+  const store = useEditorStore();
+
+  const tagsStr = store.contractTags.join(', ');
+  const modsStr = store.modifiers.join(', ');
+
+  return (
+    <div className="p-3 flex flex-col gap-3 text-xs" style={{ color: '#aabbcc' }}>
+      <div className="font-bold uppercase tracking-widest" style={{ color: '#8899aa' }}>
+        Room Metadata
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label className="text-[10px] uppercase tracking-wider" style={{ color: '#556677' }}>Kind</label>
+        <select
+          value={store.roomKind}
+          onChange={(e) => store.setRoomKind(e.target.value as RoomKind)}
+          className="bg-transparent border px-2 py-1 font-mono"
+          style={{ borderColor: '#223344', color: '#aabbcc', background: '#0a0a14' }}
+        >
+          {ROOM_KINDS.map((k) => (
+            <option key={k.id} value={k.id}>{k.label}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label className="text-[10px] uppercase tracking-wider" style={{ color: '#556677' }}>Biome</label>
+        <select
+          value={store.biome}
+          onChange={(e) => store.setBiome(e.target.value)}
+          className="bg-transparent border px-2 py-1 font-mono"
+          style={{ borderColor: '#223344', color: '#aabbcc', background: '#0a0a14' }}
+        >
+          {BIOMES.map((b) => (
+            <option key={b} value={b}>{b}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label className="text-[10px] uppercase tracking-wider" style={{ color: '#556677' }}>
+          Contract Tags (comma-separated)
+        </label>
+        <input
+          type="text"
+          value={tagsStr}
+          onChange={(e) =>
+            store.setContractTags(
+              e.target.value
+                .split(',')
+                .map((s) => s.trim())
+                .filter(Boolean)
+            )
+          }
+          placeholder="hunt, boss_hunt, extraction"
+          className="w-full bg-transparent border px-2 py-1 font-mono"
+          style={{ borderColor: '#223344', color: '#aabbcc' }}
+        />
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label className="text-[10px] uppercase tracking-wider" style={{ color: '#556677' }}>
+          Difficulty ({store.difficulty})
+        </label>
+        <input
+          type="range"
+          min={1}
+          max={5}
+          value={store.difficulty}
+          onChange={(e) => store.setDifficulty(Number(e.target.value))}
+          className="w-full"
+          style={{ accentColor: '#ff6644' }}
+        />
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label className="text-[10px] uppercase tracking-wider" style={{ color: '#556677' }}>
+          Modifiers (comma-separated)
+        </label>
+        <input
+          type="text"
+          value={modsStr}
+          onChange={(e) =>
+            store.setModifiers(
+              e.target.value
+                .split(',')
+                .map((s) => s.trim())
+                .filter(Boolean)
+            )
+          }
+          placeholder="dark, elite_only, burning"
+          className="w-full bg-transparent border px-2 py-1 font-mono"
+          style={{ borderColor: '#223344', color: '#aabbcc' }}
+        />
+      </div>
+    </div>
+  );
+}
 
 // ---- Properties Panel ------------------------------------------------------
 function PropertiesPanel() {
@@ -46,7 +163,7 @@ function PropertiesPanel() {
     );
   }
 
-  const update = (patch: Parameters<typeof store.updateEntity>[1]) =>
+  const update = (patch: Partial<EditorEntity>) =>
     store.updateEntity(selected.id, patch);
 
   return (
@@ -76,7 +193,7 @@ function PropertiesPanel() {
         </div>
       </div>
 
-      {/* Radius */}
+      {/* Radius — for circular entities */}
       {selected.radius !== undefined && (
         <div className="flex flex-col gap-1">
           <label className="text-[10px] uppercase tracking-wider" style={{ color: '#556677' }}>Radius</label>
@@ -101,8 +218,10 @@ function PropertiesPanel() {
         </div>
       )}
 
-      {/* Width / Height */}
-      {selected.type === 'obstacle' && (
+      {/* Width / Height — obstacle + rect-based zones */}
+      {(selected.type === 'obstacle' ||
+        selected.type === 'spawn_zone' ||
+        selected.type === 'trigger_zone') && (
         <div className="flex flex-col gap-1">
           <label className="text-[10px] uppercase tracking-wider" style={{ color: '#556677' }}>Size (W / H)</label>
           <div className="flex gap-2">
@@ -167,18 +286,176 @@ function PropertiesPanel() {
         </>
       )}
 
-      {/* Zone label */}
-      {(selected.type === 'interaction_zone' || selected.type === 'door') && (
-        <div className="flex flex-col gap-1">
-          <label className="text-[10px] uppercase tracking-wider" style={{ color: '#556677' }}>Label</label>
-          <input
-            type="text"
-            value={selected.label ?? ''}
-            onChange={(e) => update({ label: e.target.value })}
-            className="w-full bg-transparent border px-2 py-1 font-mono"
-            style={{ borderColor: '#223344', color: '#aabbcc' }}
-          />
-        </div>
+      {/* Interactable */}
+      {(selected.type === 'interactable' || selected.type === 'interaction_zone') && (
+        <>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] uppercase tracking-wider" style={{ color: '#556677' }}>Kind</label>
+            <input
+              type="text"
+              value={selected.kind ?? ''}
+              onChange={(e) => update({ kind: e.target.value })}
+              placeholder="contract_board, hal, workbench"
+              className="w-full bg-transparent border px-2 py-1 font-mono"
+              style={{ borderColor: '#223344', color: '#aabbcc' }}
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] uppercase tracking-wider" style={{ color: '#556677' }}>Prompt</label>
+            <input
+              type="text"
+              value={selected.prompt ?? ''}
+              onChange={(e) => update({ prompt: e.target.value })}
+              placeholder="Press E: View Contracts"
+              className="w-full bg-transparent border px-2 py-1 font-mono"
+              style={{ borderColor: '#223344', color: '#aabbcc' }}
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] uppercase tracking-wider" style={{ color: '#556677' }}>Action ID</label>
+            <input
+              type="text"
+              value={selected.action ?? ''}
+              onChange={(e) => update({ action: e.target.value })}
+              placeholder="open_contract_board"
+              className="w-full bg-transparent border px-2 py-1 font-mono"
+              style={{ borderColor: '#223344', color: '#aabbcc' }}
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] uppercase tracking-wider" style={{ color: '#556677' }}>Label</label>
+            <input
+              type="text"
+              value={selected.label ?? ''}
+              onChange={(e) => update({ label: e.target.value })}
+              className="w-full bg-transparent border px-2 py-1 font-mono"
+              style={{ borderColor: '#223344', color: '#aabbcc' }}
+            />
+          </div>
+        </>
+      )}
+
+      {/* Spawn zone */}
+      {selected.type === 'spawn_zone' && (
+        <>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] uppercase tracking-wider" style={{ color: '#556677' }}>Pool Tag</label>
+            <input
+              type="text"
+              value={selected.poolTag ?? ''}
+              onChange={(e) => update({ poolTag: e.target.value })}
+              placeholder="hunt_tier2"
+              className="w-full bg-transparent border px-2 py-1 font-mono"
+              style={{ borderColor: '#223344', color: '#aabbcc' }}
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] uppercase tracking-wider" style={{ color: '#556677' }}>Budget (max enemies)</label>
+            <input
+              type="number"
+              min={1}
+              max={200}
+              value={selected.budget ?? 8}
+              onChange={(e) => update({ budget: Number(e.target.value) })}
+              className="w-full bg-transparent border px-2 py-1 font-mono"
+              style={{ borderColor: '#223344', color: '#aabbcc' }}
+            />
+          </div>
+          <WaveAssignDropdown entityId={selected.id} currentWaveId={selected.waveId} />
+        </>
+      )}
+
+      {/* Trigger zone */}
+      {selected.type === 'trigger_zone' && (
+        <>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] uppercase tracking-wider" style={{ color: '#556677' }}>Trigger On</label>
+            <select
+              value={selected.triggerOn ?? 'enter'}
+              onChange={(e) =>
+                update({ triggerOn: e.target.value as EditorEntity['triggerOn'] })
+              }
+              className="bg-transparent border px-2 py-1 font-mono"
+              style={{ borderColor: '#223344', color: '#aabbcc', background: '#0a0a14' }}
+            >
+              <option value="enter">enter</option>
+              <option value="all_enemies_dead">all_enemies_dead</option>
+              <option value="timer">timer</option>
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] uppercase tracking-wider" style={{ color: '#556677' }}>
+              Actions (comma-separated)
+            </label>
+            <input
+              type="text"
+              value={(selected.triggerActions ?? []).join(', ')}
+              onChange={(e) =>
+                update({
+                  triggerActions: e.target.value
+                    .split(',')
+                    .map((s) => s.trim())
+                    .filter(Boolean),
+                })
+              }
+              placeholder="lock_doors, start_wave:w_intro"
+              className="w-full bg-transparent border px-2 py-1 font-mono"
+              style={{ borderColor: '#223344', color: '#aabbcc' }}
+            />
+          </div>
+        </>
+      )}
+
+      {/* Door */}
+      {selected.type === 'door' && (
+        <>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] uppercase tracking-wider" style={{ color: '#556677' }}>Label</label>
+            <input
+              type="text"
+              value={selected.label ?? ''}
+              onChange={(e) => update({ label: e.target.value })}
+              placeholder="Exit North"
+              className="w-full bg-transparent border px-2 py-1 font-mono"
+              style={{ borderColor: '#223344', color: '#aabbcc' }}
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] uppercase tracking-wider" style={{ color: '#556677' }}>Reward Tag</label>
+            <select
+              value={selected.rewardTag ?? 'mystery'}
+              onChange={(e) => update({ rewardTag: e.target.value })}
+              className="bg-transparent border px-2 py-1 font-mono"
+              style={{ borderColor: '#223344', color: '#aabbcc', background: '#0a0a14' }}
+            >
+              <option value="weapon">weapon</option>
+              <option value="heal">heal</option>
+              <option value="perk">perk</option>
+              <option value="credits">credits</option>
+              <option value="mystery">mystery</option>
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] uppercase tracking-wider" style={{ color: '#556677' }}>Next Pool Tag</label>
+            <input
+              type="text"
+              value={selected.nextPool ?? ''}
+              onChange={(e) => update({ nextPool: e.target.value })}
+              placeholder="hunt_tier3"
+              className="w-full bg-transparent border px-2 py-1 font-mono"
+              style={{ borderColor: '#223344', color: '#aabbcc' }}
+            />
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={selected.requiresCleared ?? false}
+              onChange={(e) => update({ requiresCleared: e.target.checked })}
+              style={{ accentColor: '#ffcc00' }}
+            />
+            <span>Requires room cleared</span>
+          </label>
+        </>
       )}
 
       <button
@@ -290,7 +567,6 @@ function WaveTimeline() {
         className="relative mx-2 rounded"
         style={{ height: 36, background: '#0d0d1a', border: '1px solid #1a2233' }}
       >
-        {/* Time ticks */}
         {[0, 30, 60, 90, 120, 150, 180].map((t) => (
           <div
             key={t}
@@ -301,7 +577,6 @@ function WaveTimeline() {
           </div>
         ))}
 
-        {/* Wave blocks */}
         {store.waves.map((wave) => {
           const left = (wave.triggerTime / DURATION) * 100;
           const isSelected = wave.id === store.selectedWaveId;
@@ -343,7 +618,6 @@ function WaveTimeline() {
         })}
       </div>
 
-      {/* Selected wave time input */}
       {store.selectedWaveId && (() => {
         const w = store.waves.find((x) => x.id === store.selectedWaveId);
         if (!w) return null;
@@ -375,16 +649,15 @@ export default function EditorPage() {
   const store = useEditorStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ---- Toolbar actions ----
   const handleNew = () => {
-    if (!confirm('Clear the current level?')) return;
+    if (!confirm('Clear the current room?')) return;
     store.reset();
   };
 
   const handleSave = () => {
     const data = serializeLevel(store);
     const json = JSON.stringify(data, null, 2);
-    localStorage.setItem(`level:${data.id}`, json);
+    localStorage.setItem(`room:${data.id}`, json);
     alert(`Saved "${data.name}" to localStorage.`);
   };
 
@@ -398,7 +671,7 @@ export default function EditorPage() {
     const reader = new FileReader();
     reader.onload = (ev) => {
       try {
-        const data: SerializedLevel = JSON.parse(ev.target?.result as string);
+        const data: RoomJSON | LegacySerializedLevel = JSON.parse(ev.target?.result as string);
         store.loadLevel(data);
       } catch {
         alert('Failed to parse JSON.');
@@ -431,7 +704,7 @@ export default function EditorPage() {
         style={{ height: 40, background: '#0d0d1a', borderBottom: '1px solid #1a2233' }}
       >
         <span className="text-xs font-bold tracking-widest uppercase mr-2" style={{ color: '#556677' }}>
-          Level Editor
+          Room Editor
         </span>
 
         <input
@@ -469,10 +742,14 @@ export default function EditorPage() {
             </button>
           ))}
           <button
-            disabled
-            className="px-3 py-1 text-[11px] border opacity-30 cursor-not-allowed"
-            style={{ borderColor: '#334455', color: '#aabbcc' }}
-            title="Play Test (Phase 2)"
+            onClick={() => {
+              const data = serializeLevel(store);
+              localStorage.setItem('roomPreview', JSON.stringify(data));
+              window.open('/play-room', '_blank');
+            }}
+            className="px-3 py-1 text-[11px] border transition-all hover:opacity-80"
+            style={{ borderColor: '#44ccff', color: '#44ccff' }}
+            title="Play Test — open this room in a preview tab"
           >
             PLAY TEST
           </button>
@@ -490,37 +767,43 @@ export default function EditorPage() {
       {/* ---- Main row ---- */}
       <div className="flex flex-1 min-h-0">
 
-        {/* Left sidebar -- Tools */}
+        {/* Left sidebar -- Tools + Metadata */}
         <div
-          className="flex flex-col gap-1 p-2 shrink-0"
-          style={{ width: 120, background: '#0d0d1a', borderRight: '1px solid #1a2233' }}
+          className="flex flex-col shrink-0 overflow-hidden"
+          style={{ width: 180, background: '#0d0d1a', borderRight: '1px solid #1a2233' }}
         >
-          <div className="text-[10px] uppercase tracking-wider mb-1 px-1" style={{ color: '#445566' }}>
-            Tools
-          </div>
-          {TOOLS.map((t) => {
-            const active = store.activeTool === t.id;
-            return (
-              <button
-                key={t.id}
-                onClick={() => store.setActiveTool(t.id)}
-                className="text-left px-2 py-1.5 text-[11px] border transition-all"
-                style={{
-                  borderColor: active ? t.color : '#1a2233',
-                  color: active ? t.color : '#556677',
-                  background: active ? `${t.color}11` : 'transparent',
-                }}
-              >
-                {t.label}
-              </button>
-            );
-          })}
+          <div className="p-2 flex flex-col gap-1">
+            <div className="text-[10px] uppercase tracking-wider mb-1 px-1" style={{ color: '#445566' }}>
+              Tools
+            </div>
+            {TOOLS.map((t) => {
+              const active = store.activeTool === t.id;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => store.setActiveTool(t.id)}
+                  className="text-left px-2 py-1.5 text-[11px] border transition-all"
+                  style={{
+                    borderColor: active ? t.color : '#1a2233',
+                    color: active ? t.color : '#556677',
+                    background: active ? `${t.color}11` : 'transparent',
+                  }}
+                >
+                  {t.label}
+                </button>
+              );
+            })}
 
-          <div className="mt-4 text-[10px] uppercase tracking-wider mb-1 px-1" style={{ color: '#445566' }}>
-            Entities
+            <div className="mt-3 text-[10px] uppercase tracking-wider mb-1 px-1" style={{ color: '#445566' }}>
+              Entities
+            </div>
+            <div className="text-[11px] px-1" style={{ color: '#334455' }}>
+              {store.entities.length} placed
+            </div>
           </div>
-          <div className="text-[11px] px-1" style={{ color: '#334455' }}>
-            {store.entities.length} placed
+
+          <div className="flex-1 overflow-y-auto border-t" style={{ borderColor: '#1a2233' }}>
+            <RoomMetadataPanel />
           </div>
         </div>
 
@@ -532,7 +815,7 @@ export default function EditorPage() {
         {/* Right sidebar -- Properties */}
         <div
           className="flex flex-col shrink-0 overflow-hidden"
-          style={{ width: 200, background: '#0d0d1a', borderLeft: '1px solid #1a2233' }}
+          style={{ width: 220, background: '#0d0d1a', borderLeft: '1px solid #1a2233' }}
         >
           <div
             className="text-[10px] uppercase tracking-wider px-3 py-2 shrink-0"

@@ -22,7 +22,10 @@ import {
 // ---- Colors ----------------------------------------------------------------
 const COL_PLAYER_SPAWN = 0x00ccff;
 const COL_ENEMY_SPAWN  = 0xff4444;
-const COL_ZONE         = 0xffcc00;
+const COL_INTERACTABLE = 0xffcc00;   // also used for legacy interaction_zone
+const COL_SPAWN_ZONE   = 0xff6644;
+const COL_TRIGGER_ZONE = 0xffaa44;
+const COL_DOOR         = 0x44ccff;
 const COL_SELECT       = 0x44aaff;
 const COL_GRID_ALPHA   = 0.25;
 
@@ -199,11 +202,60 @@ export function EditorCanvas() {
           break;
         }
         case 'interaction_zone':
-        case 'door': {
-          const rad = r2s(ent.radius ?? 60);
-          gfx.circle(sx, sy, rad).fill({ color: COL_ZONE, alpha: 0.25 });
-          gfx.circle(sx, sy, rad).stroke({ width: 1, color: COL_ZONE, alpha: 0.8 });
+        case 'interactable': {
+          const rad = r2s(ent.radius ?? 40);
+          gfx.circle(sx, sy, rad).fill({ color: COL_INTERACTABLE, alpha: 0.3 });
+          gfx.circle(sx, sy, rad).stroke({ width: 1.5, color: COL_INTERACTABLE, alpha: 0.9 });
+          // Inner dot to distinguish from plain zones
+          gfx.circle(sx, sy, r2s(5)).fill({ color: COL_INTERACTABLE, alpha: 1 });
           if (isSelected) gfx.circle(sx, sy, rad + 3).stroke({ width: 2, color: COL_SELECT });
+          break;
+        }
+        case 'door': {
+          const rad = r2s(ent.radius ?? 40);
+          // Diamond shape
+          gfx
+            .moveTo(sx, sy - rad)
+            .lineTo(sx + rad, sy)
+            .lineTo(sx, sy + rad)
+            .lineTo(sx - rad, sy)
+            .closePath()
+            .fill({ color: COL_DOOR, alpha: 0.4 })
+            .stroke({ width: 1.5, color: COL_DOOR, alpha: 0.95 });
+          if (isSelected) gfx.circle(sx, sy, rad + 5).stroke({ width: 2, color: COL_SELECT });
+          break;
+        }
+        case 'spawn_zone': {
+          const w = r2s(ent.width  ?? 200);
+          const h = r2s(ent.height ?? 200);
+          gfx
+            .rect(sx - w / 2, sy - h / 2, w, h)
+            .fill({ color: COL_SPAWN_ZONE, alpha: 0.15 })
+            .stroke({ width: 1.5, color: COL_SPAWN_ZONE, alpha: 0.85 });
+          // Corner marker
+          const markR = Math.min(r2s(8), 10);
+          gfx.circle(sx - w / 2 + markR, sy - h / 2 + markR, markR).fill({ color: COL_SPAWN_ZONE, alpha: 0.9 });
+          if (isSelected)
+            gfx.rect(sx - w / 2 - 2, sy - h / 2 - 2, w + 4, h + 4).stroke({ width: 2, color: COL_SELECT });
+          break;
+        }
+        case 'trigger_zone': {
+          const w = r2s(ent.width  ?? 200);
+          const h = r2s(ent.height ?? 200);
+          // Dashed-look via stroke only
+          gfx
+            .rect(sx - w / 2, sy - h / 2, w, h)
+            .fill({ color: COL_TRIGGER_ZONE, alpha: 0.08 })
+            .stroke({ width: 1.5, color: COL_TRIGGER_ZONE, alpha: 0.8 });
+          // Cross marker in center
+          const cr = Math.min(r2s(10), 14);
+          gfx
+            .moveTo(sx - cr, sy).lineTo(sx + cr, sy)
+            .stroke({ width: 1, color: COL_TRIGGER_ZONE, alpha: 0.9 })
+            .moveTo(sx, sy - cr).lineTo(sx, sy + cr)
+            .stroke({ width: 1, color: COL_TRIGGER_ZONE, alpha: 0.9 });
+          if (isSelected)
+            gfx.rect(sx - w / 2 - 2, sy - h / 2 - 2, w + 4, h + 4).stroke({ width: 2, color: COL_SELECT });
           break;
         }
       }
@@ -226,7 +278,10 @@ export function EditorCanvas() {
         case 'obstacle':         col = COL_OBSTACLE;     break;
         case 'player_spawn':     col = COL_PLAYER_SPAWN; break;
         case 'interaction_zone':
-        case 'door':             col = COL_ZONE;         break;
+        case 'interactable':     col = COL_INTERACTABLE; break;
+        case 'door':             col = COL_DOOR;         break;
+        case 'spawn_zone':       col = COL_SPAWN_ZONE;   break;
+        case 'trigger_zone':     col = COL_TRIGGER_ZONE; break;
         case 'enemy_spawn': {
           const wc = waves.find((w) => w.id === ent.waveId)?.color;
           col = wc ? parseInt(wc.replace('#', ''), 16) : COL_ENEMY_SPAWN;
@@ -374,12 +429,19 @@ export function EditorCanvas() {
         const e  = entities[i];
         const dx = wx - e.pos.x;
         const dy = wy - e.pos.y;
-        if (e.type === 'obstacle') {
+        // Rect-based entities
+        if (e.type === 'obstacle' || e.type === 'spawn_zone' || e.type === 'trigger_zone') {
           const hw = (e.width  ?? 64) / 2;
           const hh = (e.height ?? 64) / 2;
           if (Math.abs(dx) <= hw && Math.abs(dy) <= hh) return e;
         } else {
-          const r = e.radius ?? (e.type === 'enemy_spawn' || e.type === 'player_spawn' ? 14 : 60);
+          const defaultR =
+            e.type === 'enemy_spawn' || e.type === 'player_spawn'
+              ? 14
+              : e.type === 'door' || e.type === 'interactable'
+                ? 40
+                : 60;
+          const r = e.radius ?? defaultR;
           if (dx * dx + dy * dy <= r * r) return e;
         }
       }
@@ -464,12 +526,15 @@ export function EditorCanvas() {
 
       const defaults: Record<ToolMode, Partial<EditorEntity>> = {
         select:       {},
-        cave:         { type: 'cave',              radius: 150 },
-        void_pool:    { type: 'void_pool',          radius: 80  },
-        obstacle:     { type: 'obstacle',           width: 64, height: 64 },
-        enemy:        { type: 'enemy_spawn',        creature: 'Void Leech', count: 1, isElite: false },
+        cave:         { type: 'cave',         radius: 150 },
+        void_pool:    { type: 'void_pool',    radius: 80 },
+        obstacle:     { type: 'obstacle',     width: 64, height: 64 },
+        enemy:        { type: 'enemy_spawn',  creature: 'Void Leech', count: 1, isElite: false },
         player_spawn: { type: 'player_spawn' },
-        zone:         { type: 'interaction_zone',   radius: 80, label: 'Zone' },
+        interactable: { type: 'interactable', radius: 40, kind: '', prompt: '', action: '' },
+        spawn_zone:   { type: 'spawn_zone',   width: 200, height: 200, poolTag: '', budget: 8 },
+        trigger_zone: { type: 'trigger_zone', width: 200, height: 200, triggerOn: 'enter', triggerActions: [] },
+        door:         { type: 'door',         radius: 40, rewardTag: 'mystery', requiresCleared: true },
       };
 
       if (tool === 'player_spawn') {
@@ -478,8 +543,13 @@ export function EditorCanvas() {
       }
 
       const typeMap: Record<ToolMode, EntityType | null> = {
-        select: null, cave: 'cave', void_pool: 'void_pool', obstacle: 'obstacle',
-        enemy: 'enemy_spawn', player_spawn: 'player_spawn', zone: 'interaction_zone',
+        select: null,
+        cave: 'cave', void_pool: 'void_pool', obstacle: 'obstacle',
+        enemy: 'enemy_spawn', player_spawn: 'player_spawn',
+        interactable: 'interactable',
+        spawn_zone: 'spawn_zone',
+        trigger_zone: 'trigger_zone',
+        door: 'door',
       };
 
       const entType = typeMap[tool];
@@ -495,10 +565,11 @@ export function EditorCanvas() {
       s.addEntity(newEnt);
       s.selectEntity(id);
 
-      const isDragTool = tool === 'cave' || tool === 'void_pool' || tool === 'obstacle' || tool === 'zone';
-      if (isDragTool) {
+      const isCircleDrag = tool === 'cave' || tool === 'void_pool';
+      const isRectDrag   = tool === 'obstacle' || tool === 'spawn_zone' || tool === 'trigger_zone';
+      if (isCircleDrag || isRectDrag) {
         dragRef.current = {
-          type: tool === 'obstacle' ? 'place_rect' : 'place_circle',
+          type: isRectDrag ? 'place_rect' : 'place_circle',
           startScreenX: cx, startScreenY: cy,
           startWorldX: wX, startWorldY: wY,
           entityId: id, entityStartX: snapped.x, entityStartY: snapped.y,
