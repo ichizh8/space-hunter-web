@@ -1,3 +1,5 @@
+import { type PlanetId, type Planet, PLANETS, getUnlockedPlanets } from './planets';
+
 export interface ContractTypeDef {
   label: string;
   iconColor: number;
@@ -50,6 +52,10 @@ export interface Contract {
   targetTotal: number;
   /** Par time in seconds (for time bonus on results) */
   parTime: number;
+  /** Planet this contract takes place on */
+  planet: PlanetId;
+  /** Number of rooms in the run */
+  roomCount: number;
   /** Hunt targets are elite enemies only */
   eliteOnly?: boolean;
   /** Payload HP (payload_escort only) */
@@ -68,17 +74,42 @@ const CONTRACT_NAMES: Record<string, string[]> = {
   extraction_run: ['Cache Sweep', 'Ingredient Run', 'Biome Harvest', 'Supply Scavenge'],
 };
 
-function getContractDifficulty(avgRep: number): number {
-  if (avgRep < 50) return 1;
-  if (avgRep < 150) return 1 + Math.floor(Math.random() * 2); // 1-2
-  if (avgRep < 350) return 2 + Math.floor(Math.random() * 2); // 2-3
-  if (avgRep < 700) return 3 + Math.floor(Math.random() * 2); // 3-4
-  return 4 + Math.floor(Math.random() * 2); // 4-5
+// Hunt: 5-8 rooms by difficulty; indexed by difficulty 1-6
+const HUNT_ROOM_COUNTS = [0, 5, 5, 6, 6, 7, 8] as const;
+
+function getRoomCount(type: string, difficulty: number): number {
+  switch (type) {
+    case 'hunt':           return HUNT_ROOM_COUNTS[Math.min(difficulty, 6)] ?? 5;
+    case 'boss_hunt':      return difficulty >= 5 ? 5 : 4;
+    case 'extraction_run': return difficulty >= 3 ? 6 : 5;
+    case 'void_breach':    return 3;
+    case 'payload_escort': return 1;
+    default:               return 5;
+  }
+}
+
+function getPlanetDifficulty(planet: Planet, clearance: number): number {
+  const [floor, ceil] = planet.difficultyRange;
+  const step = Math.min(Math.floor(clearance / 2), ceil - floor);
+  const base = floor + step;
+  const variance = clearance > 0 && Math.random() < 0.4 ? 1 : 0;
+  return Math.min(ceil, base + variance);
+}
+
+function pickPlanetsForBoard(unlocked: Planet[], count: number): Planet[] {
+  if (unlocked.length === 0) return Array.from({ length: count }, () => PLANETS.kepler);
+  const result: Planet[] = [];
+  for (let i = 0; i < count; i++) {
+    if (i === 0) result.push(unlocked[0]);
+    else if (i === count - 1) result.push(unlocked[unlocked.length - 1]);
+    else result.push(unlocked[Math.floor(Math.random() * unlocked.length)]);
+  }
+  return result;
 }
 
 function computeSpecial(type: string, difficulty: number): string {
   switch (type) {
-    case 'boss_hunt':       return '2× Elite Core + T3 Recipe';
+    case 'boss_hunt':       return '2x Elite Core + T3 Recipe';
     case 'payload_escort':  return difficulty >= 2 ? '+1 T2 Recipe' : '';
     case 'extraction_run':  return 'All ingredients kept + rep bonus';
     case 'void_breach':     return 'Void Walker rep bonus';
@@ -86,59 +117,72 @@ function computeSpecial(type: string, difficulty: number): string {
   }
 }
 
-export function generateContracts(count: number = 3, reputation: Record<string, number> = {}): Contract[] {
-  const maxRep = Math.max(0, ...Object.values(reputation));
-  const avgRep = Object.values(reputation).length > 0
-    ? Object.values(reputation).reduce((a, b) => a + b, 0) / Object.values(reputation).length
-    : 0;
+function buildContract(type: string, planet: Planet, difficulty: number): Contract {
+  const def = CONTRACT_TYPE_DEFS[type];
+  const roomCount = getRoomCount(type, difficulty);
+  const names = CONTRACT_NAMES[type] || ['Unknown Mission'];
+  const rewardFn = CONTRACT_REWARDS[type] ?? ((d: number) => 150 + d * 80);
+  const parTimeFn = CONTRACT_PAR_TIME[type] ?? ((d: number) => 180 + d * 30);
 
-  const unlockedTypes = CONTRACT_TYPES.filter(t => maxRep >= (CONTRACT_UNLOCK_REP[t] ?? 0));
-  const pool = unlockedTypes.length > 0 ? unlockedTypes : ['hunt'];
+  const base: Contract = {
+    type,
+    label: def.label,
+    name: names[Math.floor(Math.random() * names.length)],
+    desc: def.desc,
+    difficulty,
+    reward: rewardFn(difficulty),
+    specialReward: computeSpecial(type, difficulty),
+    iconColor: def.iconColor,
+    targetTotal: 1 + difficulty,
+    parTime: parTimeFn(difficulty),
+    planet: planet.id,
+    roomCount,
+  };
 
-  const types = [...pool].sort(() => Math.random() - 0.5).slice(0, count);
-  return types.map(type => {
-    const def = CONTRACT_TYPE_DEFS[type];
-    const difficulty = getContractDifficulty(avgRep);
-    const names = CONTRACT_NAMES[type] || ['Unknown Mission'];
-    const rewardFn = CONTRACT_REWARDS[type] ?? ((d) => 150 + d * 80);
-    const parTimeFn = CONTRACT_PAR_TIME[type] ?? ((d) => 180 + d * 30);
-
-    const base: Contract = {
-      type,
-      label: def.label,
-      name: names[Math.floor(Math.random() * names.length)],
-      desc: def.desc,
-      difficulty,
-      reward: rewardFn(difficulty),
-      specialReward: computeSpecial(type, difficulty),
-      iconColor: def.iconColor,
-      targetTotal: 1 + difficulty,
-      parTime: parTimeFn(difficulty),
-    };
-
-    // Contract-type-specific fields
-    switch (type) {
-      case 'hunt':
-        base.eliteOnly = true;
-        break;
-      case 'payload_escort':
-        base.podHp = 200 + difficulty * 50;
-        break;
-      case 'void_breach':
-        base.holdTime = 30 + difficulty * 10; // per-zone hold in seconds
-        base.targetTotal = 0; // no kill target, survive + hold
-        break;
-      case 'boss_hunt':
-        base.targetTotal = 1; // kill the apex
-        break;
-      case 'extraction_run': {
-        const totalCaches = 5 + difficulty * 3; // 8 at d=1, up to 17 at d=4
-        base.cacheCount = totalCaches;
-        base.targetTotal = totalCaches;
-        break;
-      }
+  switch (type) {
+    case 'hunt':
+      base.eliteOnly = true;
+      break;
+    case 'payload_escort':
+      base.podHp = 200 + difficulty * 50;
+      break;
+    case 'void_breach':
+      base.holdTime = 30 + difficulty * 10;
+      base.targetTotal = 0;
+      break;
+    case 'boss_hunt':
+      base.targetTotal = 1;
+      break;
+    case 'extraction_run': {
+      const totalCaches = 5 + difficulty * 3;
+      base.cacheCount = totalCaches;
+      base.targetTotal = totalCaches;
+      break;
     }
+  }
 
-    return base;
+  return base;
+}
+
+export function generateContracts(
+  count: number = 3,
+  reputation: Record<string, number> = {},
+  planetClearance: Record<string, number> = {}
+): Contract[] {
+  const unlockedPlanets = getUnlockedPlanets(planetClearance);
+  const selectedPlanets = pickPlanetsForBoard(unlockedPlanets, count);
+
+  const used = new Set<string>();
+  return selectedPlanets.map(planet => {
+    const clearance = planetClearance[planet.id] ?? 0;
+    const difficulty = getPlanetDifficulty(planet, clearance);
+
+    // Pick a contract type from this planet's allowed types, avoiding repeats when possible
+    const pool = planet.allowedContractTypes.filter(t => !used.has(t));
+    const available = pool.length > 0 ? pool : planet.allowedContractTypes;
+    const type = available[Math.floor(Math.random() * available.length)];
+    used.add(type);
+
+    return buildContract(type, planet, difficulty);
   });
 }
