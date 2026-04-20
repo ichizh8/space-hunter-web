@@ -3,6 +3,7 @@ import { useState, useMemo } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { useSaveStore } from '../store/saveStore';
 import { REP_THRESHOLDS } from '../data/recipes';
+import { INGREDIENTS_BY_PLANET } from '../data/ingredients';
 import { KIT_DEFS, KIT_TREE_SECTIONS, KIT_SLOT_COSTS, checkKitPrereqs, getPrereqText } from '../data/kits';
 import { KitchenScreen } from './KitchenScreen';
 import {
@@ -49,15 +50,19 @@ const WEAPON_UNLOCK_DEFS = [
   { id: 'chain_rifle', name: 'Chain Rifle', desc: 'Scrapper rep weapon', cost: 200 },
 ];
 
-const PANTRY_COLORS: Record<string, string> = {
-  rift_dust: '#e6cc4d',
-  void_crystal: '#aa44ff',
-  cave_moss: '#4db366',
-  river_silt: '#4d99e6',
-  elite_core: '#ffd900',
+const PLANET_COLORS: Record<string, string> = {
+  kepler: '#ff8800',
+  tidal: '#44d4ff',
+  void_reach: '#aa44ff',
+  furnace: '#ff4422',
 };
 
-const ING_ORDER = ['rift_dust', 'void_crystal', 'cave_moss', 'river_silt', 'elite_core'];
+const PLANET_LABELS: Record<string, string> = {
+  kepler: 'Kepler',
+  tidal: 'Tidal',
+  void_reach: 'Void',
+  furnace: 'Furnace',
+};
 
 type Tab = 'ship' | 'upgrades' | 'kits';
 
@@ -179,16 +184,17 @@ export function ShipTab({ save, huntResult, onContracts }: {
         DEV: Give Resources (+5000cr · 99 ingredients · max rep · all weapons)
       </button>
 
-      <SectionHeader text="PANTRY" color="var(--color-accent-orange)" />
+      <SectionHeader text="INGREDIENTS" color="var(--color-accent-orange)" />
       <div className="flex gap-3 justify-center py-2">
-        {ING_ORDER.map(id => {
-          const count = save.pantry[id] ?? 0;
-          const color = PANTRY_COLORS[id] ?? '#fff';
+        {Object.entries(INGREDIENTS_BY_PLANET).map(([planet, groups]) => {
+          const allIds = [...groups.common, ...groups.rare, ...groups.boss];
+          const total = allIds.reduce((sum, id) => sum + (save.ingredientInventory[id] ?? 0), 0);
+          const color = PLANET_COLORS[planet] ?? '#fff';
           return (
-            <div key={id} className="flex flex-col items-center gap-1">
-              <div className="w-9 h-9" style={{ background: count > 0 ? color : color + '30' }} />
-              <span className="text-sm font-bold" style={{ color: count > 0 ? color : 'var(--color-text-muted)' }}>{count}</span>
-              <span className="text-xs text-[var(--color-text-muted)]">{id.replace('_', ' ').slice(0, 8)}</span>
+            <div key={planet} className="flex flex-col items-center gap-1">
+              <div className="w-9 h-9" style={{ background: total > 0 ? color : color + '30' }} />
+              <span className="text-sm font-bold" style={{ color: total > 0 ? color : 'var(--color-text-muted)' }}>{total}</span>
+              <span className="text-xs text-[var(--color-text-muted)]">{PLANET_LABELS[planet]}</span>
             </div>
           );
         })}

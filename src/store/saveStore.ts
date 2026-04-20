@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { REP_THRESHOLDS } from '../data/recipes';
+import { INGREDIENTS } from '../data/ingredients';
 
 export interface SaveState {
   totalCredits: number;
@@ -219,7 +220,7 @@ export const useSaveStore = create<SaveState & SaveActions>()(
           pantry: { rift_dust: 99, void_crystal: 99, cave_moss: 99, river_silt: 99, elite_core: 99 },
           reputation: 1200,
           planetClearance: { kepler: 10, tidal: 10, void_reach: 10, furnace: 10 },
-          ingredientInventory: { ...s.ingredientInventory },
+          ingredientInventory: Object.fromEntries(Object.keys(INGREDIENTS).map(id => [id, 99])),
           unlockedWeapons: ALL_WEAPONS,
           unlockedKits: ALL_KITS,
           kitTiers,
