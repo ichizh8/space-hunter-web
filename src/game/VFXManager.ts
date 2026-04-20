@@ -29,6 +29,7 @@ export const SPRITES_WITH_DIRS = ['player', 'void_leech', 'shadow_crawler', 'aby
 const BEHAVIOR_COLORS: Record<string, number> = {
   charge: 0xFF3333, flank: 0xFF8800, pack: 0x33FF33,
   lurker: 0xAA44FF, burst: 0xFFFF00, strafe: 0x00FFFF, patrol_river: 0x888888,
+  mine_crawler: 0xcc7722, sentry_drone: 0xff9933, tide_phantom: 0x22ccbb, coral_spitter: 0x33aacc,
 };
 
 function subtleTint(color: number, strength: number): number {
@@ -112,6 +113,18 @@ export class VFXManager {
               for (let i = 0; i < 4; i++) {
                 game.particles.push({ x: e.pos.x + (Math.random()-0.5)*e.radius, y: e.pos.y + (Math.random()-0.5)*e.radius, vx: -e.vel.x*0.08 + (Math.random()-0.5)*30, vy: -e.vel.y*0.08 + (Math.random()-0.5)*30, life: 0.2, maxLife: 0.2, color: 0xffcc00, radius: 5 + Math.random()*4 });
               }
+            }
+            break;
+          case 'sentry_drone':
+            // Orange spark trail when flying at speed
+            if (e.phase === 0 && spd > 60) {
+              game.particles.push({ x: e.pos.x, y: e.pos.y, vx: -e.vel.x*0.12 + (Math.random()-0.5)*20, vy: -e.vel.y*0.12 + (Math.random()-0.5)*20, life: 0.18, maxLife: 0.18, color: 0xff9933, radius: 2 + Math.random()*2 });
+            }
+            break;
+          case 'tide_phantom':
+            // Teal shimmer while invisible (phase 1)
+            if (e.phase === 1 && Math.random() < 0.5) {
+              game.particles.push({ x: e.pos.x + (Math.random()-0.5)*e.radius*2, y: e.pos.y + (Math.random()-0.5)*e.radius*2, vx: (Math.random()-0.5)*12, vy: -8 - Math.random()*12, life: 0.5, maxLife: 0.5, color: 0x22ccbb, radius: 3 });
             }
             break;
         }
@@ -341,7 +354,11 @@ export class VFXManager {
       // Lurker: semi-transparent (0.5) + flicker every 2s; fully dormant at 0.3
       const lurkerDormant = e.behavior === 'lurker' && (e.phase as number) === 0;
       const lurkerFlicker = e.behavior === 'lurker' ? (Math.floor(game.elapsed / 2) % 2 === 0 ? 1.0 : 0.6) : 1.0;
-      const sa = lurkerDormant ? 0.3 * lurkerFlicker : e.behavior === 'lurker' ? 0.5 * lurkerFlicker : 1.0;
+      // Tide Phantom: almost invisible during phase 1 (invisible phase)
+      const phantomAlpha = e.behavior === 'tide_phantom' && e.phase === 1
+        ? 0.1 + Math.abs(Math.sin(game.elapsed * 5)) * 0.08
+        : 1.0;
+      const sa = lurkerDormant ? 0.3 * lurkerFlicker : e.behavior === 'lurker' ? 0.5 * lurkerFlicker : phantomAlpha;
 
       if (e.isAggroed) {
         g.circle(ex, ey, er * 1.6).stroke({ color: col, width: 1.5, alpha: 0.35 * sa });
@@ -382,6 +399,61 @@ export class VFXManager {
         } else if (e.behavior === 'lurker') {
           g.moveTo(ex - er, ey - er).lineTo(ex + er, ey + er).stroke({ color: col, width: 3, alpha: 0.7 * sa });
           g.moveTo(ex + er, ey - er).lineTo(ex - er, ey + er).stroke({ color: col, width: 3, alpha: 0.7 * sa });
+        } else if (e.behavior === 'mine_crawler') {
+          // Heavy rounded hexagon (amber/rust) + mine-mode pulsing ring
+          for (let i = 0; i < 6; i++) {
+            const a1 = (i / 6) * Math.PI * 2;
+            const a2 = ((i + 1) / 6) * Math.PI * 2;
+            if (i === 0) g.moveTo(ex + Math.cos(a1) * er, ey + Math.sin(a1) * er);
+            g.lineTo(ex + Math.cos(a2) * er, ey + Math.sin(a2) * er);
+          }
+          g.closePath().fill({ color: col, alpha: 0.55 * sa });
+          for (let i = 0; i < 6; i++) {
+            const a1 = (i / 6) * Math.PI * 2;
+            const a2 = ((i + 1) / 6) * Math.PI * 2;
+            if (i === 0) g.moveTo(ex + Math.cos(a1) * er, ey + Math.sin(a1) * er);
+            g.lineTo(ex + Math.cos(a2) * er, ey + Math.sin(a2) * er);
+          }
+          g.closePath().stroke({ color: col, width: 2.5, alpha: 0.9 * sa });
+          if (e.minePhaseActive) {
+            const pulse = 0.3 + Math.abs(Math.sin(game.elapsed * 6)) * 0.5;
+            g.circle(ex, ey, er * 1.8).stroke({ color: 0xff4400, width: 2, alpha: pulse });
+          }
+        } else if (e.behavior === 'sentry_drone') {
+          // Small diamond / rhombus (amber) + flight direction line
+          g.moveTo(ex, ey - er).lineTo(ex + er * 0.7, ey).lineTo(ex, ey + er).lineTo(ex - er * 0.7, ey).closePath();
+          g.fill({ color: col, alpha: 0.55 * sa });
+          g.moveTo(ex, ey - er).lineTo(ex + er * 0.7, ey).lineTo(ex, ey + er).lineTo(ex - er * 0.7, ey).closePath();
+          g.stroke({ color: col, width: 1.5, alpha: 0.9 * sa });
+          if (e.phase === 0) {
+            const tx = ex + Math.cos(e.lockAngle) * er * 2.5;
+            const ty = ey + Math.sin(e.lockAngle) * er * 2.5;
+            g.moveTo(ex, ey).lineTo(tx, ty).stroke({ color: col, width: 1, alpha: 0.4 * sa });
+          }
+        } else if (e.behavior === 'tide_phantom') {
+          // Circle that shimmers teal -- full glow when visible, ghostly when not
+          g.circle(ex, ey, er).fill({ color: col, alpha: 0.45 * sa });
+          g.circle(ex, ey, er).stroke({ color: col, width: 2, alpha: 0.9 * sa });
+          if (e.phase === 1) {
+            // Extra shimmer ring when invisible
+            const shimmer = 0.15 + Math.abs(Math.sin(game.elapsed * 7)) * 0.15;
+            g.circle(ex, ey, er * 1.4).stroke({ color: 0x22ccbb, width: 1.5, alpha: shimmer });
+          }
+        } else if (e.behavior === 'coral_spitter') {
+          // Large circle with aim indicator and root tendrils (teal/blue)
+          g.circle(ex, ey, er).fill({ color: col, alpha: 0.5 * sa });
+          g.circle(ex, ey, er).stroke({ color: col, width: 2.5, alpha: 0.9 * sa });
+          // Aim direction line
+          const aimX = ex + Math.cos(e.lockAngle) * er * 2;
+          const aimY = ey + Math.sin(e.lockAngle) * er * 2;
+          g.moveTo(ex, ey).lineTo(aimX, aimY).stroke({ color: col, width: 1.5, alpha: 0.6 * sa });
+          // Root tendrils (4 diagonal lines)
+          for (let i = 0; i < 4; i++) {
+            const ra = (i / 4) * Math.PI * 2 + Math.PI / 4;
+            g.moveTo(ex + Math.cos(ra) * er, ey + Math.sin(ra) * er)
+              .lineTo(ex + Math.cos(ra) * er * 1.8, ey + Math.sin(ra) * er * 1.8)
+              .stroke({ color: col, width: 1, alpha: 0.4 * sa });
+          }
         } else {
           g.rect(ex - er * 0.7, ey - er * 0.7, er * 1.4, er * 1.4).fill({ color: col, alpha: 0.5 * sa });
           g.rect(ex - er * 0.7, ey - er * 0.7, er * 1.4, er * 1.4).stroke({ color: col, width: 1.5, alpha: 0.8 * sa });

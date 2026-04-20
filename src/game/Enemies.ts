@@ -1,5 +1,5 @@
 import { type Vec2, v2, v2sub, v2norm, v2add, v2mul, v2dist, v2len, v2fromAngle, randRange, randInt, pick } from '../lib/math';
-import { CREATURE_DEFS, BIOME_POOLS, type CreatureDef } from '../data/creatures';
+import { CREATURE_DEFS, BIOME_POOLS, PLANET_POOLS, type CreatureDef } from '../data/creatures';
 import { WORLD_W, WORLD_H, ENEMY_MELEE_RANGE, ENEMY_LEASH_DEFAULT } from './constants';
 import type { Player } from './Player';
 import type { GameMap } from './Map';
@@ -59,6 +59,8 @@ export interface Enemy {
   eliteAttackTimer: number;    // time until next attack fires
   eliteAttackCycle: number;    // which attack fires next: 0=aoe, 1=dash, 2=burst (cycles)
   eliteSummonTimer: number;    // 15s cooldown for summoning minions
+  // Planet-enemy behavior fields
+  minePhaseActive: boolean;    // mine_crawler: true once HP < 50% mine-drop mode starts
 }
 
 let nextEnemyId = 1;
@@ -116,16 +118,18 @@ export function createEnemy(name: string, pos: Vec2, aggroed = false): Enemy {
     eliteAttackTimer: 3.0,
     eliteAttackCycle: 0,
     eliteSummonTimer: 15,
+    minePhaseActive: false,
   };
 }
 
 export class EnemySystem {
   enemies: Enemy[] = [];
   enemyBullets: Array<{ pos: Vec2; vel: Vec2; radius: number; damage: number; life: number; color: number }> = [];
+  mines: Array<{ pos: Vec2; radius: number; damage: number; life: number; armed: boolean; armTimer: number }> = [];
   _pendingSummons: Vec2[] = [];
   _pendingImpacts: Vec2[] = [];
 
-  spawnWave(count: number, playerPos: Vec2, map: GameMap, biome?: string) {
+  spawnWave(count: number, playerPos: Vec2, map: GameMap, biome?: string, planet?: string) {
     for (let i = 0; i < count; i++) {
       // Spawn away from player
       let pos: Vec2;
@@ -135,10 +139,11 @@ export class EnemySystem {
         attempts++;
       } while (v2dist(pos, playerPos) < 500 && attempts < 30);
 
-      // Pick creature from biome pool
+      // Pick creature: 45% from planet pool (when available), rest from biome pool
       const spawnBiome = biome || map.getBiome(pos.x, pos.y);
-      const pool = BIOME_POOLS[spawnBiome] || BIOME_POOLS.open;
-      const name = pick(pool);
+      const biomePool = BIOME_POOLS[spawnBiome] || BIOME_POOLS.open;
+      const planetPool = planet ? PLANET_POOLS[planet] : undefined;
+      const name = (planetPool && Math.random() < 0.45) ? pick(planetPool) : pick(biomePool);
       const def = CREATURE_DEFS[name];
       // All wave enemies start aggroed -- they exist to fight, not to idle
       const aggroed = true;
@@ -280,7 +285,7 @@ export class EnemySystem {
 
       if (e.woundedFlee) {
         // Aggressive types go berserk; others flee
-        if (e.behavior === 'charge' || e.behavior === 'burst' || e.behavior === 'pack') {
+        if (e.behavior === 'charge' || e.behavior === 'burst' || e.behavior === 'pack' || e.behavior === 'mine_crawler') {
           e.vel = v2mul(dirToPlayer, e.speed * 1.8); // berserk rush
         } else {
           e.vel = v2mul(v2norm(v2sub(e.pos, player.pos)), e.speed * 1.2); // flee
@@ -692,6 +697,115 @@ export class EnemySystem {
           break;
         }
 
+        case 'mine_crawler': {
+          // Slow approach; once HP < 50% start dropping proximity mines every 3s
+          e.vel = v2mul(dirToPlayer, e.speed * 0.5);
+          if (!e.minePhaseActive && e.hp < e.maxHp * 0.5) {
+            e.minePhaseActive = true;
+            e.phaseTimer = 3.0;
+          }
+          if (e.minePhaseActive) {
+            e.phaseTimer -= dt;
+            if (e.phaseTimer <= 0) {
+              e.phaseTimer = 3.0;
+              this.mines.push({
+                pos: v2(e.pos.x, e.pos.y),
+                radius: 32,
+                damage: 4,
+                life: 15.0,
+                armed: false,
+                armTimer: 0.6,
+              });
+            }
+          }
+          break;
+        }
+
+        case 'sentry_drone': {
+          // Phase 0: fly in locked direction; phase 1: hover and fire 3-shot burst
+          if (e.phase === 0) {
+            e.vel = v2mul(v2fromAngle(e.lockAngle), e.speed);
+            e.flankTimer -= dt;
+            if (e.flankTimer <= 0) {
+              e.phase = 1;
+              e.strafeDir = 3; // shots remaining
+              e.phaseTimer = 0; // fire first shot immediately
+            }
+          } else {
+            e.vel = v2mul(e.vel, 0.82);
+            e.phaseTimer -= dt;
+            if (e.phaseTimer <= 0) {
+              if (e.strafeDir > 0) {
+                const angle = Math.atan2(toPlayer.y, toPlayer.x);
+                this.enemyBullets.push({
+                  pos: v2(e.pos.x, e.pos.y),
+                  vel: v2fromAngle(angle, 280),
+                  radius: 4,
+                  damage: e.rangedDmg,
+                  life: 1.8,
+                  color: 0xff9933,
+                });
+                e.strafeDir--;
+                e.phaseTimer = e.strafeDir > 0 ? 0.12 : 0.4;
+              } else {
+                // Burst done; pick a new direction biased toward player
+                const bias = Math.atan2(toTarget.y, toTarget.x);
+                e.lockAngle = bias + (Math.random() - 0.5) * Math.PI * 1.2;
+                e.flankTimer = randRange(1.5, 3.0);
+                e.phase = 0;
+              }
+            }
+          }
+          break;
+        }
+
+        case 'tide_phantom': {
+          // Visible (phase 0, 3s): aggressive lunge; invisible (phase 1, 2s): drift away
+          if (e.phaseTimer === 0) e.phaseTimer = 3.0; // one-time init
+          if (e.phase === 0) {
+            e.vel = v2mul(dirToPlayer, e.speed * 1.25);
+          } else {
+            if (distToPlayer < 160) {
+              e.vel = v2mul(v2norm(v2sub(e.pos, player.pos)), e.speed * 0.45);
+            } else {
+              e.vel = v2mul(e.vel, 0.9);
+            }
+          }
+          e.phaseTimer -= dt;
+          if (e.phaseTimer <= 0) {
+            if (e.phase === 0) { e.phase = 1; e.phaseTimer = 2.0; }
+            else                { e.phase = 0; e.phaseTimer = 3.0; }
+          }
+          break;
+        }
+
+        case 'coral_spitter': {
+          // Stationary turret: rotate lockAngle toward player, fire 5-way spread every 2s
+          e.vel = v2(0, 0);
+          const targetAng = Math.atan2(toPlayer.y, toPlayer.x);
+          let diff = targetAng - e.lockAngle;
+          while (diff > Math.PI)  diff -= Math.PI * 2;
+          while (diff < -Math.PI) diff += Math.PI * 2;
+          e.lockAngle += diff * Math.min(1, dt * 3.5);
+          e.flankTimer -= dt;
+          if (e.flankTimer <= 0) {
+            e.flankTimer = 2.0;
+            const spread = Math.PI / 5;
+            for (let si = -2; si <= 2; si++) {
+              this.enemyBullets.push({
+                pos: v2(e.pos.x, e.pos.y),
+                vel: v2fromAngle(e.lockAngle + si * spread, 115),
+                radius: 6,
+                damage: e.rangedDmg,
+                life: 3.8,
+                color: 0x33ccdd,
+              });
+            }
+            e.hitFlash = 0.08;
+          }
+          break;
+        }
+
         default: {
           // Stop at melee range; strafe instead of stacking
           const meleeStop = ENEMY_MELEE_RANGE + e.radius + player.radius;
@@ -812,6 +926,22 @@ export class EnemySystem {
         this.enemyBullets.splice(i, 1);
       }
     }
+
+    // Update proximity mines
+    for (let i = this.mines.length - 1; i >= 0; i--) {
+      const m = this.mines[i];
+      m.life -= dt;
+      if (m.life <= 0) { this.mines.splice(i, 1); continue; }
+      if (!m.armed) {
+        m.armTimer -= dt;
+        if (m.armTimer <= 0) m.armed = true;
+        continue;
+      }
+      if (v2dist(m.pos, player.pos) < m.radius + player.radius) {
+        player.takeDamage(m.damage);
+        this.mines.splice(i, 1);
+      }
+    }
   }
 
   removeEnemy(id: number) {
@@ -822,5 +952,6 @@ export class EnemySystem {
   clear() {
     this.enemies = [];
     this.enemyBullets = [];
+    this.mines = [];
   }
 }

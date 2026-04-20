@@ -784,9 +784,26 @@ export class BulletSystem {
 
     for (const b of game.enemies.enemyBullets) {
       if (!game.camera.isVisible(b.pos.x, b.pos.y, b.radius * 3)) continue;
-      g.circle(b.pos.x, b.pos.y, b.radius * 2.5).fill({ color: 0xff0000, alpha: 0.12 });
-      g.circle(b.pos.x, b.pos.y, b.radius * 1.5).fill({ color: 0xff2200, alpha: 0.8 });
-      g.circle(b.pos.x, b.pos.y, b.radius * 0.6).fill({ color: 0xff8866, alpha: 0.9 });
+      // Teal color for coral spitter projectiles, red otherwise
+      const isCoral = b.color === 0x33ccdd;
+      const bulletColor = isCoral ? 0x33ccdd : 0xff2200;
+      const bulletGlow = isCoral ? 0x00ffff : 0xff0000;
+      g.circle(b.pos.x, b.pos.y, b.radius * 2.5).fill({ color: bulletGlow, alpha: 0.12 });
+      g.circle(b.pos.x, b.pos.y, b.radius * 1.5).fill({ color: bulletColor, alpha: 0.8 });
+      g.circle(b.pos.x, b.pos.y, b.radius * 0.6).fill({ color: 0xffffff, alpha: 0.7 });
+    }
+
+    // Proximity mines (mine_crawler drops)
+    for (const m of game.enemies.mines) {
+      if (!game.camera.isVisible(m.pos.x, m.pos.y, m.radius * 2)) continue;
+      const pulse = m.armed ? (0.4 + Math.abs(Math.sin(game.elapsed * 8)) * 0.5) : 0.25;
+      const mineColor = m.armed ? 0xff4400 : 0xcc7722;
+      g.circle(m.pos.x, m.pos.y, m.radius).stroke({ color: mineColor, width: 2, alpha: pulse });
+      g.circle(m.pos.x, m.pos.y, m.radius * 0.45).fill({ color: mineColor, alpha: pulse * 0.8 });
+      // Cross-hair lines
+      const hs = m.radius * 0.35;
+      g.moveTo(m.pos.x - hs, m.pos.y).lineTo(m.pos.x + hs, m.pos.y).stroke({ color: mineColor, width: 1, alpha: pulse });
+      g.moveTo(m.pos.x, m.pos.y - hs).lineTo(m.pos.x, m.pos.y + hs).stroke({ color: mineColor, width: 1, alpha: pulse });
     }
 
   }
