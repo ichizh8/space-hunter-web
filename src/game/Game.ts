@@ -711,6 +711,9 @@ export class Game {
     this.obstacleLayer.removeChildren();
     const OBS_KEYS = ['obs_asteroid', 'obs_crystal', 'obs_debris'];
     for (const obs of this.map.obstacles) {
+      // Skip sprite for wall-like obstacles (aspect ratio > 3:1) -- drawn as rects in map
+      const aspect = Math.max(obs.w, obs.h) / Math.max(1, Math.min(obs.w, obs.h));
+      if (aspect > 3) continue;
       const key = OBS_KEYS[obs.obsType] ?? OBS_KEYS[0];
       const tex = this.textures[key];
       if (!tex) continue;
@@ -718,9 +721,8 @@ export class Game {
       spr.anchor.set(0.5, 0.5);
       spr.x = obs.pos.x;
       spr.y = obs.pos.y;
-      const scaleX = obs.w / 64;
-      const scaleY = obs.h / 64;
-      spr.scale.set(Math.max(scaleX, scaleY));
+      // Scale each axis independently so sprites aren't stretched
+      spr.scale.set(obs.w / 64, obs.h / 64);
       spr.roundPixels = true;
       spr.rotation = Math.random() * Math.PI * 2;
       this.obstacleLayer.addChild(spr);
@@ -841,6 +843,9 @@ export class Game {
     // Place obstacle sprites
     const OBS_KEYS = ['obs_asteroid', 'obs_crystal', 'obs_debris'];
     for (const obs of this.map.obstacles) {
+      // Skip sprite for wall-like obstacles (aspect ratio > 3:1) -- drawn as rects in map
+      const aspect = Math.max(obs.w, obs.h) / Math.max(1, Math.min(obs.w, obs.h));
+      if (aspect > 3) continue;
       const key = OBS_KEYS[obs.obsType] ?? OBS_KEYS[0];
       const tex = this.textures[key];
       if (!tex) continue;
@@ -848,9 +853,8 @@ export class Game {
       spr.anchor.set(0.5, 0.5);
       spr.x = obs.pos.x;
       spr.y = obs.pos.y;
-      const scaleX = obs.w / 64;
-      const scaleY = obs.h / 64;
-      spr.scale.set(Math.max(scaleX, scaleY));
+      // Scale each axis independently so sprites aren't stretched
+      spr.scale.set(obs.w / 64, obs.h / 64);
       spr.roundPixels = true;
       spr.rotation = Math.random() * Math.PI * 2;
       this.obstacleLayer.addChild(spr);

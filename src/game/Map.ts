@@ -307,7 +307,17 @@ export class GameMap {
       gfx.circle(vp.pos.x, vp.pos.y, vp.radius * 1.5).fill({ color: 0x050010, alpha: 0.85 });
     }
 
-    // Obstacles drawn as sprites in Game.ts obstacleLayer
+    // Wall obstacles (aspect > 3:1) drawn as metallic rects; smaller ones use sprites
+    for (const obs of this.obstacles) {
+      const aspect = Math.max(obs.w, obs.h) / Math.max(1, Math.min(obs.w, obs.h));
+      if (aspect <= 3) continue; // sprite handles these
+      const ox = obs.pos.x - obs.w / 2;
+      const oy = obs.pos.y - obs.h / 2;
+      gfx.rect(ox, oy, obs.w, obs.h).fill({ color: 0x1a1520, alpha: 0.95 });
+      gfx.rect(ox, oy, obs.w, obs.h).stroke({ color: 0x443355, width: 1.5, alpha: 0.6 });
+      // Inner highlight
+      gfx.rect(ox + 2, oy + 2, obs.w - 4, obs.h - 4).stroke({ color: 0x665577, width: 0.5, alpha: 0.3 });
+    }
 
     // World boundary — red containment field
     gfx.rect(0, 0, W, H).stroke({ color: 0xcc2200, width: 2, alpha: 0.4 });
