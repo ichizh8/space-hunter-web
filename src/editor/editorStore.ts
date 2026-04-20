@@ -6,6 +6,7 @@ import { WORLD_W, WORLD_H } from '../game/constants';
 // ---------------------------------------------------------------------------
 export type ToolMode =
   | 'select'
+  | 'surface'
   | 'cave'
   | 'void_pool'
   | 'obstacle'
@@ -14,7 +15,13 @@ export type ToolMode =
   | 'interactable'      // point-based interactable (NPC, console, etc.)
   | 'spawn_zone'        // rect-based enemy pool spawner
   | 'trigger_zone'      // rect-based trigger region
-  | 'door';             // room exit / transition marker
+  | 'door'              // room exit / transition marker
+  | 'zone'
+  | 'entrance'
+  | 'exit'
+  | 'npc'
+  | 'loot_cache'
+  | 'no_spawn';
 
 // ---------------------------------------------------------------------------
 // Entity types that live in the room. Some legacy types kept for backwards
@@ -34,7 +41,13 @@ export type EntityType =
   | 'trigger_zone'        // rect with on/actions
   | 'door'                // room exit
   // legacy aliases
-  | 'interaction_zone';   // kept so old saves still load; new placements use 'interactable'
+  | 'interaction_zone'    // kept so old saves still load; new placements use 'interactable'
+  // new entity types from branch
+  | 'entrance'
+  | 'exit'
+  | 'npc'
+  | 'loot_cache'
+  | 'no_spawn';
 
 // ---------------------------------------------------------------------------
 // Room kinds (spatial pivot). Arena is the default for legacy 4800x4800 maps.
@@ -75,7 +88,7 @@ export interface EditorEntity {
   poolTag?: string;             // e.g. 'hunt_tier2'
   budget?: number;              // max enemies this zone may spawn
 
-  // trigger_zone
+  // trigger_zone (RoomJSON style)
   triggerOn?: TriggerOn;
   triggerActions?: string[];    // e.g. ['lock_doors', 'start_wave:w_intro']
 
@@ -83,12 +96,108 @@ export interface EditorEntity {
   rewardTag?: string;           // 'weapon' | 'heal' | 'perk' | 'credits' | 'mystery'
   nextPool?: string;            // pool tag for next room
   requiresCleared?: boolean;    // door only opens when room cleared
+
+  // obstacle variant
+  variant?: string;
+
+  // entrance
+  sourceMap?: string;
+  spawnDirection?: 'north' | 'south' | 'east' | 'west';
+
+  // exit
+  interactionPrompt?: string;
+
+  // npc
+  npcId?: string;
+  dialogue?: string;
+
+  // loot cache
+  lootTable?: string;
+
+  // trigger zone (legacy/branch style)
+  eventId?: string;
+  triggerType?: 'enter' | 'timer' | 'kill_all';
 }
 
 export interface WaveDefinition {
   id: string;
   triggerTime: number;
   color: string;
+}
+
+// ---- Obstacle catalog -------------------------------------------------------
+
+export const OBSTACLE_CATALOG = [
+  { variant: 'Rock Small',         w: 48,  h: 48,  group: 'Structural' },
+  { variant: 'Rock Large',         w: 96,  h: 96,  group: 'Structural' },
+  { variant: 'Wall H',             w: 128, h: 32,  group: 'Structural' },
+  { variant: 'Wall V',             w: 32,  h: 128, group: 'Structural' },
+  { variant: 'Wall Corner',        w: 32,  h: 32,  group: 'Structural' },
+  { variant: 'Pillar',             w: 32,  h: 32,  group: 'Structural' },
+  { variant: 'Pillar Wide',        w: 48,  h: 48,  group: 'Structural' },
+  { variant: 'Railing H',          w: 128, h: 16,  group: 'Structural' },
+  { variant: 'Railing V',          w: 16,  h: 128, group: 'Structural' },
+  { variant: 'Crate',              w: 48,  h: 48,  group: 'Industrial' },
+  { variant: 'Crate Stack',        w: 48,  h: 96,  group: 'Industrial' },
+  { variant: 'Cargo Container',    w: 96,  h: 48,  group: 'Industrial' },
+  { variant: 'Terminal',           w: 48,  h: 64,  group: 'Industrial' },
+  { variant: 'Generator',          w: 64,  h: 64,  group: 'Industrial' },
+  { variant: 'Storage Tank',       w: 48,  h: 96,  group: 'Industrial' },
+  { variant: 'Pipe H',             w: 160, h: 24,  group: 'Industrial' },
+  { variant: 'Pipe V',             w: 24,  h: 160, group: 'Industrial' },
+  { variant: 'Debris Pile',        w: 96,  h: 96,  group: 'Industrial' },
+  { variant: 'Blast Door H',       w: 128, h: 32,  group: 'Doors'      },
+  { variant: 'Blast Door V',       w: 32,  h: 128, group: 'Doors'      },
+  { variant: 'Barricade',          w: 96,  h: 48,  group: 'Doors'      },
+  { variant: 'Energy Barrier H',   w: 128, h: 8,   group: 'Doors'      },
+  { variant: 'Energy Barrier V',   w: 8,   h: 128, group: 'Doors'      },
+] as const;
+
+export type ObstacleVariant = typeof OBSTACLE_CATALOG[number]['variant'];
+
+export function getObstacleSize(variant: string): { w: number; h: number } {
+  const found = OBSTACLE_CATALOG.find((o) => o.variant === variant);
+  return found ? { w: found.w, h: found.h } : { w: 64, h: 64 };
+}
+
+// ---- Cave / void pool presets -----------------------------------------------
+
+export const CAVE_PRESETS = [
+  { label: 'Small',  radius: 100 },
+  { label: 'Medium', radius: 200 },
+  { label: 'Large',  radius: 350 },
+] as const;
+
+export const VOID_POOL_PRESETS = [
+  { label: 'Small',  radius: 60  },
+  { label: 'Medium', radius: 120 },
+  { label: 'Large',  radius: 200 },
+] as const;
+
+export type CaveSize     = typeof CAVE_PRESETS[number]['label'];
+export type VoidPoolSize = typeof VOID_POOL_PRESETS[number]['label'];
+
+// ---- Surface ----------------------------------------------------------------
+
+export const SURFACE_TILE = 64;
+export const SURFACE_COLS = Math.ceil(WORLD_W / SURFACE_TILE); // 75
+export const SURFACE_ROWS = Math.ceil(WORLD_H / SURFACE_TILE); // 75
+
+export const SURFACE_TYPES = [
+  { id: 0, name: 'Void',          color: null      },
+  { id: 1, name: 'Station Floor', color: '#334455' },
+  { id: 2, name: 'Metal Grate',   color: '#2a3a4a' },
+  { id: 3, name: 'Dirt',          color: '#5a4a30' },
+  { id: 4, name: 'Grass',         color: '#2a4a2a' },
+  { id: 5, name: 'Sand',          color: '#6a5a3a' },
+  { id: 6, name: 'Cave Rock',     color: '#3a3a3a' },
+  { id: 7, name: 'Water Shallow', color: '#1a3a5a' },
+  { id: 8, name: 'Plating Dark',  color: '#1a2233' },
+  { id: 9, name: 'Plating Light', color: '#4a5566' },
+] as const;
+
+function makeSurfaceGrid(): number[] {
+  return new Array(SURFACE_COLS * SURFACE_ROWS).fill(0);
 }
 
 // ---------------------------------------------------------------------------
@@ -113,6 +222,17 @@ export interface EditorState {
   difficulty: number;
   modifiers: string[];
 
+  // Surface
+  surfaceGrid: number[];
+  activeSurfaceType: number;
+  brushSize: 1 | 3 | 5 | 7;
+  fillMode: boolean;
+
+  // Tool sub-state
+  activeObstacleVariant: string;
+  activeCaveSize: CaveSize;
+  activeVoidPoolSize: VoidPoolSize;
+
   // Actions
   addEntity: (entity: EditorEntity) => void;
   updateEntity: (id: string, patch: Partial<EditorEntity>) => void;
@@ -133,6 +253,15 @@ export interface EditorState {
   selectWave: (id: string | null) => void;
   loadLevel: (data: RoomJSON | LegacySerializedLevel) => void;
   reset: () => void;
+
+  paintSurface: (col: number, row: number) => void;
+  floodFillSurface: (col: number, row: number) => void;
+  setActiveSurfaceType: (type: number) => void;
+  setBrushSize: (size: 1 | 3 | 5 | 7) => void;
+  setFillMode: (fill: boolean) => void;
+  setActiveObstacleVariant: (variant: string) => void;
+  setActiveCaveSize: (size: CaveSize) => void;
+  setActiveVoidPoolSize: (size: VoidPoolSize) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -210,12 +339,19 @@ export interface LegacySerializedLevel {
   width: number;
   height: number;
   mode: 'exploration' | 'combat';
+  surfaceGrid?: number[];
   terrain: {
     rivers: Array<{ points: Array<{ x: number; y: number }>; width: number }>;
     caves: Array<{ pos: { x: number; y: number }; radius: number }>;
     voidPools: Array<{ pos: { x: number; y: number }; radius: number }>;
-    obstacles: Array<{ pos: { x: number; y: number }; w: number; h: number; obsType: number }>;
+    obstacles: Array<{ pos: { x: number; y: number }; w: number; h: number; obsType: number; variant?: string }>;
     playerSpawn: { x: number; y: number };
+    entrances?: Array<{ pos: { x: number; y: number }; sourceMap?: string; spawnDirection?: string }>;
+    exits?: Array<{ pos: { x: number; y: number }; targetMap?: string; interactionPrompt?: string }>;
+    npcs?: Array<{ pos: { x: number; y: number }; npcId?: string; dialogue?: string }>;
+    lootCaches?: Array<{ pos: { x: number; y: number }; lootTable?: string }>;
+    triggerZones?: Array<{ pos: { x: number; y: number }; radius: number; eventId?: string; triggerType?: string }>;
+    noSpawnZones?: Array<{ pos: { x: number; y: number }; radius: number }>;
   };
   waves: Array<{
     id: string;
@@ -253,23 +389,32 @@ export function newWaveId(): string {
 // Default state
 // ---------------------------------------------------------------------------
 const defaultState = {
-  entities: [] as EditorEntity[],
-  waves: [] as WaveDefinition[],
-  selectedEntityId: null as string | null,
-  selectedWaveId: null as string | null,
-  activeTool: 'select' as ToolMode,
-  camera: { x: WORLD_W / 2, y: WORLD_H / 2, zoom: 0.15 },
-  levelName: 'Untitled Room',
-  levelMode: 'combat' as const,
-  mapWidth: WORLD_W,
-  mapHeight: WORLD_H,
+  entities:            [] as EditorEntity[],
+  waves:               [] as WaveDefinition[],
+  selectedEntityId:    null as string | null,
+  selectedWaveId:      null as string | null,
+  activeTool:          'select' as ToolMode,
+  camera:              { x: WORLD_W / 2, y: WORLD_H / 2, zoom: 0.15 },
+  levelName:           'Untitled Room',
+  levelMode:           'combat' as const,
+  mapWidth:            WORLD_W,
+  mapHeight:           WORLD_H,
 
   // Room metadata defaults — legacy 4800² map authors get 'arena' by default
-  roomKind: 'arena' as RoomKind,
-  biome: 'void_waste',
-  contractTags: [] as string[],
-  difficulty: 1,
-  modifiers: [] as string[],
+  roomKind:            'arena' as RoomKind,
+  biome:               'void_waste',
+  contractTags:        [] as string[],
+  difficulty:          1,
+  modifiers:           [] as string[],
+
+  // Surface defaults
+  surfaceGrid:         makeSurfaceGrid(),
+  activeSurfaceType:   1,
+  brushSize:           3 as const,
+  fillMode:            false,
+  activeObstacleVariant: 'Rock Small',
+  activeCaveSize:      'Medium' as CaveSize,
+  activeVoidPoolSize:  'Medium' as VoidPoolSize,
 };
 
 // ---------------------------------------------------------------------------
@@ -327,6 +472,59 @@ export const useEditorStore = create<EditorState>((set) => ({
     })),
 
   selectWave: (id) => set({ selectedWaveId: id }),
+
+  paintSurface: (col, row) =>
+    set((s) => {
+      const half = Math.floor(s.brushSize / 2);
+      const grid = s.surfaceGrid.slice();
+      for (let dr = -half; dr <= half; dr++) {
+        for (let dc = -half; dc <= half; dc++) {
+          const c = col + dc;
+          const r = row + dr;
+          if (c >= 0 && c < SURFACE_COLS && r >= 0 && r < SURFACE_ROWS) {
+            grid[r * SURFACE_COLS + c] = s.activeSurfaceType;
+          }
+        }
+      }
+      return { surfaceGrid: grid };
+    }),
+
+  floodFillSurface: (col, row) =>
+    set((s) => {
+      if (col < 0 || col >= SURFACE_COLS || row < 0 || row >= SURFACE_ROWS) return s;
+      const grid = s.surfaceGrid.slice();
+      const targetType = grid[row * SURFACE_COLS + col];
+      const fillType = s.activeSurfaceType;
+      if (targetType === fillType) return s;
+
+      const queue: Array<[number, number]> = [[col, row]];
+      const visited = new Set<number>([row * SURFACE_COLS + col]);
+
+      while (queue.length > 0) {
+        const [c, r] = queue.shift()!;
+        grid[r * SURFACE_COLS + c] = fillType;
+        const neighbors: Array<[number, number]> = [
+          [c - 1, r], [c + 1, r], [c, r - 1], [c, r + 1],
+        ];
+        for (const [nc, nr] of neighbors) {
+          if (nc >= 0 && nc < SURFACE_COLS && nr >= 0 && nr < SURFACE_ROWS) {
+            const idx = nr * SURFACE_COLS + nc;
+            if (!visited.has(idx) && grid[idx] === targetType) {
+              visited.add(idx);
+              queue.push([nc, nr]);
+            }
+          }
+        }
+      }
+      return { surfaceGrid: grid };
+    }),
+
+  setActiveSurfaceType:    (activeSurfaceType)    => set({ activeSurfaceType }),
+  setBrushSize:            (brushSize)            => set({ brushSize }),
+  setFillMode:             (fillMode)             => set({ fillMode }),
+  setActiveObstacleVariant:(activeObstacleVariant)=> set({ activeObstacleVariant }),
+  setActiveCaveSize:       (activeCaveSize)       => set({ activeCaveSize }),
+  setActiveVoidPoolSize:   (activeVoidPoolSize)   => set({ activeVoidPoolSize }),
 
   loadLevel: (data) => {
     const entities: EditorEntity[] = [];
@@ -456,8 +654,27 @@ export const useEditorStore = create<EditorState>((set) => ({
       entities.push({ id: newEntityId(), type: 'void_pool', pos: v.pos, radius: v.radius })
     );
     legacy.terrain?.obstacles.forEach((o) =>
-      entities.push({ id: newEntityId(), type: 'obstacle', pos: o.pos, width: o.w, height: o.h })
+      entities.push({ id: newEntityId(), type: 'obstacle', pos: o.pos, width: o.w, height: o.h, variant: o.variant })
     );
+    legacy.terrain?.entrances?.forEach((e) =>
+      entities.push({ id: newEntityId(), type: 'entrance', pos: e.pos, sourceMap: e.sourceMap, spawnDirection: e.spawnDirection as EditorEntity['spawnDirection'] })
+    );
+    legacy.terrain?.exits?.forEach((e) =>
+      entities.push({ id: newEntityId(), type: 'exit', pos: e.pos, targetMap: e.targetMap, interactionPrompt: e.interactionPrompt })
+    );
+    legacy.terrain?.npcs?.forEach((n) =>
+      entities.push({ id: newEntityId(), type: 'npc', pos: n.pos, npcId: n.npcId, dialogue: n.dialogue })
+    );
+    legacy.terrain?.lootCaches?.forEach((l) =>
+      entities.push({ id: newEntityId(), type: 'loot_cache', pos: l.pos, lootTable: l.lootTable })
+    );
+    legacy.terrain?.triggerZones?.forEach((t) =>
+      entities.push({ id: newEntityId(), type: 'trigger_zone', pos: t.pos, radius: t.radius, eventId: t.eventId, triggerType: t.triggerType as EditorEntity['triggerType'] })
+    );
+    legacy.terrain?.noSpawnZones?.forEach((n) =>
+      entities.push({ id: newEntityId(), type: 'no_spawn', pos: n.pos, radius: n.radius })
+    );
+
     legacy.waves?.forEach((wv, wi) => {
       const waveId = wv.id ?? newWaveId();
       waves.push({
@@ -493,10 +710,11 @@ export const useEditorStore = create<EditorState>((set) => ({
       contractTags: [],
       difficulty: 1,
       modifiers: [],
+      surfaceGrid: legacy.surfaceGrid ?? makeSurfaceGrid(),
     });
   },
 
-  reset: () => set({ ...defaultState, entities: [], waves: [] }),
+  reset: () => set({ ...defaultState, entities: [], waves: [], surfaceGrid: makeSurfaceGrid() }),
 }));
 
 // ---------------------------------------------------------------------------
@@ -515,12 +733,7 @@ export function serializeLevel(s: EditorState): RoomJSON {
 
   const obstacles = s.entities
     .filter((e) => e.type === 'obstacle')
-    .map((e) => ({
-      pos: e.pos,
-      w: e.width ?? 64,
-      h: e.height ?? 64,
-      obsType: 0,
-    }));
+    .map((e) => ({ pos: e.pos, w: e.width ?? 64, h: e.height ?? 64, obsType: 0, variant: e.variant }));
 
   // Interactables + doors go into the typed `entities` array
   const interactablesAndDoors = s.entities

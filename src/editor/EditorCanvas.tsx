@@ -7,6 +7,14 @@ import {
   type EntityType,
   newEntityId,
   type ToolMode,
+  OBSTACLE_CATALOG,
+  CAVE_PRESETS,
+  VOID_POOL_PRESETS,
+  SURFACE_TILE,
+  SURFACE_COLS,
+  SURFACE_ROWS,
+  SURFACE_TYPES,
+  getObstacleSize,
 } from './editorStore';
 import {
   WORLD_W,
@@ -20,14 +28,20 @@ import {
 } from '../game/constants';
 
 // ---- Colors ----------------------------------------------------------------
-const COL_PLAYER_SPAWN = 0x00ccff;
-const COL_ENEMY_SPAWN  = 0xff4444;
-const COL_INTERACTABLE = 0xffcc00;   // also used for legacy interaction_zone
-const COL_SPAWN_ZONE   = 0xff6644;
-const COL_TRIGGER_ZONE = 0xffaa44;
-const COL_DOOR         = 0x44ccff;
-const COL_SELECT       = 0x44aaff;
-const COL_GRID_ALPHA   = 0.25;
+const COL_PLAYER_SPAWN  = 0x00ccff;
+const COL_ENEMY_SPAWN   = 0xff4444;
+const COL_INTERACTABLE  = 0xffcc00;   // also used for legacy interaction_zone
+const COL_SPAWN_ZONE    = 0xff6644;
+const COL_TRIGGER_ZONE  = 0xffaa44;
+const COL_DOOR          = 0x44ccff;
+const COL_SELECT        = 0x44aaff;
+const COL_ENTRANCE      = 0x22cc66;
+const COL_EXIT          = 0xff3333;
+const COL_NPC           = 0x4488ff;
+const COL_LOOT          = 0xffcc00;
+const COL_TRIGGER       = 0x44ff88;
+const COL_NO_SPAWN      = 0xff4444;
+const COL_GRID_ALPHA    = 0.25;
 
 // ---- Minimap ---------------------------------------------------------------
 const MINI_SIZE   = 150;
@@ -36,7 +50,7 @@ const MINI_SCALE  = MINI_SIZE / Math.max(WORLD_W, WORLD_H);
 
 // ---- Types -----------------------------------------------------------------
 interface DragState {
-  type: 'pan' | 'move_entity' | 'place_circle' | 'place_rect' | 'minimap_pan';
+  type: 'pan' | 'move_entity' | 'place_circle' | 'place_rect' | 'minimap_pan' | 'surface_paint';
   startScreenX: number;
   startScreenY: number;
   startWorldX: number;
@@ -48,21 +62,21 @@ interface DragState {
   entityStartY?: number;
 }
 
-// ---- PixiJS handles (module-level refs for the ticker closure) -------------
-let pixiGfx: import('pixi.js').Graphics | null = null;
-
 export function EditorCanvas() {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const appRef       = useRef<import('pixi.js').Application | null>(null);
-  const gfxRef       = useRef<import('pixi.js').Graphics | null>(null);
-  const dragRef      = useRef<DragState | null>(null);
-  const spaceHeldRef = useRef(false);
+  const containerRef  = useRef<HTMLDivElement>(null);
+  const appRef        = useRef<import('pixi.js').Application | null>(null);
+  const gfxRef        = useRef<import('pixi.js').Graphics | null>(null);
+  const pixiRef       = useRef<typeof import('pixi.js') | null>(null);
+  const labelsRef     = useRef<import('pixi.js').Container | null>(null);
+  const textPoolRef   = useRef<import('pixi.js').Text[]>([]);
+  const dragRef       = useRef<DragState | null>(null);
+  const spaceHeldRef  = useRef(false);
 
   const store = useEditorStore();
   const storeRef = useRef(store);
   storeRef.current = store;
 
-  // ---- world <-> screen conversions ----------------------------------------
+  // ---- world <-> screen ----------------------------------------------------
   const worldToScreen = useCallback(
     (wx: number, wy: number, cam: { x: number; y: number; zoom: number }, w: number, h: number) => {
       return { sx: (wx - cam.x) * cam.zoom + w / 2, sy: (wy - cam.y) * cam.zoom + h / 2 };
@@ -114,22 +128,48 @@ export function EditorCanvas() {
 
   // ---- draw -----------------------------------------------------------------
   const draw = useCallback(() => {
-    const app = appRef.current;
-    const gfx = gfxRef.current;
+    const app  = appRef.current;
+    const gfx  = gfxRef.current;
+    const PIXI = pixiRef.current;
     if (!app || !gfx) return;
 
-    const { camera, entities, selectedEntityId, selectedWaveId, waves } = storeRef.current;
+    const s = storeRef.current;
+    const { camera, entities, selectedEntityId, selectedWaveId, waves, surfaceGrid } = s;
     const W = app.renderer.width;
     const H = app.renderer.height;
 
     gfx.clear();
     gfx.rect(0, 0, W, H).fill(COL_BG);
 
-    // Grid
-    const worldLeft   = (0 - W / 2) / camera.zoom + camera.x;
-    const worldTop    = (0 - H / 2) / camera.zoom + camera.y;
-    const worldRight  = (W - W / 2) / camera.zoom + camera.x;
-    const worldBottom = (H - H / 2) / camera.zoom + camera.y;
+    // Viewport in world space
+    const worldLeft   = (0     - W / 2) / camera.zoom + camera.x;
+    const worldTop    = (0     - H / 2) / camera.zoom + camera.y;
+    const worldRight  = (W     - W / 2) / camera.zoom + camera.x;
+    const worldBottom = (H     - H / 2) / camera.zoom + camera.y;
+
+    // ---- Surface tiles (drawn before everything) ---------------------------
+    const hasSurface = surfaceGrid.some((v) => v !== 0);
+    if (hasSurface) {
+      const tileS      = SURFACE_TILE * camera.zoom;
+      const tileLeft   = Math.max(0, Math.floor(worldLeft   / SURFACE_TILE));
+      const tileTop    = Math.max(0, Math.floor(worldTop    / SURFACE_TILE));
+      const tileRight  = Math.min(SURFACE_COLS - 1, Math.ceil(worldRight  / SURFACE_TILE));
+      const tileBottom = Math.min(SURFACE_ROWS - 1, Math.ceil(worldBottom / SURFACE_TILE));
+
+      for (let row = tileTop; row <= tileBottom; row++) {
+        for (let col = tileLeft; col <= tileRight; col++) {
+          const tileType = surfaceGrid[row * SURFACE_COLS + col];
+          if (tileType === 0) continue;
+          const st = SURFACE_TYPES.find((x) => x.id === tileType);
+          if (!st?.color) continue;
+          const color = parseInt(st.color.replace('#', ''), 16);
+          const { sx: tsx, sy: tsy } = worldToScreen(col * SURFACE_TILE, row * SURFACE_TILE, camera, W, H);
+          gfx.rect(tsx, tsy, tileS + 0.5, tileS + 0.5).fill({ color, alpha: 1 });
+        }
+      }
+    }
+
+    // ---- Grid ----------------------------------------------------------------
     const startGX = Math.floor(worldLeft  / GRID_STEP) * GRID_STEP;
     const startGY = Math.floor(worldTop   / GRID_STEP) * GRID_STEP;
 
@@ -143,7 +183,7 @@ export function EditorCanvas() {
       gfx.moveTo(0, sy).lineTo(W, sy).stroke();
     }
 
-    // Map border
+    // ---- Map border ----------------------------------------------------------
     const { sx: bx1, sy: by1 } = worldToScreen(0, 0, camera, W, H);
     const { sx: bx2, sy: by2 } = worldToScreen(WORLD_W, WORLD_H, camera, W, H);
     gfx.setStrokeStyle({ width: 2, color: 0x334455, alpha: 0.8 })
@@ -153,7 +193,9 @@ export function EditorCanvas() {
     const toS = (wx: number, wy: number) => worldToScreen(wx, wy, camera, W, H);
     const r2s = (r: number) => r * camera.zoom;
 
-    // Entities
+    // ---- Entities ------------------------------------------------------------
+    let labelIdx = 0;
+
     for (const ent of entities) {
       const { sx, sy } = toS(ent.pos.x, ent.pos.y);
       const isSelected        = ent.id === selectedEntityId;
@@ -173,11 +215,28 @@ export function EditorCanvas() {
           break;
         }
         case 'obstacle': {
-          const w = r2s(ent.width  ?? 64);
-          const h = r2s(ent.height ?? 64);
-          gfx.rect(sx - w / 2, sy - h / 2, w, h).fill({ color: COL_OBSTACLE, alpha: 0.9 });
+          const { w: ow, h: oh } = ent.variant ? getObstacleSize(ent.variant) : { w: ent.width ?? 64, h: ent.height ?? 64 };
+          const ws = r2s(ow);
+          const hs = r2s(oh);
+          gfx.rect(sx - ws / 2, sy - hs / 2, ws, hs).fill({ color: COL_OBSTACLE, alpha: 0.9 });
           if (isSelected)
-            gfx.rect(sx - w / 2 - 2, sy - h / 2 - 2, w + 4, h + 4).stroke({ width: 2, color: COL_SELECT });
+            gfx.rect(sx - ws / 2 - 2, sy - hs / 2 - 2, ws + 4, hs + 4).stroke({ width: 2, color: COL_SELECT });
+
+          // Variant label at zoom > 0.3
+          if (PIXI && labelsRef.current && camera.zoom > 0.3 && ent.variant) {
+            const pool = textPoolRef.current;
+            let t = pool[labelIdx];
+            if (!t) {
+              t = new PIXI.Text({ text: '', style: { fontSize: 9, fill: 0xaabbcc, fontFamily: 'monospace' } });
+              labelsRef.current.addChild(t);
+              pool.push(t);
+            }
+            t.text = ent.variant;
+            t.x = sx + ws / 2 + 2;
+            t.y = sy - 5;
+            t.visible = true;
+            labelIdx++;
+          }
           break;
         }
         case 'enemy_spawn': {
@@ -187,8 +246,7 @@ export function EditorCanvas() {
           gfx.circle(sx, sy, rad).fill({ color: col, alpha: isWaveHighlighted ? 1.0 : 0.8 });
           if (isSelected || isWaveHighlighted)
             gfx.circle(sx, sy, rad + 3).stroke({ width: 2, color: COL_SELECT });
-          const cnt = ent.count ?? 1;
-          if (cnt > 1 || ent.isElite)
+          if ((ent.count ?? 1) > 1 || ent.isElite)
             gfx.circle(sx + rad, sy - rad, r2s(4)).fill({ color: ent.isElite ? 0xffcc00 : 0xffffff });
           break;
         }
@@ -240,25 +298,104 @@ export function EditorCanvas() {
           break;
         }
         case 'trigger_zone': {
-          const w = r2s(ent.width  ?? 200);
-          const h = r2s(ent.height ?? 200);
-          // Dashed-look via stroke only
-          gfx
-            .rect(sx - w / 2, sy - h / 2, w, h)
-            .fill({ color: COL_TRIGGER_ZONE, alpha: 0.08 })
-            .stroke({ width: 1.5, color: COL_TRIGGER_ZONE, alpha: 0.8 });
-          // Cross marker in center
-          const cr = Math.min(r2s(10), 14);
-          gfx
-            .moveTo(sx - cr, sy).lineTo(sx + cr, sy)
-            .stroke({ width: 1, color: COL_TRIGGER_ZONE, alpha: 0.9 })
-            .moveTo(sx, sy - cr).lineTo(sx, sy + cr)
-            .stroke({ width: 1, color: COL_TRIGGER_ZONE, alpha: 0.9 });
+          // If it has width/height render as rect (RoomJSON style), else as circle (legacy style)
+          if (ent.width !== undefined || ent.height !== undefined) {
+            const w = r2s(ent.width  ?? 200);
+            const h = r2s(ent.height ?? 200);
+            gfx
+              .rect(sx - w / 2, sy - h / 2, w, h)
+              .fill({ color: COL_TRIGGER_ZONE, alpha: 0.08 })
+              .stroke({ width: 1.5, color: COL_TRIGGER_ZONE, alpha: 0.8 });
+            // Cross marker in center
+            const cr = Math.min(r2s(10), 14);
+            gfx
+              .moveTo(sx - cr, sy).lineTo(sx + cr, sy)
+              .stroke({ width: 1, color: COL_TRIGGER_ZONE, alpha: 0.9 })
+              .moveTo(sx, sy - cr).lineTo(sx, sy + cr)
+              .stroke({ width: 1, color: COL_TRIGGER_ZONE, alpha: 0.9 });
+            if (isSelected)
+              gfx.rect(sx - w / 2 - 2, sy - h / 2 - 2, w + 4, h + 4).stroke({ width: 2, color: COL_SELECT });
+          } else {
+            const rad = r2s(ent.radius ?? 80);
+            gfx.circle(sx, sy, rad).fill({ color: COL_TRIGGER, alpha: 0.1 });
+            gfx.circle(sx, sy, rad).stroke({ width: 1, color: COL_TRIGGER, alpha: 0.7 });
+            // Inner dot
+            gfx.circle(sx, sy, r2s(5)).fill({ color: COL_TRIGGER, alpha: 0.8 });
+            if (isSelected) gfx.circle(sx, sy, rad + 3).stroke({ width: 2, color: COL_SELECT });
+          }
+          break;
+        }
+        case 'entrance': {
+          const rad = r2s(16);
+          gfx.circle(sx, sy, rad).fill({ color: COL_ENTRANCE, alpha: 0.85 });
+          // Arrow pointing inward (downward by default)
+          const dir = ent.spawnDirection ?? 'south';
+          const [adx, ady] = dir === 'north' ? [0, 1] : dir === 'south' ? [0, -1] : dir === 'east' ? [-1, 0] : [1, 0];
+          const as = r2s(10);
+          gfx.setStrokeStyle({ width: 2, color: 0xffffff })
+             .moveTo(sx - adx * as, sy - ady * as)
+             .lineTo(sx + adx * as, sy + ady * as).stroke();
+          // Arrow head
+          const perp = r2s(5);
+          gfx.moveTo(sx + adx * as, sy + ady * as)
+             .lineTo(sx + adx * as - ady * perp - adx * perp * 0.6, sy + ady * as + adx * perp - ady * perp * 0.6).stroke()
+             .moveTo(sx + adx * as, sy + ady * as)
+             .lineTo(sx + adx * as + ady * perp - adx * perp * 0.6, sy + ady * as - adx * perp - ady * perp * 0.6).stroke();
+          if (isSelected) gfx.circle(sx, sy, rad + 3).stroke({ width: 2, color: COL_SELECT });
+          break;
+        }
+        case 'exit': {
+          const rad = r2s(16);
+          gfx.circle(sx, sy, rad).fill({ color: COL_EXIT, alpha: 0.85 });
+          // Arrow pointing outward (upward by default)
+          const as = r2s(10);
+          gfx.setStrokeStyle({ width: 2, color: 0xffffff })
+             .moveTo(sx, sy + as).lineTo(sx, sy - as).stroke();
+          const perp = r2s(5);
+          gfx.moveTo(sx, sy - as)
+             .lineTo(sx - perp, sy - as + perp * 0.8).stroke()
+             .moveTo(sx, sy - as)
+             .lineTo(sx + perp, sy - as + perp * 0.8).stroke();
+          if (isSelected) gfx.circle(sx, sy, rad + 3).stroke({ width: 2, color: COL_SELECT });
+          break;
+        }
+        case 'npc': {
+          // Blue diamond
+          const ds = r2s(14);
+          gfx.moveTo(sx, sy - ds).lineTo(sx + ds, sy).lineTo(sx, sy + ds).lineTo(sx - ds, sy).closePath()
+             .fill({ color: COL_NPC, alpha: 0.85 });
           if (isSelected)
-            gfx.rect(sx - w / 2 - 2, sy - h / 2 - 2, w + 4, h + 4).stroke({ width: 2, color: COL_SELECT });
+            gfx.moveTo(sx, sy - ds - 3).lineTo(sx + ds + 3, sy).lineTo(sx, sy + ds + 3).lineTo(sx - ds - 3, sy).closePath()
+               .stroke({ width: 2, color: COL_SELECT });
+          break;
+        }
+        case 'loot_cache': {
+          const ls = r2s(12);
+          gfx.rect(sx - ls, sy - ls, ls * 2, ls * 2).fill({ color: COL_LOOT, alpha: 0.85 });
+          gfx.rect(sx - ls, sy - ls, ls * 2, ls * 2).stroke({ width: 1, color: 0xffffff, alpha: 0.6 });
+          if (isSelected)
+            gfx.rect(sx - ls - 2, sy - ls - 2, ls * 2 + 4, ls * 2 + 4).stroke({ width: 2, color: COL_SELECT });
+          break;
+        }
+        case 'no_spawn': {
+          const rad = r2s(ent.radius ?? 80);
+          gfx.circle(sx, sy, rad).fill({ color: COL_NO_SPAWN, alpha: 0.12 });
+          gfx.circle(sx, sy, rad).stroke({ width: 1, color: COL_NO_SPAWN, alpha: 0.5 });
+          // X mark
+          const xs = r2s(8);
+          gfx.setStrokeStyle({ width: 2, color: COL_NO_SPAWN, alpha: 0.8 })
+             .moveTo(sx - xs, sy - xs).lineTo(sx + xs, sy + xs).stroke()
+             .moveTo(sx + xs, sy - xs).lineTo(sx - xs, sy + xs).stroke();
+          if (isSelected) gfx.circle(sx, sy, rad + 3).stroke({ width: 2, color: COL_SELECT });
           break;
         }
       }
+    }
+
+    // Hide unused label text objects
+    const pool = textPoolRef.current;
+    for (let i = labelIdx; i < pool.length; i++) {
+      pool[i].visible = false;
     }
 
     // ---- Minimap -----------------------------------------------------------
@@ -282,6 +419,11 @@ export function EditorCanvas() {
         case 'door':             col = COL_DOOR;         break;
         case 'spawn_zone':       col = COL_SPAWN_ZONE;   break;
         case 'trigger_zone':     col = COL_TRIGGER_ZONE; break;
+        case 'entrance':         col = COL_ENTRANCE;     break;
+        case 'exit':             col = COL_EXIT;         break;
+        case 'npc':              col = COL_NPC;          break;
+        case 'loot_cache':       col = COL_LOOT;         break;
+        case 'no_spawn':         col = COL_NO_SPAWN;     break;
         case 'enemy_spawn': {
           const wc = waves.find((w) => w.id === ent.waveId)?.color;
           col = wc ? parseInt(wc.replace('#', ''), 16) : COL_ENEMY_SPAWN;
@@ -303,7 +445,7 @@ export function EditorCanvas() {
     ).stroke({ width: 1, color: 0xffffff, alpha: 0.65 });
   }, [worldToScreen]);
 
-  // ---- init PixiJS ----------------------------------------------------------
+  // ---- init PixiJS ---------------------------------------------------------
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -311,7 +453,7 @@ export function EditorCanvas() {
 
     (async () => {
       const PIXI = await import('pixi.js');
-      const { Application, Graphics } = PIXI;
+      const { Application, Graphics, Container } = PIXI;
 
       PIXI.TextureSource.defaultOptions.scaleMode = 'nearest';
       PIXI.AbstractRenderer.defaultOptions.roundPixels = true;
@@ -338,9 +480,15 @@ export function EditorCanvas() {
 
       const gfx = new Graphics();
       app.stage.addChild(gfx);
-      appRef.current = app;
-      gfxRef.current = gfx;
-      pixiGfx = gfx;
+
+      const labelsContainer = new Container();
+      app.stage.addChild(labelsContainer);
+
+      appRef.current       = app;
+      gfxRef.current       = gfx;
+      pixiRef.current      = PIXI;
+      labelsRef.current    = labelsContainer;
+      textPoolRef.current  = [];
 
       const ro = new ResizeObserver(() => {
         if (!destroyed) {
@@ -356,10 +504,12 @@ export function EditorCanvas() {
 
     return () => {
       destroyed = true;
-      pixiGfx = null;
       appRef.current?.destroy(true);
-      appRef.current = null;
-      gfxRef.current = null;
+      appRef.current    = null;
+      gfxRef.current    = null;
+      pixiRef.current   = null;
+      labelsRef.current = null;
+      textPoolRef.current = [];
       while (container.firstChild) container.removeChild(container.firstChild);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -430,7 +580,10 @@ export function EditorCanvas() {
         const dx = wx - e.pos.x;
         const dy = wy - e.pos.y;
         // Rect-based entities
-        if (e.type === 'obstacle' || e.type === 'spawn_zone' || e.type === 'trigger_zone') {
+        if (e.type === 'obstacle') {
+          const { w, h } = e.variant ? getObstacleSize(e.variant) : { w: e.width ?? 64, h: e.height ?? 64 };
+          if (Math.abs(dx) <= w / 2 && Math.abs(dy) <= h / 2) return e;
+        } else if (e.type === 'spawn_zone' || (e.type === 'trigger_zone' && (e.width !== undefined || e.height !== undefined))) {
           const hw = (e.width  ?? 64) / 2;
           const hh = (e.height ?? 64) / 2;
           if (Math.abs(dx) <= hw && Math.abs(dy) <= hh) return e;
@@ -438,9 +591,13 @@ export function EditorCanvas() {
           const defaultR =
             e.type === 'enemy_spawn' || e.type === 'player_spawn'
               ? 14
-              : e.type === 'door' || e.type === 'interactable'
-                ? 40
-                : 60;
+              : e.type === 'entrance' || e.type === 'exit'
+                ? 16
+                : e.type === 'npc' || e.type === 'loot_cache'
+                  ? 14
+                  : e.type === 'door' || e.type === 'interactable'
+                    ? 40
+                    : 60;
           const r = e.radius ?? defaultR;
           if (dx * dx + dy * dy <= r * r) return e;
         }
@@ -499,11 +656,28 @@ export function EditorCanvas() {
         };
         return;
       }
-
       if (e.button !== 0) return;
 
       const tool = s.activeTool;
 
+      // ---- Surface paint ---------------------------------------------------
+      if (tool === 'surface') {
+        const col = Math.floor(wX / SURFACE_TILE);
+        const row = Math.floor(wY / SURFACE_TILE);
+        if (s.fillMode) {
+          s.floodFillSurface(col, row);
+        } else {
+          s.paintSurface(col, row);
+          dragRef.current = {
+            type: 'surface_paint',
+            startScreenX: cx, startScreenY: cy,
+            startWorldX: wX, startWorldY: wY,
+          };
+        }
+        return;
+      }
+
+      // ---- Select ----------------------------------------------------------
       if (tool === 'select') {
         const hit = hitTest(wX, wY);
         if (hit) {
@@ -521,11 +695,12 @@ export function EditorCanvas() {
         return;
       }
 
-      // Placement tools
+      // ---- Placement -------------------------------------------------------
       const snapped = { x: Math.round(wX), y: Math.round(wY) };
 
       const defaults: Record<ToolMode, Partial<EditorEntity>> = {
         select:       {},
+        surface:      {},
         cave:         { type: 'cave',         radius: 150 },
         void_pool:    { type: 'void_pool',    radius: 80 },
         obstacle:     { type: 'obstacle',     width: 64, height: 64 },
@@ -535,6 +710,12 @@ export function EditorCanvas() {
         spawn_zone:   { type: 'spawn_zone',   width: 200, height: 200, poolTag: '', budget: 8 },
         trigger_zone: { type: 'trigger_zone', width: 200, height: 200, triggerOn: 'enter', triggerActions: [] },
         door:         { type: 'door',         radius: 40, rewardTag: 'mystery', requiresCleared: true },
+        zone:         { type: 'interaction_zone', radius: 80 },
+        entrance:     { type: 'entrance',     spawnDirection: 'south' },
+        exit:         { type: 'exit',         targetMap: '', interactionPrompt: 'Exit' },
+        npc:          { type: 'npc',          npcId: '', dialogue: '' },
+        loot_cache:   { type: 'loot_cache',   lootTable: 'default' },
+        no_spawn:     { type: 'no_spawn',     radius: 150 },
       };
 
       if (tool === 'player_spawn') {
@@ -543,29 +724,55 @@ export function EditorCanvas() {
       }
 
       const typeMap: Record<ToolMode, EntityType | null> = {
-        select: null,
-        cave: 'cave', void_pool: 'void_pool', obstacle: 'obstacle',
-        enemy: 'enemy_spawn', player_spawn: 'player_spawn',
+        select:       null,
+        surface:      null,
+        cave:         'cave',
+        void_pool:    'void_pool',
+        obstacle:     'obstacle',
+        enemy:        'enemy_spawn',
+        player_spawn: 'player_spawn',
         interactable: 'interactable',
-        spawn_zone: 'spawn_zone',
+        spawn_zone:   'spawn_zone',
         trigger_zone: 'trigger_zone',
-        door: 'door',
+        door:         'door',
+        zone:         'interaction_zone',
+        entrance:     'entrance',
+        exit:         'exit',
+        npc:          'npc',
+        loot_cache:   'loot_cache',
+        no_spawn:     'no_spawn',
       };
 
       const entType = typeMap[tool];
       if (!entType) return;
 
+      // Build entity with tool-specific defaults
       const id = newEntityId();
+
+      // Apply cave/void_pool/obstacle presets
+      let toolDefaults = { ...defaults[tool] };
+      if (tool === 'cave') {
+        const preset = CAVE_PRESETS.find((p) => p.label === s.activeCaveSize) ?? CAVE_PRESETS[1];
+        toolDefaults = { ...toolDefaults, radius: preset.radius };
+      } else if (tool === 'void_pool') {
+        const preset = VOID_POOL_PRESETS.find((p) => p.label === s.activeVoidPoolSize) ?? VOID_POOL_PRESETS[1];
+        toolDefaults = { ...toolDefaults, radius: preset.radius };
+      } else if (tool === 'obstacle') {
+        const { w, h } = getObstacleSize(s.activeObstacleVariant);
+        toolDefaults = { ...toolDefaults, variant: s.activeObstacleVariant, width: w, height: h };
+      } else if (tool === 'enemy') {
+        toolDefaults = { ...toolDefaults, waveId: s.selectedWaveId ?? undefined };
+      }
+
       const newEnt: EditorEntity = {
         id, type: entType, pos: snapped,
-        waveId: s.selectedWaveId ?? undefined,
-        ...defaults[tool],
+        ...toolDefaults,
       } as EditorEntity;
 
       s.addEntity(newEnt);
       s.selectEntity(id);
 
-      const isCircleDrag = tool === 'cave' || tool === 'void_pool';
+      const isCircleDrag = tool === 'cave' || tool === 'void_pool' || tool === 'no_spawn';
       const isRectDrag   = tool === 'obstacle' || tool === 'spawn_zone' || tool === 'trigger_zone';
       if (isCircleDrag || isRectDrag) {
         dragRef.current = {
@@ -604,6 +811,13 @@ export function EditorCanvas() {
       }
 
       const { wx: wX, wy: wY } = screenToWorld(sx, sy, s.camera, w, h);
+
+      if (drag.type === 'surface_paint') {
+        const col = Math.floor(wX / SURFACE_TILE);
+        const row = Math.floor(wY / SURFACE_TILE);
+        s.paintSurface(col, row);
+        return;
+      }
 
       if (drag.type === 'move_entity' && drag.entityId) {
         const dx = wX - drag.startWorldX;
@@ -673,7 +887,6 @@ export function EditorCanvas() {
         onContextMenu={onContextMenu}
         onMouseMove={onMouseMove}
       />
-      {/* Coordinate HUD */}
       <div
         ref={coordRef}
         className="absolute bottom-2 left-2 text-xs font-mono pointer-events-none"
