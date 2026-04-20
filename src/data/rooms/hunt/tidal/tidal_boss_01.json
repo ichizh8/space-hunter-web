@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "id": "tidal_boss_01",
+  "name": "Leviathan Cove",
+  "kind": "fixed",
+  "biome": "tidal_flats",
+  "contractTags": ["hunt"],
+  "difficulty": 5,
+  "planet": "tidal",
+  "roomType": "boss",
+  "size": { "w": 1400, "h": 1000 },
+
+  "terrain": {
+    "caves": [],
+    "voidPools": [],
+    "obstacles": [
+      { "pos": { "x": 40,   "y": 500 }, "w": 20,  "h": 940, "obsType": 0 },
+      { "pos": { "x": 1360, "y": 500 }, "w": 20,  "h": 940, "obsType": 0 },
+      { "pos": { "x": 700,  "y": 30  }, "w": 1340, "h": 20,  "obsType": 0 },
+      { "pos": { "x": 700,  "y": 970 }, "w": 1340, "h": 20,  "obsType": 0 },
+      { "pos": { "x": 700,  "y": 290 }, "w": 480,  "h": 36,  "obsType": 0 },
+      { "pos": { "x": 700,  "y": 710 }, "w": 480,  "h": 36,  "obsType": 0 },
+      { "pos": { "x": 405,  "y": 415 }, "w": 36,   "h": 170, "obsType": 0 },
+      { "pos": { "x": 995,  "y": 415 }, "w": 36,   "h": 170, "obsType": 0 },
+      { "pos": { "x": 405,  "y": 585 }, "w": 36,   "h": 170, "obsType": 0 },
+      { "pos": { "x": 995,  "y": 585 }, "w": 36,   "h": 170, "obsType": 0 },
+      { "pos": { "x": 452,  "y": 338 }, "w": 72,   "h": 72,  "obsType": 0 },
+      { "pos": { "x": 948,  "y": 338 }, "w": 72,   "h": 72,  "obsType": 0 },
+      { "pos": { "x": 452,  "y": 662 }, "w": 72,   "h": 72,  "obsType": 0 },
+      { "pos": { "x": 948,  "y": 662 }, "w": 72,   "h": 72,  "obsType": 0 },
+      { "pos": { "x": 220,  "y": 220 }, "w": 64,   "h": 64,  "obsType": 0 },
+      { "pos": { "x": 700,  "y": 165 }, "w": 64,   "h": 64,  "obsType": 0 },
+      { "pos": { "x": 1180, "y": 220 }, "w": 64,   "h": 64,  "obsType": 0 },
+      { "pos": { "x": 220,  "y": 780 }, "w": 64,   "h": 64,  "obsType": 0 },
+      { "pos": { "x": 700,  "y": 835 }, "w": 64,   "h": 64,  "obsType": 0 },
+      { "pos": { "x": 1180, "y": 780 }, "w": 64,   "h": 64,  "obsType": 0 }
+    ],
+    "rivers": []
+  },
+
+  "playerSpawn": { "x": 130, "y": 500 },
+
+  "entities": [],
+
+  "spawnZones": [
+    {
+      "id": "sz_boss",
+      "rect": { "x": 560, "y": 390, "w": 280, "h": 220 },
+      "poolTag": "boss_tidal_leviathan",
+      "budget": 1
+    },
+    {
+      "id": "sz_adds",
+      "rect": { "x": 100, "y": 100, "w": 1200, "h": 800 },
+      "poolTag": "tidal_tier2",
+      "budget": 12
+    }
+  ],
+
+  "triggers": [
+    {
+      "id": "tr_start",
+      "rect": { "x": 200, "y": 0, "w": 1200, "h": 1000 },
+      "on": "enter",
+      "actions": ["spawn_all_zones"]
+    }
+  ],
+
+  "waves": [],
+  "modifiers": [],
+  "mode": "combat"
+}

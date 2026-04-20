@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "id": "tidal_standard_02",
+  "name": "Tidal Platform Maze",
+  "kind": "pool",
+  "biome": "tidal_flats",
+  "contractTags": ["hunt"],
+  "difficulty": 2,
+  "planet": "tidal",
+  "roomType": "standard",
+  "size": { "w": 800, "h": 800 },
+
+  "terrain": {
+    "caves": [],
+    "voidPools": [],
+    "obstacles": [
+      { "pos": { "x": 40,  "y": 400 }, "w": 20,  "h": 740, "obsType": 0 },
+      { "pos": { "x": 760, "y": 400 }, "w": 20,  "h": 740, "obsType": 0 },
+      { "pos": { "x": 400, "y": 30  }, "w": 740, "h": 20,  "obsType": 0 },
+      { "pos": { "x": 400, "y": 770 }, "w": 740, "h": 20,  "obsType": 0 },
+      { "pos": { "x": 210, "y": 185 }, "w": 120, "h": 80,  "obsType": 0 },
+      { "pos": { "x": 590, "y": 185 }, "w": 120, "h": 80,  "obsType": 0 },
+      { "pos": { "x": 210, "y": 615 }, "w": 120, "h": 80,  "obsType": 0 },
+      { "pos": { "x": 590, "y": 615 }, "w": 120, "h": 80,  "obsType": 0 },
+      { "pos": { "x": 400, "y": 400 }, "w": 64,  "h": 64,  "obsType": 0 },
+      { "pos": { "x": 158, "y": 290 }, "w": 40,  "h": 80,  "obsType": 0 },
+      { "pos": { "x": 158, "y": 510 }, "w": 40,  "h": 80,  "obsType": 0 }
+    ],
+    "rivers": []
+  },
+
+  "playerSpawn": { "x": 130, "y": 400 },
+
+  "entities": [
+    {
+      "id": "door_top",
+      "type": "door",
+      "pos": { "x": 400, "y": 55 },
+      "radius": 45,
+      "rewardTag": "perk",
+      "nextPool": "tidal_elite",
+      "requiresCleared": true,
+      "label": "Upper Shelf"
+    },
+    {
+      "id": "door_right",
+      "type": "door",
+      "pos": { "x": 745, "y": 400 },
+      "radius": 45,
+      "rewardTag": "mystery",
+      "nextPool": "tidal_elite",
+      "requiresCleared": true,
+      "label": "Advance"
+    }
+  ],
+
+  "spawnZones": [
+    {
+      "id": "sz_ne",
+      "rect": { "x": 490, "y": 80, "w": 240, "h": 280 },
+      "poolTag": "tidal_tier1",
+      "budget": 4
+    },
+    {
+      "id": "sz_se",
+      "rect": { "x": 490, "y": 440, "w": 240, "h": 280 },
+      "poolTag": "tidal_tier1",
+      "budget": 4
+    }
+  ],
+
+  "triggers": [
+    {
+      "id": "tr_start",
+      "rect": { "x": 200, "y": 0, "w": 600, "h": 800 },
+      "on": "enter",
+      "actions": ["spawn_all_zones", "lock_doors"]
+    },
+    {
+      "id": "tr_clear",
+      "on": "all_enemies_dead",
+      "actions": ["unlock_doors"]
+    }
+  ],
+
+  "waves": [],
+  "modifiers": [],
+  "mode": "combat"
+}

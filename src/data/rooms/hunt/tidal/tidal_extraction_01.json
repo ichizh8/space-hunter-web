@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "id": "tidal_extraction_01",
+  "name": "Tidal Beach Extraction",
+  "kind": "fixed",
+  "biome": "tidal_flats",
+  "contractTags": ["hunt"],
+  "difficulty": 0,
+  "planet": "tidal",
+  "roomType": "extraction",
+  "size": { "w": 800, "h": 600 },
+
+  "terrain": {
+    "caves": [],
+    "voidPools": [],
+    "obstacles": [
+      { "pos": { "x": 40,  "y": 300 }, "w": 20,  "h": 540, "obsType": 0 },
+      { "pos": { "x": 760, "y": 300 }, "w": 20,  "h": 540, "obsType": 0 },
+      { "pos": { "x": 400, "y": 30  }, "w": 740, "h": 20,  "obsType": 0 },
+      { "pos": { "x": 400, "y": 570 }, "w": 740, "h": 20,  "obsType": 0 },
+      { "pos": { "x": 205, "y": 180 }, "w": 64,  "h": 40,  "obsType": 0 },
+      { "pos": { "x": 205, "y": 420 }, "w": 64,  "h": 40,  "obsType": 0 },
+      { "pos": { "x": 375, "y": 300 }, "w": 80,  "h": 28,  "obsType": 0 },
+      { "pos": { "x": 160, "y": 300 }, "w": 40,  "h": 96,  "obsType": 0 }
+    ],
+    "rivers": []
+  },
+
+  "playerSpawn": { "x": 130, "y": 300 },
+
+  "entities": [
+    {
+      "id": "e_extract_terminal",
+      "type": "interactable",
+      "kind": "extract_terminal",
+      "pos": { "x": 640, "y": 300 },
+      "radius": 70,
+      "prompt": "Press E: Complete Extraction",
+      "action": "complete_extraction",
+      "label": "Extract"
+    }
+  ],
+
+  "spawnZones": [
+    {
+      "id": "sz_guards",
+      "rect": { "x": 430, "y": 120, "w": 300, "h": 360 },
+      "poolTag": "tidal_tier1",
+      "budget": 4
+    }
+  ],
+
+  "triggers": [
+    {
+      "id": "tr_start",
+      "rect": { "x": 200, "y": 0, "w": 600, "h": 600 },
+      "on": "enter",
+      "actions": ["spawn_all_zones"]
+    }
+  ],
+
+  "waves": [],
+  "modifiers": [],
+  "mode": "combat"
+}
