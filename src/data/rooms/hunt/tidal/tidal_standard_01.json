@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 1,
+  "id": "tidal_standard_01",
+  "name": "Coral Reef Choke",
+  "kind": "pool",
+  "biome": "tidal_flats",
+  "contractTags": ["hunt"],
+  "difficulty": 2,
+  "planet": "tidal",
+  "roomType": "standard",
+  "size": { "w": 900, "h": 700 },
+
+  "terrain": {
+    "caves": [],
+    "voidPools": [],
+    "obstacles": [
+      { "pos": { "x": 40,  "y": 350 }, "w": 20,  "h": 660, "obsType": 0 },
+      { "pos": { "x": 860, "y": 350 }, "w": 20,  "h": 660, "obsType": 0 },
+      { "pos": { "x": 450, "y": 30  }, "w": 840, "h": 20,  "obsType": 0 },
+      { "pos": { "x": 450, "y": 670 }, "w": 840, "h": 20,  "obsType": 0 },
+      { "pos": { "x": 250, "y": 165 }, "w": 140, "h": 28,  "obsType": 0 },
+      { "pos": { "x": 650, "y": 165 }, "w": 140, "h": 28,  "obsType": 0 },
+      { "pos": { "x": 250, "y": 535 }, "w": 140, "h": 28,  "obsType": 0 },
+      { "pos": { "x": 650, "y": 535 }, "w": 140, "h": 28,  "obsType": 0 },
+      { "pos": { "x": 450, "y": 220 }, "w": 40,  "h": 96,  "obsType": 0 },
+      { "pos": { "x": 450, "y": 480 }, "w": 40,  "h": 96,  "obsType": 0 },
+      { "pos": { "x": 130, "y": 295 }, "w": 48,  "h": 80,  "obsType": 0 },
+      { "pos": { "x": 770, "y": 295 }, "w": 48,  "h": 80,  "obsType": 0 }
+    ],
+    "rivers": []
+  },
+
+  "playerSpawn": { "x": 130, "y": 350 },
+
+  "entities": [
+    {
+      "id": "door_a",
+      "type": "door",
+      "pos": { "x": 845, "y": 175 },
+      "radius": 45,
+      "rewardTag": "weapon",
+      "nextPool": "tidal_elite",
+      "requiresCleared": true,
+      "label": "Reef Passage"
+    },
+    {
+      "id": "door_b",
+      "type": "door",
+      "pos": { "x": 845, "y": 525 },
+      "radius": 45,
+      "rewardTag": "mystery",
+      "nextPool": "tidal_elite",
+      "requiresCleared": true,
+      "label": "Advance"
+    },
+    {
+      "id": "door_c",
+      "type": "door",
+      "pos": { "x": 450, "y": 55 },
+      "radius": 45,
+      "rewardTag": "perk",
+      "nextPool": "tidal_elite",
+      "requiresCleared": true,
+      "label": "Tideway"
+    }
+  ],
+
+  "spawnZones": [
+    {
+      "id": "sz_ne",
+      "rect": { "x": 540, "y": 80, "w": 280, "h": 210 },
+      "poolTag": "tidal_tier1",
+      "budget": 4
+    },
+    {
+      "id": "sz_se",
+      "rect": { "x": 540, "y": 410, "w": 280, "h": 210 },
+      "poolTag": "tidal_tier1",
+      "budget": 4
+    }
+  ],
+
+  "triggers": [
+    {
+      "id": "tr_start",
+      "rect": { "x": 200, "y": 0, "w": 700, "h": 700 },
+      "on": "enter",
+      "actions": ["spawn_all_zones", "lock_doors"]
+    },
+    {
+      "id": "tr_clear",
+      "on": "all_enemies_dead",
+      "actions": ["unlock_doors"]
+    }
+  ],
+
+  "waves": [],
+  "modifiers": [],
+  "mode": "combat"
+}

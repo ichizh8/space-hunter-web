@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "id": "tidal_opening_01",
+  "name": "Tidal Shallows Gate",
+  "kind": "pool",
+  "biome": "tidal_flats",
+  "contractTags": ["hunt"],
+  "difficulty": 1,
+  "planet": "tidal",
+  "roomType": "opening",
+  "size": { "w": 800, "h": 600 },
+
+  "terrain": {
+    "caves": [],
+    "voidPools": [],
+    "obstacles": [
+      { "pos": { "x": 40,  "y": 300 }, "w": 20, "h": 540, "obsType": 0 },
+      { "pos": { "x": 760, "y": 300 }, "w": 20, "h": 540, "obsType": 0 },
+      { "pos": { "x": 400, "y": 30  }, "w": 740, "h": 20, "obsType": 0 },
+      { "pos": { "x": 400, "y": 570 }, "w": 740, "h": 20, "obsType": 0 },
+      { "pos": { "x": 210, "y": 190 }, "w": 72,  "h": 48, "obsType": 0 },
+      { "pos": { "x": 590, "y": 190 }, "w": 72,  "h": 48, "obsType": 0 },
+      { "pos": { "x": 400, "y": 330 }, "w": 56,  "h": 56, "obsType": 0 },
+      { "pos": { "x": 185, "y": 430 }, "w": 48,  "h": 48, "obsType": 0 },
+      { "pos": { "x": 615, "y": 430 }, "w": 48,  "h": 48, "obsType": 0 },
+      { "pos": { "x": 400, "y": 190 }, "w": 32,  "h": 32, "obsType": 0 }
+    ],
+    "rivers": []
+  },
+
+  "playerSpawn": { "x": 400, "y": 510 },
+
+  "entities": [
+    {
+      "id": "door_exit",
+      "type": "door",
+      "pos": { "x": 400, "y": 55 },
+      "radius": 45,
+      "rewardTag": "mystery",
+      "nextPool": "tidal_standard",
+      "requiresCleared": true,
+      "label": "Advance"
+    }
+  ],
+
+  "spawnZones": [
+    {
+      "id": "sz_main",
+      "rect": { "x": 120, "y": 80, "w": 560, "h": 320 },
+      "poolTag": "tidal_tier1",
+      "budget": 6
+    }
+  ],
+
+  "triggers": [
+    {
+      "id": "tr_start",
+      "rect": { "x": 100, "y": 0, "w": 600, "h": 600 },
+      "on": "enter",
+      "actions": ["spawn_all_zones", "lock_doors"]
+    },
+    {
+      "id": "tr_clear",
+      "on": "all_enemies_dead",
+      "actions": ["unlock_doors"]
+    }
+  ],
+
+  "waves": [],
+  "modifiers": [],
+  "mode": "combat"
+}

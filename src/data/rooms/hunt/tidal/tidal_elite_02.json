@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "id": "tidal_elite_02",
+  "name": "Tidal Channel Crossroads",
+  "kind": "pool",
+  "biome": "tidal_flats",
+  "contractTags": ["hunt"],
+  "difficulty": 4,
+  "planet": "tidal",
+  "roomType": "elite",
+  "size": { "w": 900, "h": 900 },
+
+  "terrain": {
+    "caves": [],
+    "voidPools": [],
+    "obstacles": [
+      { "pos": { "x": 40,  "y": 450 }, "w": 20,  "h": 840, "obsType": 0 },
+      { "pos": { "x": 860, "y": 450 }, "w": 20,  "h": 840, "obsType": 0 },
+      { "pos": { "x": 450, "y": 30  }, "w": 840, "h": 20,  "obsType": 0 },
+      { "pos": { "x": 450, "y": 870 }, "w": 840, "h": 20,  "obsType": 0 },
+      { "pos": { "x": 205, "y": 370 }, "w": 370, "h": 28,  "obsType": 0 },
+      { "pos": { "x": 695, "y": 370 }, "w": 370, "h": 28,  "obsType": 0 },
+      { "pos": { "x": 205, "y": 530 }, "w": 370, "h": 28,  "obsType": 0 },
+      { "pos": { "x": 695, "y": 530 }, "w": 370, "h": 28,  "obsType": 0 },
+      { "pos": { "x": 450, "y": 205 }, "w": 28,  "h": 350, "obsType": 0 },
+      { "pos": { "x": 450, "y": 695 }, "w": 28,  "h": 350, "obsType": 0 }
+    ],
+    "rivers": []
+  },
+
+  "playerSpawn": { "x": 130, "y": 450 },
+
+  "entities": [
+    {
+      "id": "door_exit",
+      "type": "door",
+      "pos": { "x": 845, "y": 450 },
+      "radius": 45,
+      "rewardTag": "mystery",
+      "nextPool": "tidal_extraction",
+      "requiresCleared": true,
+      "label": "Exit"
+    }
+  ],
+
+  "spawnZones": [
+    {
+      "id": "sz_elite",
+      "rect": { "x": 390, "y": 390, "w": 120, "h": 120 },
+      "poolTag": "elite_tidal_tide_caller",
+      "budget": 1
+    },
+    {
+      "id": "sz_q1",
+      "rect": { "x": 80, "y": 80, "w": 310, "h": 260 },
+      "poolTag": "tidal_tier2",
+      "budget": 4
+    },
+    {
+      "id": "sz_q2",
+      "rect": { "x": 510, "y": 80, "w": 310, "h": 260 },
+      "poolTag": "tidal_tier2",
+      "budget": 4
+    }
+  ],
+
+  "triggers": [
+    {
+      "id": "tr_start",
+      "rect": { "x": 200, "y": 0, "w": 700, "h": 900 },
+      "on": "enter",
+      "actions": ["spawn_all_zones", "lock_doors"]
+    },
+    {
+      "id": "tr_clear",
+      "on": "all_enemies_dead",
+      "actions": ["unlock_doors"]
+    }
+  ],
+
+  "waves": [],
+  "modifiers": [],
+  "mode": "combat"
+}

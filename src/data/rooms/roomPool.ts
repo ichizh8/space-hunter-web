@@ -10,6 +10,16 @@ import elite02     from './hunt/kepler/kepler_elite_02.json';
 import boss01      from './hunt/kepler/kepler_boss_01.json';
 import extraction01 from './hunt/kepler/kepler_extraction_01.json';
 
+import tidalOpening01    from './hunt/tidal/tidal_opening_01.json';
+import tidalStandard01   from './hunt/tidal/tidal_standard_01.json';
+import tidalStandard02   from './hunt/tidal/tidal_standard_02.json';
+import tidalStandard03   from './hunt/tidal/tidal_standard_03.json';
+import tidalStandard04   from './hunt/tidal/tidal_standard_04.json';
+import tidalElite01      from './hunt/tidal/tidal_elite_01.json';
+import tidalElite02      from './hunt/tidal/tidal_elite_02.json';
+import tidalBoss01       from './hunt/tidal/tidal_boss_01.json';
+import tidalExtraction01 from './hunt/tidal/tidal_extraction_01.json';
+
 // planet → roomType → available templates
 const POOL: Record<string, Record<string, readonly unknown[]>> = {
   kepler: {
@@ -18,6 +28,13 @@ const POOL: Record<string, Record<string, readonly unknown[]>> = {
     elite:      [elite01, elite02],
     boss:       [boss01],
     extraction: [extraction01],
+  },
+  tidal: {
+    opening:    [tidalOpening01],
+    standard:   [tidalStandard01, tidalStandard02, tidalStandard03, tidalStandard04],
+    elite:      [tidalElite01, tidalElite02],
+    boss:       [tidalBoss01],
+    extraction: [tidalExtraction01],
   },
 };
 
