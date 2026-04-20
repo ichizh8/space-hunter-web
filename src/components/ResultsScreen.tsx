@@ -9,6 +9,7 @@ const CORR_COLORS = ['#44ff66', '#e6cc33', '#e64d33', '#ff1919'];
 
 export function ResultsScreen() {
   const result = useGameStore(s => s.huntResult);
+  const contract = useGameStore(s => s.currentContract);
   const setScreen = useGameStore(s => s.setScreen);
   const save = useSaveStore();
 
@@ -16,6 +17,9 @@ export function ResultsScreen() {
     if (result) {
       save.completeContract(result.credits, result.corruption);
       if (result.ingredients.length > 0) save.addIngredients(result.ingredients);
+      if (result.huntStatus === 'COMPLETED' && contract?.planet) {
+        save.completePlanetContract(contract.planet);
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

@@ -13,6 +13,8 @@ import { KitAbilitySystem } from './KitAbilitySystem';
 import { ProgressionManager } from './ProgressionManager';
 import { VFXManager, DIR_NAMES, SPRITES_WITH_DIRS } from './VFXManager';
 import { v2dist, v2, v2sub, v2norm, v2mul, v2len, v2fromAngle, randRange, lineSegHitsCircle } from '../lib/math';
+import { pickNextRoom } from '../data/rooms/roomPool';
+import type { RoomJSON } from '../editor/editorStore';
 import {
   PLAYER_BASE_HP, PLAYER_BASE_SPEED, WORLD_W, WORLD_H,
   PLAYER_COLOR
@@ -214,6 +216,8 @@ export class Game {
   weaponPerkPending = false;
 
   // Run path / room tracking (fork at room 1, auto-mutation at mutationRoom)
+  planet = 'kepler';
+  currentRoom: RoomJSON | null = null;
   roomsCleared = 0;
   runPath: 'clean' | 'void' | null = null;
   forkChoicePending = false;
@@ -381,13 +385,15 @@ export class Game {
     targetTotal: number,
     shipUpgrades: Record<string, number>,
     callbacks: GameCallbacks,
-    contractExtras?: { holdTime?: number; podHp?: number; cacheCount?: number; reward?: number; parTime?: number; difficulty?: number },
+    contractExtras?: { holdTime?: number; podHp?: number; cacheCount?: number; reward?: number; parTime?: number; difficulty?: number; planet?: string },
     startingWeapon?: string
   ) {
     this.app = app;
     this.callbacks = callbacks;
     this.equippedKits = kits;
     this.contractType = contractType;
+    this.planet = contractExtras?.planet ?? 'kepler';
+    try { this.currentRoom = pickNextRoom(this.planet, 'opening'); } catch { /* planet not yet in pool */ }
     this.targetTotal = targetTotal;
     this.shipUpgrades = shipUpgrades;
     this.hpBonus = 0;
@@ -1317,6 +1323,7 @@ export class Game {
    *  mutationRoom: auto-applies mutation before showing upgrade cards. */
   private offerUpgradePanel() {
     this.roomsCleared++;
+    try { this.currentRoom = pickNextRoom(this.planet, 'standard'); } catch { /* planet not yet in pool */ }
 
     const doOfferCards = () => {
       // Auto-mutate at the designated room if path is chosen and not yet mutated

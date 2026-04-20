@@ -8,6 +8,7 @@ import { ForkScreen } from './ForkScreen';
 import type { ModifierDef } from '../data/modifiers';
 import type { UpgradeCard } from '../data/upgrades';
 import type { RunPath } from '../store/gameStore';
+import { INGREDIENTS_BY_PLANET, INGREDIENTS } from '../data/ingredients';
 
 export function GameCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -96,9 +97,25 @@ export function GameCanvas() {
           onDeath: () => {},
           onComplete: () => {},
           onHuntResult: (r) => {
-            // Status determined by Game.finishHunt caller; infer from game state
             const status = gameRef.current?.dead ? 'FAILED' : gameRef.current?.complete ? 'COMPLETED' : 'ABANDONED';
-            finishHunt(status, r);
+            const planetDrops: Array<{ id: string; name: string }> = [];
+            if (status === 'COMPLETED') {
+              const planet = contract?.planet ?? 'kepler';
+              const table = INGREDIENTS_BY_PLANET[planet];
+              if (table) {
+                const count = 1 + Math.floor(Math.random() * 3);
+                for (let i = 0; i < count; i++) {
+                  const pool = Math.random() < 0.2 ? [...table.common, ...table.rare] : table.common;
+                  const id = pool[Math.floor(Math.random() * pool.length)];
+                  const ing = INGREDIENTS[id];
+                  if (ing) {
+                    planetDrops.push({ id, name: ing.name });
+                    useSaveStore.getState().addIngredient(id, 1);
+                  }
+                }
+              }
+            }
+            finishHunt(status, { ...r, ingredients: [...r.ingredients, ...planetDrops] });
           },
           onWeaponPerkPick: (perks, weaponName, resolve) => {
             setWeaponPerks({ perks, weaponName });
@@ -131,6 +148,7 @@ export function GameCanvas() {
           reward: contract?.reward ?? 0,
           parTime: contract?.parTime ?? 300,
           difficulty: contract?.difficulty ?? 1,
+          planet: contract?.planet ?? 'kepler',
         }
       );
 
