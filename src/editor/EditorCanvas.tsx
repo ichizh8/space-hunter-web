@@ -102,6 +102,19 @@ export function EditorCanvas() {
     if (containerRef.current) containerRef.current.style.cursor = c;
   }, []);
 
+  // updateCursor: state-driven cursor (from reverent-almeida)
+  const updateCursor = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    if (dragRef.current?.type === 'pan') {
+      el.style.cursor = 'grabbing';
+    } else if (spaceHeldRef.current) {
+      el.style.cursor = 'grab';
+    } else {
+      el.style.cursor = 'crosshair';
+    }
+  }, []);
+
   const getFitCamera = useCallback(() => {
     const { w, h } = getCanvasSize();
     const zoom = Math.min(w / WORLD_W, h / WORLD_H) * 0.9;
@@ -125,6 +138,26 @@ export function EditorCanvas() {
     },
     [screenToWorld]
   );
+
+  // zoomAtPoint: zoom-to-mouse helper (from reverent-almeida)
+  const zoomAtPoint = useCallback((screenX: number, screenY: number, factor: number) => {
+    const s = storeRef.current;
+    const { w: W, h: H } = getCanvasSize();
+    const oldZoom = s.camera.zoom;
+    const newZoom = Math.min(5, Math.max(0.05, oldZoom * factor));
+    const wx = (screenX - W / 2) / oldZoom + s.camera.x;
+    const wy = (screenY - H / 2) / oldZoom + s.camera.y;
+    const newCamX = wx - (screenX - W / 2) / newZoom;
+    const newCamY = wy - (screenY - H / 2) / newZoom;
+    s.setCamera({ zoom: newZoom, x: newCamX, y: newCamY });
+  }, []);
+
+  // fitToMap: fit-view helper (from reverent-almeida)
+  const fitToMap = useCallback(() => {
+    const { w: W, h: H } = getCanvasSize();
+    const zoom = Math.min(W / WORLD_W, H / WORLD_H) * 0.9;
+    storeRef.current.setCamera({ x: WORLD_W / 2, y: WORLD_H / 2, zoom });
+  }, []);
 
   // ---- draw -----------------------------------------------------------------
   const draw = useCallback(() => {
@@ -517,6 +550,15 @@ export function EditorCanvas() {
 
   // ---- keyboard shortcuts --------------------------------------------------
   useEffect(() => {
+    const isInputFocused = () => {
+      const el = document.activeElement;
+      return (
+        el instanceof HTMLInputElement ||
+        el instanceof HTMLTextAreaElement ||
+        el instanceof HTMLSelectElement
+      );
+    };
+
     const onKeyDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
       if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
@@ -525,10 +567,15 @@ export function EditorCanvas() {
 
       if (e.code === 'Space') {
         e.preventDefault();
-        spaceHeldRef.current = true;
-        if (!dragRef.current) setCursor('grab');
+        if (!e.repeat) {
+          spaceHeldRef.current = true;
+          if (!dragRef.current) setCursor('grab');
+          updateCursor();
+        }
         return;
       }
+
+      if (isInputFocused()) return;
 
       switch (e.key) {
         case 'z': case 'Z': case '=': case '+':
@@ -560,16 +607,25 @@ export function EditorCanvas() {
       if (e.code === 'Space') {
         spaceHeldRef.current = false;
         if (dragRef.current?.type !== 'pan') setCursor('crosshair');
+        updateCursor();
       }
+    };
+
+    // Lose space if window loses focus (from reverent-almeida)
+    const onBlur = () => {
+      spaceHeldRef.current = false;
+      updateCursor();
     };
 
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', onBlur);
     return () => {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onBlur);
     };
-  }, [zoomBy, getFitCamera, setCursor]);
+  }, [zoomBy, getFitCamera, setCursor, updateCursor]);
 
   // ---- hit test ------------------------------------------------------------
   const hitTest = useCallback(
@@ -642,6 +698,7 @@ export function EditorCanvas() {
           startWorldX: wX, startWorldY: wY,
           startCamX: camera.x, startCamY: camera.y,
         };
+        updateCursor();
         return;
       }
 
@@ -654,6 +711,7 @@ export function EditorCanvas() {
           startWorldX: wX, startWorldY: wY,
           startCamX: camera.x, startCamY: camera.y,
         };
+        updateCursor();
         return;
       }
       if (e.button !== 0) return;
@@ -783,7 +841,7 @@ export function EditorCanvas() {
         };
       }
     },
-    [hitTest, screenToWorld, setCursor]
+    [hitTest, screenToWorld, setCursor, updateCursor]
   );
 
   const onPointerMove = useCallback(
@@ -848,7 +906,8 @@ export function EditorCanvas() {
   const onPointerUp = useCallback(() => {
     dragRef.current = null;
     setCursor(spaceHeldRef.current ? 'grab' : 'crosshair');
-  }, [setCursor]);
+    updateCursor();
+  }, [setCursor, updateCursor]);
 
   const onWheel = useCallback(
     (e: React.WheelEvent<HTMLDivElement>) => {
