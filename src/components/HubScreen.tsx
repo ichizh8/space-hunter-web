@@ -49,12 +49,6 @@ const WEAPON_UNLOCK_DEFS = [
   { id: 'chain_rifle', name: 'Chain Rifle', desc: 'Scrapper rep weapon', cost: 200 },
 ];
 
-const TRACK_COLORS: Record<string, string> = {
-  contractor: '#44cc44',
-  void_walker: '#aa44ff',
-  tactician: '#4d80e6',
-  scrapper: '#ff8844',
-};
 
 const PANTRY_COLORS: Record<string, string> = {
   rift_dust: '#e6cc4d',
