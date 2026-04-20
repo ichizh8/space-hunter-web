@@ -1,4 +1,4 @@
-export type EnemyBehavior = 'charge' | 'flank' | 'burst' | 'strafe' | 'pack' | 'lurker' | 'patrol_river' | 'elite' | 'mine_crawler' | 'sentry_drone' | 'tide_phantom' | 'coral_spitter';
+export type EnemyBehavior = 'charge' | 'flank' | 'burst' | 'strafe' | 'pack' | 'lurker' | 'patrol_river' | 'elite' | 'mine_crawler' | 'sentry_drone' | 'tide_phantom' | 'coral_spitter' | 'void_weaver' | 'phase_stalker';
 
 export interface CreatureDef {
   name: string;
@@ -31,6 +31,9 @@ export const CREATURE_DEFS: Record<string, CreatureDef> = {
   // Tidal Flats enemies
   'Tide Phantom':   { name: 'Tide Phantom',   radius: 14, color: 0x22ccbb, speed: 105, hp: 10, detection: 360, meleeDmg: 3, ranged: false, rangedDmg: 0, rangedCooldown: 0, voidType: false, behavior: 'tide_phantom',  ingredient: { id: 'phase_membrane', name: 'Phase Membrane' } },
   'Coral Spitter':  { name: 'Coral Spitter',  radius: 18, color: 0x33aacc, speed: 0,   hp: 20, detection: 390, meleeDmg: 0, ranged: false, rangedDmg: 2, rangedCooldown: 0, voidType: false, behavior: 'coral_spitter', ingredient: { id: 'coral_venom', name: 'Coral Venom' } },
+  // Void Reach enemies
+  'Void Weaver':    { name: 'Void Weaver',    radius: 16, color: 0xaa44ff, speed: 60,  hp: 14, detection: 400, meleeDmg: 0, ranged: false, rangedDmg: 3, rangedCooldown: 0, voidType: true,  behavior: 'void_weaver',   ingredient: { id: 'living_tissue', name: 'Living Tissue' } },
+  'Phase Stalker':  { name: 'Phase Stalker',  radius: 12, color: 0xdd22ff, speed: 135, hp: 7,  detection: 380, meleeDmg: 2, ranged: false, rangedDmg: 0, rangedCooldown: 0, voidType: true,  behavior: 'phase_stalker', ingredient: { id: 'crystal_shards', name: 'Crystal Shards' } },
 };
 
 export const CREATURE_NAMES = Object.keys(CREATURE_DEFS);
@@ -43,6 +46,7 @@ export const BIOME_POOLS: Record<string, string[]> = {
 };
 
 export const PLANET_POOLS: Record<string, string[]> = {
-  kepler: ['Mine Crawler', 'Sentry Drone'],
-  tidal:  ['Tide Phantom', 'Coral Spitter'],
+  kepler:     ['Mine Crawler', 'Sentry Drone'],
+  tidal:      ['Tide Phantom', 'Coral Spitter'],
+  void_reach: ['Void Weaver', 'Phase Stalker'],
 };

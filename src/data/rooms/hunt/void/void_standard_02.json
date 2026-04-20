@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "id": "void_standard_02",
+  "name": "Flesh Corridor",
+  "kind": "pool",
+  "biome": "void_reach",
+  "contractTags": ["hunt"],
+  "difficulty": 3,
+  "planet": "void_reach",
+  "roomType": "standard",
+  "size": { "w": 1000, "h": 500 },
+
+  "terrain": {
+    "caves": [],
+    "voidPools": [
+      { "pos": { "x": 500, "y": 130 }, "radius": 45 },
+      { "pos": { "x": 500, "y": 370 }, "radius": 45 }
+    ],
+    "obstacles": [
+      { "pos": { "x": 40,  "y": 250 }, "w": 20,  "h": 460, "obsType": 0 },
+      { "pos": { "x": 960, "y": 250 }, "w": 20,  "h": 460, "obsType": 0 },
+      { "pos": { "x": 500, "y": 30  }, "w": 940, "h": 20,  "obsType": 0 },
+      { "pos": { "x": 500, "y": 470 }, "w": 940, "h": 20,  "obsType": 0 },
+      { "pos": { "x": 250, "y": 250 }, "w": 30, "h": 200, "obsType": 0 },
+      { "pos": { "x": 750, "y": 250 }, "w": 30, "h": 200, "obsType": 0 },
+      { "pos": { "x": 400, "y": 130 }, "w": 60, "h": 30, "obsType": 0 },
+      { "pos": { "x": 600, "y": 130 }, "w": 60, "h": 30, "obsType": 0 },
+      { "pos": { "x": 400, "y": 370 }, "w": 60, "h": 30, "obsType": 0 },
+      { "pos": { "x": 600, "y": 370 }, "w": 60, "h": 30, "obsType": 0 }
+    ],
+    "rivers": []
+  },
+
+  "playerSpawn": { "x": 100, "y": 250 },
+
+  "entities": [
+    {
+      "id": "door_a",
+      "type": "door",
+      "pos": { "x": 940, "y": 150 },
+      "radius": 45,
+      "rewardTag": "weapon",
+      "nextPool": "void_elite",
+      "requiresCleared": true,
+      "label": "Rift Gate"
+    },
+    {
+      "id": "door_b",
+      "type": "door",
+      "pos": { "x": 940, "y": 350 },
+      "radius": 45,
+      "rewardTag": "perk",
+      "nextPool": "void_standard",
+      "requiresCleared": true,
+      "label": "Deeper"
+    }
+  ],
+
+  "spawnZones": [
+    {
+      "id": "sz_mid",
+      "rect": { "x": 320, "y": 60, "w": 360, "h": 380 },
+      "poolTag": "void_tier1",
+      "budget": 6
+    },
+    {
+      "id": "sz_east",
+      "rect": { "x": 720, "y": 80, "w": 200, "h": 340 },
+      "poolTag": "void_tier1",
+      "budget": 4
+    }
+  ],
+
+  "triggers": [
+    { "id": "tr_start", "rect": { "x": 150, "y": 0, "w": 850, "h": 500 }, "on": "enter", "actions": ["spawn_all_zones", "lock_doors"] },
+    { "id": "tr_clear", "on": "all_enemies_dead", "actions": ["unlock_doors"] }
+  ],
+
+  "waves": [],
+  "modifiers": [],
+  "mode": "combat"
+}

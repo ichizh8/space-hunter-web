@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "id": "void_elite_01",
+  "name": "Void Heart Chamber",
+  "kind": "pool",
+  "biome": "void_reach",
+  "contractTags": ["hunt"],
+  "difficulty": 4,
+  "planet": "void_reach",
+  "roomType": "elite",
+  "size": { "w": 900, "h": 700 },
+
+  "terrain": {
+    "caves": [],
+    "voidPools": [
+      { "pos": { "x": 450, "y": 350 }, "radius": 90 }
+    ],
+    "obstacles": [
+      { "pos": { "x": 40,  "y": 350 }, "w": 20,  "h": 660, "obsType": 0 },
+      { "pos": { "x": 860, "y": 350 }, "w": 20,  "h": 660, "obsType": 0 },
+      { "pos": { "x": 450, "y": 30  }, "w": 840, "h": 20,  "obsType": 0 },
+      { "pos": { "x": 450, "y": 670 }, "w": 840, "h": 20,  "obsType": 0 },
+      { "pos": { "x": 220, "y": 180 }, "w": 64, "h": 64, "obsType": 0 },
+      { "pos": { "x": 680, "y": 180 }, "w": 64, "h": 64, "obsType": 0 },
+      { "pos": { "x": 220, "y": 520 }, "w": 64, "h": 64, "obsType": 0 },
+      { "pos": { "x": 680, "y": 520 }, "w": 64, "h": 64, "obsType": 0 }
+    ],
+    "rivers": []
+  },
+
+  "playerSpawn": { "x": 450, "y": 600 },
+
+  "entities": [
+    {
+      "id": "door_a",
+      "type": "door",
+      "pos": { "x": 450, "y": 55 },
+      "radius": 45,
+      "rewardTag": "weapon",
+      "nextPool": "void_standard",
+      "requiresCleared": true,
+      "label": "Exit"
+    }
+  ],
+
+  "spawnZones": [
+    {
+      "id": "sz_ring",
+      "rect": { "x": 120, "y": 100, "w": 660, "h": 450 },
+      "poolTag": "void_tier2",
+      "budget": 8
+    }
+  ],
+
+  "triggers": [
+    { "id": "tr_start", "rect": { "x": 60, "y": 0, "w": 780, "h": 650 }, "on": "enter", "actions": ["spawn_all_zones", "lock_doors"] },
+    { "id": "tr_clear", "on": "all_enemies_dead", "actions": ["unlock_doors"] }
+  ],
+
+  "waves": [],
+  "modifiers": [],
+  "mode": "combat"
+}

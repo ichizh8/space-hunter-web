@@ -20,6 +20,16 @@ import tidalElite02      from './hunt/tidal/tidal_elite_02.json';
 import tidalBoss01       from './hunt/tidal/tidal_boss_01.json';
 import tidalExtraction01 from './hunt/tidal/tidal_extraction_01.json';
 
+import voidOpening01     from './hunt/void/void_opening_01.json';
+import voidStandard01    from './hunt/void/void_standard_01.json';
+import voidStandard02    from './hunt/void/void_standard_02.json';
+import voidStandard03    from './hunt/void/void_standard_03.json';
+import voidStandard04    from './hunt/void/void_standard_04.json';
+import voidElite01       from './hunt/void/void_elite_01.json';
+import voidElite02       from './hunt/void/void_elite_02.json';
+import voidBoss01        from './hunt/void/void_boss_01.json';
+import voidExtraction01  from './hunt/void/void_extraction_01.json';
+
 // planet → roomType → available templates
 const POOL: Record<string, Record<string, readonly unknown[]>> = {
   kepler: {
@@ -35,6 +45,13 @@ const POOL: Record<string, Record<string, readonly unknown[]>> = {
     elite:      [tidalElite01, tidalElite02],
     boss:       [tidalBoss01],
     extraction: [tidalExtraction01],
+  },
+  void_reach: {
+    opening:    [voidOpening01],
+    standard:   [voidStandard01, voidStandard02, voidStandard03, voidStandard04],
+    elite:      [voidElite01, voidElite02],
+    boss:       [voidBoss01],
+    extraction: [voidExtraction01],
   },
 };
 

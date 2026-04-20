@@ -285,7 +285,7 @@ export class EnemySystem {
 
       if (e.woundedFlee) {
         // Aggressive types go berserk; others flee
-        if (e.behavior === 'charge' || e.behavior === 'burst' || e.behavior === 'pack' || e.behavior === 'mine_crawler') {
+        if (e.behavior === 'charge' || e.behavior === 'burst' || e.behavior === 'pack' || e.behavior === 'mine_crawler' || e.behavior === 'phase_stalker') {
           e.vel = v2mul(dirToPlayer, e.speed * 1.8); // berserk rush
         } else {
           e.vel = v2mul(v2norm(v2sub(e.pos, player.pos)), e.speed * 1.2); // flee
@@ -802,6 +802,74 @@ export class EnemySystem {
               });
             }
             e.hitFlash = 0.08;
+          }
+          break;
+        }
+
+        case 'void_weaver': {
+          // Slow-moving caster: circles at mid-range, fires 3-shot void bolts every 2.5s
+          // Phase 0: approach to ~250px; Phase 1: circle and cast
+          const weaverIdeal = 250;
+          if (distToPlayer > weaverIdeal + 40) {
+            e.vel = v2mul(dirToPlayer, e.speed);
+          } else if (distToPlayer < weaverIdeal - 40) {
+            e.vel = v2mul(v2norm(v2sub(e.pos, player.pos)), e.speed * 0.8);
+          } else {
+            // Circle strafe
+            const perp = v2(-dirToPlayer.y * e.strafeDir, dirToPlayer.x * e.strafeDir);
+            e.vel = v2mul(perp, e.speed * 0.7);
+          }
+          e.strafeTimer -= dt;
+          if (e.strafeTimer <= 0) {
+            e.strafeDir *= -1;
+            e.strafeTimer = randRange(2.0, 4.0);
+          }
+          // Fire 3-shot burst aimed at player
+          e.flankTimer -= dt;
+          if (e.flankTimer <= 0 && distToPlayer < 400) {
+            e.flankTimer = 2.5;
+            const aimA = Math.atan2(toPlayer.y, toPlayer.x);
+            for (let si = -1; si <= 1; si++) {
+              this.enemyBullets.push({
+                pos: v2(e.pos.x, e.pos.y),
+                vel: v2fromAngle(aimA + si * 0.2, 160),
+                radius: 5,
+                damage: e.rangedDmg,
+                life: 2.5,
+                color: 0xaa44ff,
+              });
+            }
+            e.hitFlash = 0.08;
+          }
+          break;
+        }
+
+        case 'phase_stalker': {
+          // Fast void creature: visible rush (phase 0, 2s) then phase-shift invisible (phase 1, 1.5s)
+          // During phase shift, moves to flank position; reappears with a lunge
+          if (e.phaseTimer === 0) e.phaseTimer = 2.0;
+          if (e.phase === 0) {
+            // Visible: rush at player
+            e.vel = v2mul(dirToPlayer, e.speed * 1.2);
+            e.phaseTimer -= dt;
+            if (e.phaseTimer <= 0) {
+              e.phase = 1;
+              e.phaseTimer = 1.5;
+              // Pick a flank angle to reappear at
+              e.lockAngle = Math.atan2(toPlayer.y, toPlayer.x) + (Math.random() < 0.5 ? 1.2 : -1.2);
+            }
+          } else {
+            // Invisible: drift toward flank position
+            const flankDist = 120;
+            const targetX = player.pos.x - Math.cos(e.lockAngle) * flankDist;
+            const targetY = player.pos.y - Math.sin(e.lockAngle) * flankDist;
+            const toTarget = v2norm(v2sub(v2(targetX, targetY), e.pos));
+            e.vel = v2mul(toTarget, e.speed * 1.5);
+            e.phaseTimer -= dt;
+            if (e.phaseTimer <= 0) {
+              e.phase = 0;
+              e.phaseTimer = 2.0;
+            }
           }
           break;
         }

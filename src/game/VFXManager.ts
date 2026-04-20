@@ -30,6 +30,7 @@ const BEHAVIOR_COLORS: Record<string, number> = {
   charge: 0xFF3333, flank: 0xFF8800, pack: 0x33FF33,
   lurker: 0xAA44FF, burst: 0xFFFF00, strafe: 0x00FFFF, patrol_river: 0x888888,
   mine_crawler: 0xcc7722, sentry_drone: 0xff9933, tide_phantom: 0x22ccbb, coral_spitter: 0x33aacc,
+  void_weaver: 0xaa44ff, phase_stalker: 0xdd22ff,
 };
 
 function subtleTint(color: number, strength: number): number {
@@ -125,6 +126,19 @@ export class VFXManager {
             // Teal shimmer while invisible (phase 1)
             if (e.phase === 1 && Math.random() < 0.5) {
               game.particles.push({ x: e.pos.x + (Math.random()-0.5)*e.radius*2, y: e.pos.y + (Math.random()-0.5)*e.radius*2, vx: (Math.random()-0.5)*12, vy: -8 - Math.random()*12, life: 0.5, maxLife: 0.5, color: 0x22ccbb, radius: 3 });
+            }
+            break;
+          case 'void_weaver':
+            // Purple void motes orbiting the weaver
+            if (Math.random() < 0.35) {
+              const a = Math.random() * Math.PI * 2;
+              game.particles.push({ x: e.pos.x + Math.cos(a)*e.radius*1.5, y: e.pos.y + Math.sin(a)*e.radius*1.5, vx: Math.cos(a+1.5)*25, vy: Math.sin(a+1.5)*25, life: 0.6, maxLife: 0.6, color: 0xaa44ff, radius: 2.5 });
+            }
+            break;
+          case 'phase_stalker':
+            // Magenta trail while phased out
+            if (e.phase === 1 && Math.random() < 0.6) {
+              game.particles.push({ x: e.pos.x + (Math.random()-0.5)*e.radius, y: e.pos.y + (Math.random()-0.5)*e.radius, vx: (Math.random()-0.5)*8, vy: (Math.random()-0.5)*8, life: 0.35, maxLife: 0.35, color: 0xdd22ff, radius: 2 + Math.random()*2 });
             }
             break;
         }
@@ -354,8 +368,8 @@ export class VFXManager {
       // Lurker: semi-transparent (0.5) + flicker every 2s; fully dormant at 0.3
       const lurkerDormant = e.behavior === 'lurker' && (e.phase as number) === 0;
       const lurkerFlicker = e.behavior === 'lurker' ? (Math.floor(game.elapsed / 2) % 2 === 0 ? 1.0 : 0.6) : 1.0;
-      // Tide Phantom: almost invisible during phase 1 (invisible phase)
-      const phantomAlpha = e.behavior === 'tide_phantom' && e.phase === 1
+      // Tide Phantom / Phase Stalker: almost invisible during phase 1 (invisible phase)
+      const phantomAlpha = (e.behavior === 'tide_phantom' || e.behavior === 'phase_stalker') && e.phase === 1
         ? 0.1 + Math.abs(Math.sin(game.elapsed * 5)) * 0.08
         : 1.0;
       const sa = lurkerDormant ? 0.3 * lurkerFlicker : e.behavior === 'lurker' ? 0.5 * lurkerFlicker : phantomAlpha;
