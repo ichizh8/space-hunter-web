@@ -49,7 +49,6 @@ const WEAPON_UNLOCK_DEFS = [
   { id: 'chain_rifle', name: 'Chain Rifle', desc: 'Scrapper rep weapon', cost: 200 },
 ];
 
-
 const PANTRY_COLORS: Record<string, string> = {
   rift_dust: '#e6cc4d',
   void_crystal: '#aa44ff',
