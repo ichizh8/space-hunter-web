@@ -1,6 +1,7 @@
 // Runtime types for a loaded room. Distinct from editor-facing RoomJSON.
 
 import type { RoomJSON, TriggerOn } from '../../editor/editorStore';
+import type { UpgradeCard } from '../../data/upgrades';
 
 export interface Vec2 {
   x: number;
@@ -33,6 +34,7 @@ export interface RuntimeDoor {
   requiresCleared: boolean;
   label?: string;
   consumed: boolean;
+  rewardCard?: UpgradeCard;
 }
 
 export interface RuntimeSpawnZone {

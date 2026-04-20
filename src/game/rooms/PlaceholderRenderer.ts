@@ -20,6 +20,12 @@ const COL_SPAWN    = 0xff6644;
 const COL_TRIGGER  = 0xffaa44;
 const COL_HILIGHT  = 0xffffff;
 
+const RARITY_BORDER: Record<string, number> = {
+  common:    0xcccccc,
+  rare:      0x4499ff,
+  legendary: 0xffcc00,
+};
+
 export interface RenderCamera {
   x: number;
   y: number;
@@ -144,6 +150,18 @@ export function drawRoom(
       .stroke({ width: 1.5, color, alpha: 0.95 });
     if (target && target.kind === 'door' && target.ref.id === d.id) {
       gfx.circle(sx, sy, r + 6).stroke({ width: 2, color: COL_HILIGHT, alpha: 0.9 });
+    }
+
+    // Card preview: floats above the door when unlocked and reward is assigned
+    if (!locked && d.rewardCard) {
+      const border = RARITY_BORDER[d.rewardCard.rarity] ?? 0xcccccc;
+      const cw = 74, ch = 34;
+      const cx = sx - cw / 2;
+      const cy = sy - r - 10 - ch;
+      gfx.rect(cx, cy, cw, ch).fill({ color: 0x080818, alpha: 0.9 });
+      gfx.rect(cx, cy, cw, ch).stroke({ width: 1.5, color: border, alpha: 0.95 });
+      // Rarity gem
+      gfx.circle(cx + 13, cy + ch / 2, 4).fill({ color: border, alpha: 1 });
     }
   }
 
