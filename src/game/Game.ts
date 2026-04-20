@@ -582,12 +582,13 @@ export class Game {
   private loadRoomEntities(room: RoomJSON) {
     this.doors = [];
     if (!room.entities) return;
+    const S = GameMap.ROOM_SCALE;
     for (const ent of room.entities) {
       if (ent.type === 'door') {
         this.doors.push({
           id: ent.id,
-          pos: v2(ent.pos.x, ent.pos.y),
-          radius: ent.radius ?? 45,
+          pos: v2(ent.pos.x * S, ent.pos.y * S),
+          radius: (ent.radius ?? 45) * S,
           rewardTag: ent.rewardTag ?? 'mystery',
           nextPool: ent.nextPool ?? '',
           locked: true,
@@ -600,11 +601,12 @@ export class Game {
   /** Spawn enemies from room's spawn zones */
   private spawnFromRoomZones(room: RoomJSON) {
     if (!room.spawnZones) return;
+    const S = GameMap.ROOM_SCALE;
     for (const zone of room.spawnZones) {
       const budget = zone.budget ?? 5;
       for (let i = 0; i < budget; i++) {
-        const x = zone.rect.x + Math.random() * zone.rect.w;
-        const y = zone.rect.y + Math.random() * zone.rect.h;
+        const x = (zone.rect.x + Math.random() * zone.rect.w) * S;
+        const y = (zone.rect.y + Math.random() * zone.rect.h) * S;
         // Pick from planet pool or biome pool
         const biome = this.map.getBiome(x, y);
         const biomePool = BIOME_POOLS[biome] || BIOME_POOLS.open;

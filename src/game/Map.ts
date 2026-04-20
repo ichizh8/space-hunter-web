@@ -101,6 +101,9 @@ export class GameMap {
   }
 
   /** Build map from a room JSON template instead of random generation */
+  /** Scale factor applied to room JSON coordinates so rooms feel arena-sized */
+  static ROOM_SCALE = 2.5;
+
   generateFromRoom(room: RoomJSON) {
     this.rivers = [];
     this.caves = [];
@@ -108,8 +111,9 @@ export class GameMap {
     this.obstacles = [];
     this.stars = [];
 
-    const w = room.size?.w ?? 900;
-    const h = room.size?.h ?? 700;
+    const S = GameMap.ROOM_SCALE;
+    const w = (room.size?.w ?? 900) * S;
+    const h = (room.size?.h ?? 700) * S;
     this.roomW = w;
     this.roomH = h;
 
@@ -125,15 +129,15 @@ export class GameMap {
       });
     }
 
-    // Terrain from room JSON
+    // Terrain from room JSON (all coords scaled)
     const terrain = room.terrain;
     if (terrain) {
       if (terrain.obstacles) {
         for (const obs of terrain.obstacles) {
           this.obstacles.push({
-            pos: v2(obs.pos.x, obs.pos.y),
-            w: obs.w,
-            h: obs.h,
+            pos: v2(obs.pos.x * S, obs.pos.y * S),
+            w: obs.w * S,
+            h: obs.h * S,
             obsType: obs.obsType ?? 0,
           });
         }
@@ -141,8 +145,8 @@ export class GameMap {
       if (terrain.voidPools) {
         for (const vp of terrain.voidPools) {
           this.voidPools.push({
-            pos: v2(vp.pos.x, vp.pos.y),
-            radius: vp.radius,
+            pos: v2(vp.pos.x * S, vp.pos.y * S),
+            radius: vp.radius * S,
             pulse: Math.random() * Math.PI * 2,
           });
         }
@@ -150,24 +154,24 @@ export class GameMap {
       if (terrain.caves) {
         for (const cave of terrain.caves) {
           this.caves.push({
-            pos: v2(cave.pos.x, cave.pos.y),
-            radius: cave.radius,
+            pos: v2(cave.pos.x * S, cave.pos.y * S),
+            radius: cave.radius * S,
           });
         }
       }
       if (terrain.rivers) {
         for (const river of terrain.rivers) {
           this.rivers.push({
-            points: river.points.map((p: { x: number; y: number }) => v2(p.x, p.y)),
-            width: river.width ?? 50,
+            points: river.points.map((p: { x: number; y: number }) => v2(p.x * S, p.y * S)),
+            width: (river.width ?? 50) * S,
           });
         }
       }
     }
 
-    // Player spawn
+    // Player spawn (scaled)
     this.spawnPos = room.playerSpawn
-      ? v2(room.playerSpawn.x, room.playerSpawn.y)
+      ? v2(room.playerSpawn.x * S, room.playerSpawn.y * S)
       : v2(w / 2, h - 80);
   }
 
