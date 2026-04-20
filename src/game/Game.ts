@@ -582,13 +582,14 @@ export class Game {
   private loadRoomEntities(room: RoomJSON) {
     this.doors = [];
     if (!room.entities) return;
-    const S = GameMap.ROOM_SCALE;
+    const SX = GameMap.ROOM_SCALE_X;
+    const SY = GameMap.ROOM_SCALE_Y;
     for (const ent of room.entities) {
       if (ent.type === 'door') {
         this.doors.push({
           id: ent.id,
-          pos: v2(ent.pos.x * S, ent.pos.y * S),
-          radius: (ent.radius ?? 45) * S,
+          pos: v2(ent.pos.x * SX, ent.pos.y * SY),
+          radius: (ent.radius ?? 45) * Math.max(SX, SY),
           rewardTag: ent.rewardTag ?? 'mystery',
           nextPool: ent.nextPool ?? '',
           locked: true,
@@ -598,24 +599,48 @@ export class Game {
     }
   }
 
-  /** Spawn enemies from room's spawn zones */
+  /** Spawn enemies from room's spawn zones + extra top/bottom waves */
   private spawnFromRoomZones(room: RoomJSON) {
-    if (!room.spawnZones) return;
-    const S = GameMap.ROOM_SCALE;
-    for (const zone of room.spawnZones) {
-      const budget = zone.budget ?? 5;
-      for (let i = 0; i < budget; i++) {
-        const x = (zone.rect.x + Math.random() * zone.rect.w) * S;
-        const y = (zone.rect.y + Math.random() * zone.rect.h) * S;
-        // Pick from planet pool or biome pool
-        const biome = this.map.getBiome(x, y);
-        const biomePool = BIOME_POOLS[biome] || BIOME_POOLS.open;
-        const planetPool = PLANET_POOLS[this.planet];
-        const name = (planetPool && Math.random() < 0.45) ? pick(planetPool) : pick(biomePool);
-        const enemy = createEnemy(name, v2(x, y), true);
-        this.enemies.enemies.push(enemy);
+    const SX = GameMap.ROOM_SCALE_X;
+    const SY = GameMap.ROOM_SCALE_Y;
+    const W = this.map.roomW;
+    const H = this.map.roomH;
+
+    // Spawn from defined zones
+    if (room.spawnZones) {
+      for (const zone of room.spawnZones) {
+        const budget = zone.budget ?? 5;
+        for (let i = 0; i < budget; i++) {
+          const x = (zone.rect.x + Math.random() * zone.rect.w) * SX;
+          const y = (zone.rect.y + Math.random() * zone.rect.h) * SY;
+          this.spawnRoomEnemy(x, y);
+        }
       }
     }
+
+    // Extra top and bottom spawns (portrait-oriented mobile play)
+    const extraTop = 4 + Math.floor(Math.random() * 4);
+    const extraBottom = 4 + Math.floor(Math.random() * 4);
+    for (let i = 0; i < extraTop; i++) {
+      const x = randRange(80, W - 80);
+      const y = randRange(60, H * 0.25);
+      this.spawnRoomEnemy(x, y);
+    }
+    for (let i = 0; i < extraBottom; i++) {
+      const x = randRange(80, W - 80);
+      const y = randRange(H * 0.75, H - 60);
+      this.spawnRoomEnemy(x, y);
+    }
+  }
+
+  /** Helper: spawn a single enemy at world pos using planet/biome pools */
+  private spawnRoomEnemy(x: number, y: number) {
+    const biome = this.map.getBiome(x, y);
+    const biomePool = BIOME_POOLS[biome] || BIOME_POOLS.open;
+    const planetPool = PLANET_POOLS[this.planet];
+    const name = (planetPool && Math.random() < 0.45) ? pick(planetPool) : pick(biomePool);
+    const enemy = createEnemy(name, v2(x, y), true);
+    this.enemies.enemies.push(enemy);
   }
 
   /** Transition to a new room via door */

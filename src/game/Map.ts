@@ -101,8 +101,9 @@ export class GameMap {
   }
 
   /** Build map from a room JSON template instead of random generation */
-  /** Scale factor applied to room JSON coordinates so rooms feel arena-sized */
-  static ROOM_SCALE = 2.5;
+  /** Scale factors for room JSON coords -- portrait orientation for mobile */
+  static ROOM_SCALE_X = 2.0;
+  static ROOM_SCALE_Y = 3.5;
 
   generateFromRoom(room: RoomJSON) {
     this.rivers = [];
@@ -111,9 +112,10 @@ export class GameMap {
     this.obstacles = [];
     this.stars = [];
 
-    const S = GameMap.ROOM_SCALE;
-    const w = (room.size?.w ?? 900) * S;
-    const h = (room.size?.h ?? 700) * S;
+    const SX = GameMap.ROOM_SCALE_X;
+    const SY = GameMap.ROOM_SCALE_Y;
+    const w = (room.size?.w ?? 900) * SX;
+    const h = (room.size?.h ?? 700) * SY;
     this.roomW = w;
     this.roomH = h;
 
@@ -129,15 +131,15 @@ export class GameMap {
       });
     }
 
-    // Terrain from room JSON (all coords scaled)
+    // Terrain from room JSON (all coords scaled by SX/SY)
     const terrain = room.terrain;
     if (terrain) {
       if (terrain.obstacles) {
         for (const obs of terrain.obstacles) {
           this.obstacles.push({
-            pos: v2(obs.pos.x * S, obs.pos.y * S),
-            w: obs.w * S,
-            h: obs.h * S,
+            pos: v2(obs.pos.x * SX, obs.pos.y * SY),
+            w: obs.w * SX,
+            h: obs.h * SY,
             obsType: obs.obsType ?? 0,
           });
         }
@@ -145,8 +147,8 @@ export class GameMap {
       if (terrain.voidPools) {
         for (const vp of terrain.voidPools) {
           this.voidPools.push({
-            pos: v2(vp.pos.x * S, vp.pos.y * S),
-            radius: vp.radius * S,
+            pos: v2(vp.pos.x * SX, vp.pos.y * SY),
+            radius: vp.radius * Math.max(SX, SY),
             pulse: Math.random() * Math.PI * 2,
           });
         }
@@ -154,16 +156,16 @@ export class GameMap {
       if (terrain.caves) {
         for (const cave of terrain.caves) {
           this.caves.push({
-            pos: v2(cave.pos.x * S, cave.pos.y * S),
-            radius: cave.radius * S,
+            pos: v2(cave.pos.x * SX, cave.pos.y * SY),
+            radius: cave.radius * Math.max(SX, SY),
           });
         }
       }
       if (terrain.rivers) {
         for (const river of terrain.rivers) {
           this.rivers.push({
-            points: river.points.map((p: { x: number; y: number }) => v2(p.x * S, p.y * S)),
-            width: (river.width ?? 50) * S,
+            points: river.points.map((p: { x: number; y: number }) => v2(p.x * SX, p.y * SY)),
+            width: (river.width ?? 50) * Math.max(SX, SY),
           });
         }
       }
@@ -171,7 +173,7 @@ export class GameMap {
 
     // Player spawn (scaled)
     this.spawnPos = room.playerSpawn
-      ? v2(room.playerSpawn.x * S, room.playerSpawn.y * S)
+      ? v2(room.playerSpawn.x * SX, room.playerSpawn.y * SY)
       : v2(w / 2, h - 80);
   }
 
