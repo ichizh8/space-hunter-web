@@ -2,6 +2,7 @@ import { type Vec2, v2, v2add, v2mul, v2norm, v2sub, v2dist, v2len, v2fromAngle,
 import { WEAPON_DEFS, type WeaponDef } from '../data/weapons';
 import { BULLET_MAX_COUNT } from './constants';
 import type { Player } from './Player';
+import type { PlanetWeaponMod } from '../data/planets';
 
 export interface Bullet {
   pos: Vec2;
@@ -63,6 +64,12 @@ export class WeaponSystem {
   burnOnHit = false;
   deflect = false;
 
+  // Planet physics (set by Game at hunt start)
+  planetBulletSpeedMult = 1.0;
+  planetBulletLifeMult = 1.0;
+  planetFireRateMult = 1.0;
+  planetWeaponMods: PlanetWeaponMod[] = [];
+
   // Runtime state (updated each frame by Game)
   corruptionLevel = 0;
 
@@ -76,7 +83,7 @@ export class WeaponSystem {
       return [];
     }
 
-    player.fireCooldown = Math.max(0.02, def.fireRate + this.fireRateBonus);
+    player.fireCooldown = Math.max(0.02, (def.fireRate + this.fireRateBonus) * this.planetFireRateMult);
     if (def.magSize < 999) player.magAmmo--;
 
     const swingAngle = (def.pattern === 'melee_aoe' || def.pattern === 'laser') ? player.lastMoveAngle : player.aimAngle;
@@ -95,10 +102,14 @@ export class WeaponSystem {
   }
 
   private createBullets(pos: Vec2, angle: number, def: WeaponDef): Bullet[] {
-    const speed = def.bulletSpeed + this.bulletSpeedBonus;
-    const range = def.range + this.rangeBonus;
-    const dmg = def.damage + this.bonusDamage;
+    // Planet weapon-specific overrides
+    const wmod = this.planetWeaponMods.find(m => m.weaponId === def.id);
+    const speed = (def.bulletSpeed + this.bulletSpeedBonus) * this.planetBulletSpeedMult * (wmod?.speedMult ?? 1);
+    const range = (def.range + this.rangeBonus) * this.planetBulletLifeMult * (wmod?.rangeMult ?? 1);
+    const dmg = (def.damage + this.bonusDamage) * (wmod?.damageMult ?? 1);
     const rad = def.bulletRadius + this.radiusBonus;
+    const planetPierceAdd = wmod?.piercingAdd ?? 0;
+    const planetBounceAdd = wmod?.bouncesAdd ?? 0;
     const makeBullet = (a: number, opts: Partial<Bullet> = {}): Bullet => ({
       pos: v2(pos.x, pos.y),
       vel: v2fromAngle(a, speed),
@@ -107,9 +118,9 @@ export class WeaponSystem {
       damage: dmg,
       life: range / Math.max(speed, 1),
       maxLife: range / Math.max(speed, 1),
-      piercing: this.piercingCount > 0,
+      piercing: this.piercingCount > 0 || planetPierceAdd > 0,
       homing: false,
-      bounces: this.bounceExtra,
+      bounces: Math.max(0, this.bounceExtra + planetBounceAdd),
       aoeRadius: 0,
       fromPlayer: true,
       hitSet: new Set(),
@@ -122,7 +133,7 @@ export class WeaponSystem {
 
       case 'scatter': {
         const count = 5 + this.extraPellets;
-        const spread = Math.max(0.05, 0.4 - this.spreadBonus); // tight_spread narrows cone
+        const spread = Math.max(0.05, 0.4 - this.spreadBonus) * (wmod?.spreadMult ?? 1);
         return Array.from({ length: count }, (_, i) => {
           const a = angle - spread / 2 + (spread / (count - 1)) * i + randRange(-0.05, 0.05);
           return makeBullet(a);
@@ -137,7 +148,7 @@ export class WeaponSystem {
         const DEG70 = 70 * Math.PI / 180;
         const sweepStartAngle = angle - DEG70;
         const innerDist = 15;
-        const outerDist = 110 + this.radiusBonus;
+        const outerDist = (110 + this.radiusBonus) * (wmod?.reachMult ?? 1);
         const lineStart = v2(pos.x + Math.cos(sweepStartAngle) * innerDist, pos.y + Math.sin(sweepStartAngle) * innerDist);
         const lineEnd   = v2(pos.x + Math.cos(sweepStartAngle) * outerDist, pos.y + Math.sin(sweepStartAngle) * outerDist);
         return [makeBullet(angle, {
@@ -201,10 +212,10 @@ export class WeaponSystem {
       }
 
       case 'arc_aoe':
-        return [makeBullet(angle, { aoeRadius: 80 + this.aoeRadiusBonus, life: def.range / def.bulletSpeed, radius: 4 })];
+        return [makeBullet(angle, { aoeRadius: (80 + this.aoeRadiusBonus) * (wmod?.aoeMult ?? 1), life: range / Math.max(speed, 1), radius: 4 })];
 
       case 'bounce':
-        return [makeBullet(angle, { bounces: 3 + this.bounceExtra, pulseTimer: 0.5 })];
+        return [makeBullet(angle, { bounces: Math.max(0, 3 + this.bounceExtra + planetBounceAdd), pulseTimer: 0.5 })];
 
       default:
         return [makeBullet(angle)];
@@ -229,7 +240,9 @@ export class WeaponSystem {
         const speed = v2len(b.vel);
         const currentDir = v2norm(b.vel);
         // tracking_plus: +50% tracking weight (0.2 -> 0.3, capped at 0.95)
-        const trackW = Math.min(0.95, 0.2 * this.missileTrackingMult);
+        // Planet trackingMult further scales tracking (e.g. Tidal 0.70, Furnace 1.40)
+        const planetTrack = this.planetWeaponMods.find(m => m.weaponId === 'dart')?.trackingMult ?? 1;
+        const trackW = Math.min(0.95, 0.2 * this.missileTrackingMult * planetTrack);
         const blend = v2norm(v2add(v2mul(currentDir, 1 - trackW), v2mul(toTarget, trackW)));
         b.vel = v2mul(blend, speed);
       }

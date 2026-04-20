@@ -23,6 +23,7 @@ import { CREATURE_DEFS } from '../data/creatures';
 import { type ModifierDef } from '../data/modifiers';
 import { WEAPON_DEFS, WEAPON_LEVEL_PERKS, WEAPON_MUTATIONS } from '../data/weapons';
 import { KIT_DEFS } from '../data/kits';
+import { PLANETS, type PlanetId, type PlanetPhysics } from '../data/planets';
 import { type UpgradeCard, type ProgressionState, type RunPathState, generateDoorRewards } from '../data/upgrades';
 import {
   halSay,
@@ -215,6 +216,9 @@ export class Game {
   // Weapon leveling (starts at 1; perks are levels 2-5)
   weaponLevel = 1;
   weaponPerkPending = false;
+
+  // Planet physics (applied at hunt start)
+  planetPhysics: PlanetPhysics = PLANETS.kepler.physics;
 
   // Run path / room tracking (fork at room 1, auto-mutation at mutationRoom)
   planet = 'kepler';
@@ -464,7 +468,22 @@ export class Game {
     if (quickLevel > 0) {
       this.player.reloadTimeMult = Math.max(0.5, 1 - quickLevel * 0.05);
     }
+
+    // Planet physics -- apply movement modifiers
+    const planetDef = PLANETS[this.planet as PlanetId];
+    if (planetDef?.physics) {
+      this.planetPhysics = planetDef.physics;
+      this.player.inertia = planetDef.physics.inertia;
+      this.player.baseSpeed = Math.round(this.player.baseSpeed * planetDef.physics.moveSpeedMult);
+      this.player.speed = this.player.baseSpeed;
+    }
+
     this.weapons = new WeaponSystem();
+    // Planet weapon physics
+    this.weapons.planetBulletSpeedMult = this.planetPhysics.bulletSpeedMult;
+    this.weapons.planetBulletLifeMult = this.planetPhysics.bulletLifeMult;
+    this.weapons.planetFireRateMult = this.planetPhysics.fireRateMult;
+    this.weapons.planetWeaponMods = planetDef?.weaponMods ?? [];
     // Trigger Discipline: +4% fire rate per level (reduces cooldown)
     const triggerLevel = shipUpgrades.trigger_discipline ?? 0;
     if (triggerLevel > 0) {

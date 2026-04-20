@@ -27,9 +27,9 @@ export class SpawnManager {
       const count = 20 + game.waveCount * 6 + Math.floor(game.elapsed / 60) * 4;
       const prevLen = game.enemies.enemies.length;
       game.enemies.spawnWave(Math.min(count, 60), game.player.pos, game.map, undefined, game.planet);
-      // Time-based enemy scaling: +10% HP per 2min, +5% speed per 3min
-      const hpScale = 1 + Math.floor(game.elapsed / 120) * 0.1;
-      const spdScale = 1 + Math.floor(game.elapsed / 180) * 0.05;
+      // Time-based enemy scaling + planet physics
+      const hpScale = (1 + Math.floor(game.elapsed / 120) * 0.1) * game.planetPhysics.enemyHpMult;
+      const spdScale = (1 + Math.floor(game.elapsed / 180) * 0.05) * game.planetPhysics.enemySpeedMult;
       for (let ei = prevLen; ei < game.enemies.enemies.length; ei++) {
         const e = game.enemies.enemies[ei];
         e.hp = Math.floor(e.hp * hpScale);

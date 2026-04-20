@@ -45,6 +45,9 @@ export class Player {
   // External speed multiplier (set by game systems like void surge)
   externalSpeedMult = 1.0;
 
+  /** Planet inertia: 0 = instant direction change, 1 = ice */
+  inertia = 0;
+
   constructor(x: number, y: number, maxHp: number, magSize: number) {
     this.pos = v2(x, y);
     this.hp = maxHp;
@@ -89,8 +92,15 @@ export class Player {
       this.lastMoveAngle = Math.atan2(dir.y, dir.x);
     }
 
-    // Apply velocity
-    this.vel = v2mul(dir, this.speed * speedMod);
+    // Apply velocity (with planet inertia)
+    const targetVel = v2mul(dir, this.speed * speedMod);
+    if (this.inertia > 0) {
+      const blend = 1 - Math.pow(this.inertia, dt * 60);
+      this.vel.x += (targetVel.x - this.vel.x) * blend;
+      this.vel.y += (targetVel.y - this.vel.y) * blend;
+    } else {
+      this.vel = targetVel;
+    }
     const newX = this.pos.x + this.vel.x * dt;
     const newY = this.pos.y + this.vel.y * dt;
 
