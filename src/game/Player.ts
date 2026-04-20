@@ -10,8 +10,6 @@ export class Player {
   maxHp: number;
   speed: number;
   corruption = 0;
-  level = 1;
-  essenceCollected = 0;
 
   // Joystick
   joyActive = false;

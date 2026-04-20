@@ -15,7 +15,7 @@ import { VFXManager, DIR_NAMES, SPRITES_WITH_DIRS } from './VFXManager';
 import { v2dist, v2, v2sub, v2norm, v2mul, v2len, v2fromAngle, randRange, lineSegHitsCircle } from '../lib/math';
 import {
   PLAYER_BASE_HP, PLAYER_BASE_SPEED, WORLD_W, WORLD_H,
-  PLAYER_COLOR, XP_PER_LEVEL, MAX_LEVEL, POST_CAP_XP
+  PLAYER_COLOR
 } from './constants';
 import { CREATURE_DEFS } from '../data/creatures';
 import { type ModifierDef } from '../data/modifiers';
@@ -27,7 +27,7 @@ import {
   HAL_HUNT_START, HAL_FIRST_KILL, HAL_KILL_STREAK,
   HAL_ELITE_SPAWNED, HAL_LOW_HP, HAL_CRITICAL_HP, HAL_TOOK_DAMAGE,
   HAL_CORRUPTION_VALLEY, HAL_CORRUPTION_CORRUPT, HAL_CORRUPTION_VOID,
-  HAL_OBJECTIVE_HALF, HAL_OBJECTIVE_NEAR, HAL_LEVEL_UP,
+  HAL_OBJECTIVE_HALF, HAL_OBJECTIVE_NEAR,
   HAL_PLAYER_DIED, HAL_CONTRACT_DONE, HAL_RELOAD,
 } from '../data/hal';
 
@@ -188,9 +188,6 @@ export class Game {
   // Kit T3 path choices (persisted per run)
   kitT3Choices: Record<string, string> = {};
 
-  // Post-cap stat drip
-  postCapIndex = 0;
-
   // Kit perk state
   stimWithdrawalActive = false;
   sacrificeInvincibleTimer = 0;
@@ -307,7 +304,6 @@ export class Game {
   activeModifiers: string[] = [];
   modifierPickPending = false;
   upgradePending = false;
-  pendingLevelUpPicks = 0;
   adrenalineKills = 0;
   adrenalineTimer = 0;
   adrenalineStacks = 0;
@@ -512,7 +508,6 @@ export class Game {
     this.hudLayer.addChild(this.hud.corrText);
     this.hudLayer.addChild(this.hud.killsText);
     this.hudLayer.addChild(this.hud.timerText);
-    this.hudLayer.addChild(this.hud.levelText);
     this.hudLayer.addChild(this.hud.messageText);
     this.hudLayer.addChild(this.hud.halStripText);
 
@@ -876,11 +871,6 @@ export class Game {
       this.halCooldown = 4;
     }
 
-    // Deferred level-up: offer 3-slot upgrade panel
-    if (this.pendingLevelUpPicks > 0 && !this.upgradePending && !this.kitT3ChoicePending && !this.forkChoicePending) {
-      this.pendingLevelUpPicks--;
-      this.offerUpgradePanel();
-    }
     // Process kit T3 path choices
     if (this.kitT3Pending.length > 0 && !this.upgradePending && !this.kitT3ChoicePending) {
       this.processKitT3Choice();

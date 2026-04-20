@@ -2,7 +2,7 @@ import { Graphics, Text, TextStyle } from 'pixi.js';
 import type { Player } from './Player';
 import { WEAPON_DEFS } from '../data/weapons';
 import { KIT_DEFS } from '../data/kits';
-import { MAX_LEVEL, XP_PER_LEVEL, CORR_CLEAN, CORR_VALLEY, CORR_CORRUPT } from './constants';
+import { CORR_CLEAN, CORR_VALLEY, CORR_CORRUPT } from './constants';
 
 // HAL 9000 terminal font styles
 const FONT_HAL  = new TextStyle({ fontFamily: 'PixelOperator, monospace', fontSize: 22, fill: 0xff3300, letterSpacing: 1 });
@@ -21,7 +21,6 @@ export class HUD {
   corrText: Text;
   killsText: Text;
   timerText: Text;
-  levelText: Text;
   messageText: Text;
   halStripText: Text;     // HAL commentary strip Ã¢ÂÂ bottom center
   messageDuration = 0;
@@ -39,7 +38,6 @@ export class HUD {
     this.corrText  = new Text({ text: '', style: FONT_DATA });
     this.killsText = new Text({ text: '', style: FONT_DATA });
     this.timerText = new Text({ text: '', style: FONT_DATA });
-    this.levelText = new Text({ text: '', style: FONT_DATA });
     this.messageText = new Text({ text: '', style: FONT_MSG });
     this.messageText.anchor.set(0.5, 0.5);
     this.halStripText = new Text({ text: '', style: FONT_HAL_STRIP });
@@ -134,19 +132,6 @@ export class HUD {
     this.timerText.text = `T+${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
     this.timerText.x = corrX;
     this.timerText.y = y;
-
-    // Ã¢ÂÂÃ¢ÂÂ BOTTOM: XP BAR Ã¢ÂÂÃ¢ÂÂ
-    const xpH = 8;
-    const xpY = this.viewH - xpH;
-    const xpThreshold = player.level < MAX_LEVEL ? (XP_PER_LEVEL[player.level] ?? 999) : 210;
-    const xpFrac = Math.min(player.essenceCollected / xpThreshold, 1);
-    g.rect(0, xpY, this.viewW, xpH).fill({ color: 0x0a0008, alpha: 0.85 });
-    g.rect(0, xpY, this.viewW * xpFrac, xpH).fill({ color: 0xff2200, alpha: 0.8 });
-
-    // Level label
-    this.levelText.text = `LV ${player.level}`;
-    this.levelText.x = L;
-    this.levelText.y = this.viewH - 30;
 
     // Kit buttons - bottom right
     const kitBtnW = 72;
