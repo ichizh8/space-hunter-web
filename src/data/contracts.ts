@@ -166,7 +166,7 @@ function buildContract(type: string, planet: Planet, difficulty: number): Contra
 
 export function generateContracts(
   count: number = 3,
-  reputation: Record<string, number> = {},
+  reputation: number = 0,
   planetClearance: Record<string, number> = {}
 ): Contract[] {
   const unlockedPlanets = getUnlockedPlanets(planetClearance);
