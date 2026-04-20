@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { Contract } from '../data/contracts';
 
 export type GameScreen = 'hub' | 'contracts' | 'loadout' | 'hunt' | 'results';
+export type RunPath = 'clean' | 'void';
 
 export interface HuntResult {
   contractName: string;
@@ -25,6 +26,10 @@ export interface GameState {
   startingWeapon: string;
   huntResult: HuntResult | null;
   hubPlayerPos: { x: number; y: number } | null;
+  runPath: RunPath | null;
+  roomsCleared: number;
+  runCorruption: number;
+  weaponMutated: boolean;
 }
 
 export interface GameActions {
@@ -34,14 +39,22 @@ export interface GameActions {
   setHuntResult: (result: HuntResult) => void;
   startHunt: () => void;
   setHubPlayerPos: (pos: { x: number; y: number } | null) => void;
+  setRunPath: (path: RunPath) => void;
+  incrementRoomsCleared: () => void;
+  applyCorruptionDrift: () => void;
+  triggerMutation: () => void;
 }
 
-export const useGameStore = create<GameState & GameActions>((set) => ({
+export const useGameStore = create<GameState & GameActions>((set, get) => ({
   screen: 'hub',
   currentContract: null,
   startingWeapon: 'sidearm',
   huntResult: null,
   hubPlayerPos: null,
+  runPath: null,
+  roomsCleared: 0,
+  runCorruption: 0,
+  weaponMutated: false,
 
   setScreen: (screen) => set({ screen }),
   setContract: (contract) => set({ currentContract: contract }),
@@ -49,4 +62,12 @@ export const useGameStore = create<GameState & GameActions>((set) => ({
   setHuntResult: (result) => set({ huntResult: result }),
   startHunt: () => set({ screen: 'hunt' }),
   setHubPlayerPos: (pos) => set({ hubPlayerPos: pos }),
+  setRunPath: (path) => set({ runPath: path }),
+  incrementRoomsCleared: () => set(s => ({ roomsCleared: s.roomsCleared + 1 })),
+  applyCorruptionDrift: () => set(s => ({
+    runCorruption: s.runCorruption + (s.runPath === 'clean' ? -3 : 5),
+  })),
+  triggerMutation: () => {
+    if (get().roomsCleared >= 4) set({ weaponMutated: true });
+  },
 }));
