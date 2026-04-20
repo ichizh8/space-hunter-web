@@ -87,8 +87,8 @@ export class KitAbilitySystem {
         } else {
           game.player.pos.y -= blinkDist;
         }
-        game.player.pos.x = Math.max(0, Math.min(WORLD_W, game.player.pos.x));
-        game.player.pos.y = Math.max(0, Math.min(WORLD_H, game.player.pos.y));
+        game.player.pos.x = Math.max(0, Math.min(game.map.roomW, game.player.pos.x));
+        game.player.pos.y = Math.max(0, Math.min(game.map.roomH, game.player.pos.y));
         // T2: stun field at departure point
         if (tier >= 2) {
           for (const e of game.enemies.enemies) {
@@ -140,8 +140,8 @@ export class KitAbilitySystem {
         }
         // linked_fuse: override blink destination to last triggered flash_trap position
         if (game.hasMod('linked_fuse') && game.lastFlashTrapPos) {
-          game.player.pos.x = Math.max(0, Math.min(WORLD_W, game.lastFlashTrapPos.x));
-          game.player.pos.y = Math.max(0, Math.min(WORLD_H, game.lastFlashTrapPos.y));
+          game.player.pos.x = Math.max(0, Math.min(game.map.roomW, game.lastFlashTrapPos.x));
+          game.player.pos.y = Math.max(0, Math.min(game.map.roomH, game.lastFlashTrapPos.y));
         }
         // smoke_blink: drop smoke cloud at blink landing point
         if (game.hasMod('smoke_blink')) {

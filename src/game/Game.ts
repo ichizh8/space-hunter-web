@@ -12,14 +12,14 @@ import { ContractObjectives } from './ContractObjectives';
 import { KitAbilitySystem } from './KitAbilitySystem';
 import { ProgressionManager } from './ProgressionManager';
 import { VFXManager, DIR_NAMES, SPRITES_WITH_DIRS } from './VFXManager';
-import { v2dist, v2, v2sub, v2norm, v2mul, v2len, v2fromAngle, randRange, lineSegHitsCircle } from '../lib/math';
+import { type Vec2, v2dist, v2, v2sub, v2norm, v2mul, v2len, v2fromAngle, randRange, lineSegHitsCircle, pick } from '../lib/math';
 import { pickNextRoom } from '../data/rooms/roomPool';
 import type { RoomJSON } from '../editor/editorStore';
 import {
   PLAYER_BASE_HP, PLAYER_BASE_SPEED, WORLD_W, WORLD_H,
   PLAYER_COLOR
 } from './constants';
-import { CREATURE_DEFS } from '../data/creatures';
+import { CREATURE_DEFS, BIOME_POOLS, PLANET_POOLS } from '../data/creatures';
 import { type ModifierDef } from '../data/modifiers';
 import { WEAPON_DEFS, WEAPON_LEVEL_PERKS, WEAPON_MUTATIONS } from '../data/weapons';
 import { KIT_DEFS } from '../data/kits';
@@ -229,6 +229,10 @@ export class Game {
   runPath: 'clean' | 'void' | null = null;
   forkChoicePending = false;
   mutationRoom = 4;
+  // Room-based door system
+  doors: Array<{ id: string; pos: Vec2; radius: number; rewardTag: string; nextPool: string; locked: boolean; label: string }> = [];
+  roomCleared = false;   // true when all enemies in current room are dead
+  roomTransitioning = false; // brief pause during room load
 
   // State
   elapsed = 0;
@@ -448,7 +452,12 @@ export class Game {
 
     this.camera = new Camera(vw, vh);
     this.map = new GameMap();
-    this.map.generate();
+    if (this.currentRoom) {
+      this.map.generateFromRoom(this.currentRoom);
+      this.loadRoomEntities(this.currentRoom);
+    } else {
+      this.map.generate();
+    }
 
     // Apply hub upgrades
     const condLevel = shipUpgrades.conditioning ?? 0;
@@ -542,8 +551,12 @@ export class Game {
     // Draw static map
     this.map.drawStatic(this.mapGfx);
 
-    // Spawn initial wave
-    this.enemies.spawnWave(30, this.player.pos, this.map);
+    // Spawn initial enemies: use room spawn zones if available, else legacy wave
+    if (this.currentRoom?.spawnZones?.length) {
+      this.spawnFromRoomZones(this.currentRoom);
+    } else {
+      this.enemies.spawnWave(30, this.player.pos, this.map);
+    }
     this.hud.showMessage('HUNT STARTED', 2);
     setTimeout(() => this.hud.showHalMessage(halSay(HAL_HUNT_START), 5), 2500);
 
@@ -560,6 +573,147 @@ export class Game {
 
     // Input
     this.setupInput();
+  }
+
+  /** Load door entities from a room JSON */
+  private loadRoomEntities(room: RoomJSON) {
+    this.doors = [];
+    if (!room.entities) return;
+    for (const ent of room.entities) {
+      if (ent.type === 'door') {
+        this.doors.push({
+          id: ent.id,
+          pos: v2(ent.pos.x, ent.pos.y),
+          radius: ent.radius ?? 45,
+          rewardTag: ent.rewardTag ?? 'mystery',
+          nextPool: ent.nextPool ?? '',
+          locked: true,
+          label: ent.label ?? 'Door',
+        });
+      }
+    }
+  }
+
+  /** Spawn enemies from room's spawn zones */
+  private spawnFromRoomZones(room: RoomJSON) {
+    if (!room.spawnZones) return;
+    for (const zone of room.spawnZones) {
+      const budget = zone.budget ?? 5;
+      for (let i = 0; i < budget; i++) {
+        const x = zone.rect.x + Math.random() * zone.rect.w;
+        const y = zone.rect.y + Math.random() * zone.rect.h;
+        // Pick from planet pool or biome pool
+        const biome = this.map.getBiome(x, y);
+        const biomePool = BIOME_POOLS[biome] || BIOME_POOLS.open;
+        const planetPool = PLANET_POOLS[this.planet];
+        const name = (planetPool && Math.random() < 0.45) ? pick(planetPool) : pick(biomePool);
+        const enemy = createEnemy(name, v2(x, y), true);
+        this.enemies.enemies.push(enemy);
+      }
+    }
+  }
+
+  /** Transition to a new room via door */
+  private transitionToRoom(door: { nextPool: string; rewardTag: string }) {
+    if (this.roomTransitioning) return;
+    this.roomTransitioning = true;
+
+    // Extraction complete: finish the contract
+    if (door.nextPool === 'extraction_complete') {
+      this.roomTransitioning = false;
+      this.complete = true;
+      this.hud.showMessage('EXTRACTION COMPLETE', 2);
+      this.hud.showHalMessage(halSay(HAL_CONTRACT_DONE), 5);
+      setTimeout(() => this.finishHunt('COMPLETED'), 2000);
+      return;
+    }
+
+    // Parse nextPool to determine planet and roomType (e.g. "furnace_elite" -> planet=furnace, type=elite)
+    const parts = door.nextPool.split('_');
+    let nextPlanet = this.planet;
+    let nextType = 'standard';
+    if (parts.length >= 2) {
+      // Check if first part is a known planet
+      const possiblePlanet = parts[0] === 'void' ? 'void_reach' : parts[0];
+      if (PLANETS[possiblePlanet as PlanetId]) {
+        nextPlanet = possiblePlanet;
+        nextType = parts.slice(parts[0] === 'void' ? 2 : 1).join('_') || 'standard';
+      } else {
+        nextType = door.nextPool;
+      }
+    }
+
+    // Pick the next room template
+    let nextRoom: RoomJSON | null = null;
+    try {
+      nextRoom = pickNextRoom(nextPlanet, nextType);
+    } catch {
+      // Fallback to standard if pool not found
+      try { nextRoom = pickNextRoom(nextPlanet, 'standard'); } catch { /* give up */ }
+    }
+
+    if (!nextRoom) {
+      this.roomTransitioning = false;
+      return;
+    }
+
+    // Clear current state
+    this.enemies.enemies = [];
+    this.enemies.mines = [];
+    this.enemies.enemyBullets = [];
+    this.particles = [];
+    this.explosions = [];
+    this.roomCleared = false;
+
+    // Load new room
+    this.currentRoom = nextRoom;
+    this.map.generateFromRoom(nextRoom);
+    this.loadRoomEntities(nextRoom);
+
+    // Redraw static map
+    this.mapGfx.clear();
+    this.map.drawStatic(this.mapGfx);
+
+    // Move player to new spawn
+    this.player.pos.x = this.map.spawnPos.x;
+    this.player.pos.y = this.map.spawnPos.y;
+    this.player.vel = v2(0, 0);
+    this.player.iFrames = 1.0; // brief invincibility on room entry
+
+    // Spawn enemies from new room
+    this.spawnFromRoomZones(nextRoom);
+
+    // Lock doors
+    for (const d of this.doors) d.locked = true;
+
+    // Show room upgrade panel before transitioning
+    this.offerUpgradePanel();
+
+    this.screenFlash = 0.3;
+    this.roomTransitioning = false;
+  }
+
+  /** Check if all enemies are dead and unlock doors */
+  private checkRoomClear() {
+    if (this.roomCleared || this.doors.length === 0) return;
+    const aliveCount = this.enemies.enemies.filter(e => e.hp > 0 && !e.isAlly).length;
+    if (aliveCount === 0 && this.enemies.enemies.length > 0) {
+      this.roomCleared = true;
+      for (const d of this.doors) d.locked = false;
+      this.hud.showMessage('ROOM CLEARED', 1.5);
+    }
+  }
+
+  /** Check if player is touching an unlocked door */
+  private checkDoorEntry() {
+    if (!this.roomCleared || this.roomTransitioning) return;
+    for (const door of this.doors) {
+      if (door.locked) continue;
+      if (v2dist(this.player.pos, door.pos) < door.radius + this.player.radius) {
+        this.transitionToRoom(door);
+        return;
+      }
+    }
   }
 
   /** Current world-space pod position interpolated along podPath */
@@ -1138,6 +1292,12 @@ export class Game {
 
     this.contractObjectives.update(dt, this);
 
+    // Room system: check if room is cleared, check door entry
+    if (this.currentRoom) {
+      this.checkRoomClear();
+      this.checkDoorEntry();
+    }
+
     // Dynamic map
     this.map.drawDynamic(this.dynamicGfx, this.elapsed, this.player.pos.x, this.player.pos.y);
 
@@ -1345,7 +1505,10 @@ export class Game {
    *  mutationRoom: auto-applies mutation before showing upgrade cards. */
   private offerUpgradePanel() {
     this.roomsCleared++;
-    try { this.currentRoom = pickNextRoom(this.planet, 'standard'); } catch { /* planet not yet in pool */ }
+    // Only pick a new room if transitionToRoom hasn't already set one
+    if (!this.currentRoom) {
+      try { this.currentRoom = pickNextRoom(this.planet, 'standard'); } catch { /* planet not yet in pool */ }
+    }
 
     const doOfferCards = () => {
       // Auto-mutate at the designated room if path is chosen and not yet mutated

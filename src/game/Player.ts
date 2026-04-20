@@ -108,9 +108,9 @@ export class Player {
     if (!map.isBlocked(newX, this.pos.y, this.radius)) this.pos.x = newX;
     if (!map.isBlocked(this.pos.x, newY, this.radius)) this.pos.y = newY;
 
-    // World bounds
-    this.pos.x = clamp(this.pos.x, this.radius, WORLD_W - this.radius);
-    this.pos.y = clamp(this.pos.y, this.radius, WORLD_H - this.radius);
+    // World bounds (use room dimensions if available)
+    this.pos.x = clamp(this.pos.x, this.radius, (map.roomW ?? WORLD_W) - this.radius);
+    this.pos.y = clamp(this.pos.y, this.radius, (map.roomH ?? WORLD_H) - this.radius);
 
     // Void corruption (with resist modifier)
     const voidCorr = map.getVoidCorruption(this.pos.x, this.pos.y);

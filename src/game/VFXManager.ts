@@ -334,6 +334,25 @@ export class VFXManager {
 
     game.contractObjectives.draw(g, game, px, py);
 
+    // Room doors
+    for (const door of game.doors) {
+      const dx = door.pos.x, dy = door.pos.y, dr = door.radius;
+      if (door.locked) {
+        // Locked: red ring, dim fill
+        g.circle(dx, dy, dr).fill({ color: 0x441111, alpha: 0.3 });
+        g.circle(dx, dy, dr).stroke({ color: 0xff3333, width: 2, alpha: 0.6 });
+        // Lock icon (X)
+        g.moveTo(dx - 8, dy - 8).lineTo(dx + 8, dy + 8).stroke({ color: 0xff3333, width: 2, alpha: 0.8 });
+        g.moveTo(dx + 8, dy - 8).lineTo(dx - 8, dy + 8).stroke({ color: 0xff3333, width: 2, alpha: 0.8 });
+      } else {
+        // Unlocked: green pulsing ring
+        const pulse = 0.6 + Math.sin(game.elapsed * 4) * 0.3;
+        g.circle(dx, dy, dr).fill({ color: 0x113311, alpha: 0.3 });
+        g.circle(dx, dy, dr).stroke({ color: 0x33ff66, width: 3, alpha: pulse });
+        g.circle(dx, dy, dr * 0.6).stroke({ color: 0x33ff66, width: 1, alpha: pulse * 0.5 });
+      }
+    }
+
     // Player glow ring
     g.circle(px, py, pr * 2.2).fill({ color: 0x0066aa, alpha: 0.06 * pAlpha });
     g.circle(px, py, pr * 1.5).stroke({ color: 0x00aaff, width: 1, alpha: 0.2 * pAlpha });

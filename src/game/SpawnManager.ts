@@ -8,6 +8,9 @@ import type { Game } from './Game';
 export class SpawnManager {
   /** Called each frame; handles wave, elite, and apex spawn timers. */
   update(dt: number, game: Game): void {
+    // Room-based contracts: rooms have fixed spawn zones, no timed waves/elites
+    if (game.currentRoom) return;
+
     // Boss Hunt: spawn apex after wave 2
     if (game.contractType === 'boss_hunt' && !game.apexSpawned && game.waveCount >= 2) {
       this.spawnApex(game);
@@ -65,8 +68,8 @@ export class SpawnManager {
     const spawnAngle = Math.random() * Math.PI * 2;
     const spawnDist = 600 + Math.random() * 300;
     const pos = {
-      x: Math.max(100, Math.min(WORLD_W - 100, game.player.pos.x + Math.cos(spawnAngle) * spawnDist)),
-      y: Math.max(100, Math.min(WORLD_H - 100, game.player.pos.y + Math.sin(spawnAngle) * spawnDist)),
+      x: Math.max(100, Math.min((game.map.roomW ?? WORLD_W) - 100, game.player.pos.x + Math.cos(spawnAngle) * spawnDist)),
+      y: Math.max(100, Math.min((game.map.roomH ?? WORLD_H) - 100, game.player.pos.y + Math.sin(spawnAngle) * spawnDist)),
     };
 
     // Base stats scaled by time
@@ -128,8 +131,8 @@ export class SpawnManager {
     let attempts = 0;
     do {
       pos = {
-        x: randRange(200, WORLD_W - 200),
-        y: randRange(200, WORLD_H - 200),
+        x: randRange(200, (game.map.roomW ?? WORLD_W) - 200),
+        y: randRange(200, (game.map.roomH ?? WORLD_H) - 200),
       };
       attempts++;
     } while (v2dist(pos, game.player.pos) < 800 && attempts < 30);
@@ -178,8 +181,8 @@ export class SpawnManager {
       let attempts = 0;
       do {
         pos = {
-          x: randRange(300, WORLD_W - 300),
-          y: randRange(300, WORLD_H - 300),
+          x: randRange(300, (game.map.roomW ?? WORLD_W) - 300),
+          y: randRange(300, (game.map.roomH ?? WORLD_H) - 300),
         };
         attempts++;
       } while (
@@ -208,8 +211,8 @@ export class SpawnManager {
       let attempts = 0;
       do {
         pos = {
-          x: randRange(300, WORLD_W - 300),
-          y: randRange(300, WORLD_H - 300),
+          x: randRange(300, (game.map.roomW ?? WORLD_W) - 300),
+          y: randRange(300, (game.map.roomH ?? WORLD_H) - 300),
         };
         attempts++;
       } while (
@@ -228,16 +231,18 @@ export class SpawnManager {
 
   spawnPodPath(game: Game): void {
     const WAYPOINTS = 5 + Math.floor(Math.random() * 3);
-    const start = { x: 150, y: WORLD_H / 2 };
-    const end   = { x: WORLD_W - 150, y: WORLD_H / 2 };
+    const W = game.map.roomW ?? WORLD_W;
+    const H = game.map.roomH ?? WORLD_H;
+    const start = { x: 150, y: H / 2 };
+    const end   = { x: W - 150, y: H / 2 };
     game.podPath = [start];
     for (let i = 1; i < WAYPOINTS; i++) {
       const t = i / WAYPOINTS;
       const baseX = start.x + (end.x - start.x) * t;
       const baseY = start.y + (end.y - start.y) * t;
       game.podPath.push({
-        x: Math.max(200, Math.min(WORLD_W - 200, baseX + (Math.random() - 0.5) * 400)),
-        y: Math.max(200, Math.min(WORLD_H - 200, baseY + (Math.random() - 0.5) * 400)),
+        x: Math.max(200, Math.min(W - 200, baseX + (Math.random() - 0.5) * 400)),
+        y: Math.max(200, Math.min(H - 200, baseY + (Math.random() - 0.5) * 400)),
       });
     }
     game.podPath.push(end);

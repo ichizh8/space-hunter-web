@@ -5,6 +5,7 @@ import {
   COL_BG, COL_GRID, COL_RIVER, COL_CAVE, COL_VOID_POOL, COL_OBSTACLE,
 } from './constants';
 import { Graphics } from 'pixi.js';
+import type { RoomJSON } from '../editor/editorStore';
 
 export interface River { points: Vec2[]; width: number }
 export interface Cave { pos: Vec2; radius: number }
@@ -19,6 +20,9 @@ export class GameMap {
   obstacles: Obstacle[] = [];
   stars: Star[] = [];
   spawnPos: Vec2 = v2(WORLD_W / 2, WORLD_H / 2);
+  /** Active room dimensions (defaults to WORLD_W/WORLD_H for legacy mode) */
+  roomW: number = WORLD_W;
+  roomH: number = WORLD_H;
 
   generate() {
     this.rivers = [];
@@ -96,6 +100,77 @@ export class GameMap {
     }
   }
 
+  /** Build map from a room JSON template instead of random generation */
+  generateFromRoom(room: RoomJSON) {
+    this.rivers = [];
+    this.caves = [];
+    this.voidPools = [];
+    this.obstacles = [];
+    this.stars = [];
+
+    const w = room.size?.w ?? 900;
+    const h = room.size?.h ?? 700;
+    this.roomW = w;
+    this.roomH = h;
+
+    // Star field scaled to room size
+    const starCount = Math.max(40, Math.floor((w * h) / 5000));
+    for (let i = 0; i < starCount; i++) {
+      this.stars.push({
+        x: randRange(0, w),
+        y: randRange(0, h),
+        size: randRange(0.5, 2.0),
+        brightness: randRange(0.15, 0.6),
+        twinkleSpeed: randRange(0.5, 3.0),
+      });
+    }
+
+    // Terrain from room JSON
+    const terrain = room.terrain;
+    if (terrain) {
+      if (terrain.obstacles) {
+        for (const obs of terrain.obstacles) {
+          this.obstacles.push({
+            pos: v2(obs.pos.x, obs.pos.y),
+            w: obs.w,
+            h: obs.h,
+            obsType: obs.obsType ?? 0,
+          });
+        }
+      }
+      if (terrain.voidPools) {
+        for (const vp of terrain.voidPools) {
+          this.voidPools.push({
+            pos: v2(vp.pos.x, vp.pos.y),
+            radius: vp.radius,
+            pulse: Math.random() * Math.PI * 2,
+          });
+        }
+      }
+      if (terrain.caves) {
+        for (const cave of terrain.caves) {
+          this.caves.push({
+            pos: v2(cave.pos.x, cave.pos.y),
+            radius: cave.radius,
+          });
+        }
+      }
+      if (terrain.rivers) {
+        for (const river of terrain.rivers) {
+          this.rivers.push({
+            points: river.points.map((p: { x: number; y: number }) => v2(p.x, p.y)),
+            width: river.width ?? 50,
+          });
+        }
+      }
+    }
+
+    // Player spawn
+    this.spawnPos = room.playerSpawn
+      ? v2(room.playerSpawn.x, room.playerSpawn.y)
+      : v2(w / 2, h - 80);
+  }
+
   /** Check if point is inside an obstacle */
   isBlocked(x: number, y: number, radius: number): boolean {
     for (const obs of this.obstacles) {
@@ -150,7 +225,9 @@ export class GameMap {
     gfx.clear();
 
     // Deep space background
-    gfx.rect(0, 0, WORLD_W, WORLD_H).fill(0x020208);
+    const W = this.roomW;
+    const H = this.roomH;
+    gfx.rect(0, 0, W, H).fill(0x020208);
 
     // ── Biome ground layers (drawn before stars so stars sit on top) ──────────
 
@@ -177,11 +254,11 @@ export class GameMap {
     }
 
     // World grid — thin lines (HAL terminal feel)
-    for (let x = 0; x <= WORLD_W; x += GRID_STEP) {
-      gfx.moveTo(x, 0).lineTo(x, WORLD_H).stroke({ color: 0xff2200, width: 0.5, alpha: 0.06 });
+    for (let x = 0; x <= W; x += GRID_STEP) {
+      gfx.moveTo(x, 0).lineTo(x, H).stroke({ color: 0xff2200, width: 0.5, alpha: 0.06 });
     }
-    for (let y = 0; y <= WORLD_H; y += GRID_STEP) {
-      gfx.moveTo(0, y).lineTo(WORLD_W, y).stroke({ color: 0xff2200, width: 0.5, alpha: 0.06 });
+    for (let y = 0; y <= H; y += GRID_STEP) {
+      gfx.moveTo(0, y).lineTo(W, y).stroke({ color: 0xff2200, width: 0.5, alpha: 0.06 });
     }
 
     // Energy rivers — glowing cyan plasma streams
@@ -227,8 +304,8 @@ export class GameMap {
     // Obstacles drawn as sprites in Game.ts obstacleLayer
 
     // World boundary — red containment field
-    gfx.rect(0, 0, WORLD_W, WORLD_H).stroke({ color: 0xcc2200, width: 2, alpha: 0.4 });
-    gfx.rect(4, 4, WORLD_W - 8, WORLD_H - 8).stroke({ color: 0xcc2200, width: 1, alpha: 0.15 });
+    gfx.rect(0, 0, W, H).stroke({ color: 0xcc2200, width: 2, alpha: 0.4 });
+    gfx.rect(4, 4, W - 8, H - 8).stroke({ color: 0xcc2200, width: 1, alpha: 0.15 });
   }
 
   /** Draw dynamic elements — void pools pulsing + twinkling stars + biome particles */
@@ -238,9 +315,12 @@ export class GameMap {
     // ── Biome particles ───────────────────────────────────────────────────────
 
     // OPEN — dust motes drifting slowly (deterministic virtual particles)
-    for (let i = 0; i < 240; i++) {
-      const bx = (i * 157.31 + 80) % WORLD_W;
-      const by = (i * 211.73 + 80) % WORLD_H;
+    const W = this.roomW;
+    const H = this.roomH;
+    const moteCount = Math.max(20, Math.floor(240 * (W * H) / (4800 * 4800)));
+    for (let i = 0; i < moteCount; i++) {
+      const bx = (i * 157.31 + 80) % W;
+      const by = (i * 211.73 + 80) % H;
       if (this.getBiome(bx, by) !== 'open') continue;
       const ox = Math.sin(time * 0.4 + i * 2.71) * 10;
       const oy = Math.cos(time * 0.35 + i * 1.41) * 10;

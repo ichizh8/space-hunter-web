@@ -130,14 +130,17 @@ export class EnemySystem {
   _pendingImpacts: Vec2[] = [];
 
   spawnWave(count: number, playerPos: Vec2, map: GameMap, biome?: string, planet?: string) {
+    const mapW = map.roomW ?? WORLD_W;
+    const mapH = map.roomH ?? WORLD_H;
     for (let i = 0; i < count; i++) {
       // Spawn away from player
       let pos: Vec2;
       let attempts = 0;
+      const minDist = Math.min(500, Math.min(mapW, mapH) * 0.4);
       do {
-        pos = v2(randRange(100, WORLD_W - 100), randRange(100, WORLD_H - 100));
+        pos = v2(randRange(100, mapW - 100), randRange(100, mapH - 100));
         attempts++;
-      } while (v2dist(pos, playerPos) < 500 && attempts < 30);
+      } while (v2dist(pos, playerPos) < minDist && attempts < 30);
 
       // Pick creature: 45% from planet pool (when available), rest from biome pool
       const spawnBiome = biome || map.getBiome(pos.x, pos.y);
@@ -989,8 +992,10 @@ export class EnemySystem {
       const newY = e.pos.y + e.vel.y * dt;
       if (!map.isBlocked(newX, e.pos.y, e.radius)) e.pos.x = newX;
       if (!map.isBlocked(e.pos.x, newY, e.radius)) e.pos.y = newY;
-      e.pos.x = Math.max(e.radius, Math.min(WORLD_W - e.radius, e.pos.x));
-      e.pos.y = Math.max(e.radius, Math.min(WORLD_H - e.radius, e.pos.y));
+      const mapW = map.roomW ?? WORLD_W;
+      const mapH = map.roomH ?? WORLD_H;
+      e.pos.x = Math.max(e.radius, Math.min(mapW - e.radius, e.pos.x));
+      e.pos.y = Math.max(e.radius, Math.min(mapH - e.radius, e.pos.y));
 
       // Enforce minimum distance from player — prevent stacking on top of player
       const minPlayerDist = e.radius + player.radius + 2;
