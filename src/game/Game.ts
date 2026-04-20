@@ -21,7 +21,7 @@ import { CREATURE_DEFS } from '../data/creatures';
 import { type ModifierDef } from '../data/modifiers';
 import { WEAPON_DEFS, WEAPON_LEVEL_PERKS, WEAPON_MUTATIONS } from '../data/weapons';
 import { KIT_DEFS } from '../data/kits';
-import { type UpgradeCard, type ProgressionState, generateUpgrades } from '../data/upgrades';
+import { type UpgradeCard, type ProgressionState, type RunPathState, generateDoorRewards } from '../data/upgrades';
 import {
   halSay,
   HAL_HUNT_START, HAL_FIRST_KILL, HAL_KILL_STREAK,
@@ -89,6 +89,10 @@ export interface GameCallbacks {
   onWeaponPerkPick: (perks: string[], weaponName: string, resolve: (picked: string) => void) => void;
   onUpgradePick: (choices: UpgradeCard[], resolve: (picked: UpgradeCard) => void) => void;
   onKitT3Choice: (kitId: string, kitName: string, resolve: (path: 'clean' | 'void') => void) => void;
+  /** Called after room 1 to let the player choose clean or void path. */
+  onForkChoice: (weaponId: string, resolve: (path: 'clean' | 'void') => void) => void;
+  /** Called when weapon auto-mutates (for gameStore sync). */
+  onMutationApplied?: (path: 'clean' | 'void') => void;
 }
 
 export class Game {
@@ -211,6 +215,12 @@ export class Game {
   // Weapon leveling (starts at 1; perks are levels 2-5)
   weaponLevel = 1;
   weaponPerkPending = false;
+
+  // Run path / room tracking (fork at room 1, auto-mutation at mutationRoom)
+  roomsCleared = 0;
+  runPath: 'clean' | 'void' | null = null;
+  forkChoicePending = false;
+  mutationRoom = 4;
 
   // State
   elapsed = 0;
@@ -421,6 +431,8 @@ export class Game {
     if (contractExtras?.difficulty !== undefined) {
       this.contractDifficulty = contractExtras.difficulty;
     }
+    // Short contracts (boss hunt or difficulty 1) mutate at room 3, others at room 4
+    this.mutationRoom = (contractType === 'boss_hunt' || this.contractDifficulty <= 1) ? 3 : 4;
 
     const vw = app.screen.width;
     const vh = app.screen.height;
@@ -865,7 +877,7 @@ export class Game {
     }
 
     // Deferred level-up: offer 3-slot upgrade panel
-    if (this.pendingLevelUpPicks > 0 && !this.upgradePending && !this.kitT3ChoicePending) {
+    if (this.pendingLevelUpPicks > 0 && !this.upgradePending && !this.kitT3ChoicePending && !this.forkChoicePending) {
       this.pendingLevelUpPicks--;
       this.offerUpgradePanel();
     }
@@ -1289,20 +1301,76 @@ export class Game {
     return this.progression.getProgressionState(this);
   }
 
-  /** Pause game and show 3-slot upgrade panel */
+  /** Auto-apply weapon mutation based on chosen run path. */
+  private _autoApplyMutation() {
+    const path = this.runPath!;
+    const wid = this.player.weaponId;
+    const mut = WEAPON_MUTATIONS[wid]?.[path];
+    if (!mut || this.player.mutated !== '') return;
+    const card: UpgradeCard = {
+      type: 'mutation',
+      id: `mut_${wid}_${path}`,
+      rarity: 'legendary',
+      icon: mut.icon,
+      label: mut.name,
+      desc: mut.desc,
+      weaponId: wid,
+      mutationType: path,
+    };
+    this.applyUpgrade(card);
+    this.screenFlash = 0.5;
+    this.callbacks.onMutationApplied?.(path);
+  }
+
+  /** Pause game and show door reward picker. Increments roomsCleared.
+   *  Room 1: shows fork choice first, then upgrade cards.
+   *  mutationRoom: auto-applies mutation before showing upgrade cards. */
   private offerUpgradePanel() {
-    const state = this.getProgressionState();
-    const choices = generateUpgrades(state);
-    // Sync back kitT3Pending (generateUpgrades may have pushed new entries)
-    this.kitT3Pending = state.kitT3Pending;
-    if (choices.length === 0) return;
-    this.upgradePending = true;
-    this.paused = true;
-    this.callbacks.onUpgradePick(choices, (picked) => {
-      this.applyUpgrade(picked);
-      this.upgradePending = false;
-      this.paused = false;
-    });
+    this.roomsCleared++;
+
+    const doOfferCards = () => {
+      // Auto-mutate at the designated room if path is chosen and not yet mutated
+      if (this.roomsCleared === this.mutationRoom && this.runPath !== null && this.player.mutated === '') {
+        this._autoApplyMutation();
+      }
+
+      const state = this.getProgressionState();
+      // T3 kit advancement: mirror the side-effect previously in generateUpgrades
+      for (const kid of state.equippedKits) {
+        const kt = state.kitTiers[kid] ?? 1;
+        if (kt === 2 && !state.kitT3Pending.includes(kid)) {
+          state.kitT3Pending.push(kid);
+        }
+      }
+      this.kitT3Pending = state.kitT3Pending;
+
+      const pathState: RunPathState | undefined = this.runPath
+        ? { path: this.runPath, roomsCleared: this.roomsCleared, corruption: this.player.corruption }
+        : undefined;
+      const choices = generateDoorRewards(state, 3, pathState).flat();
+      if (choices.length === 0) return;
+      this.upgradePending = true;
+      this.paused = true;
+      this.callbacks.onUpgradePick(choices, (picked) => {
+        this.applyUpgrade(picked);
+        this.upgradePending = false;
+        this.paused = false;
+      });
+    };
+
+    // Room 1: pause and present fork choice before the upgrade cards
+    if (this.roomsCleared === 1 && this.runPath === null) {
+      this.forkChoicePending = true;
+      this.paused = true;
+      this.callbacks.onForkChoice(this.player.weaponId, (path) => {
+        this.runPath = path;
+        this.forkChoicePending = false;
+        doOfferCards();
+      });
+      return;
+    }
+
+    doOfferCards();
   }
 
   /** Process pending kit T3 path choices */
