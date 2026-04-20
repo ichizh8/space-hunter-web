@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "id": "hunt_elite_brood_mother_nest",
+  "name": "Brood Mother Nest",
+  "kind": "pool",
+  "biome": "cave",
+  "contractTags": ["hunt"],
+  "difficulty": 4,
+  "size": { "w": 1600, "h": 1100 },
+
+  "terrain": {
+    "caves": [
+      { "pos": { "x": 500,  "y": 300  }, "radius": 160 },
+      { "pos": { "x": 500,  "y": 800  }, "radius": 160 },
+      { "pos": { "x": 1100, "y": 550  }, "radius": 200 }
+    ],
+    "voidPools": [
+      { "pos": { "x": 750, "y": 200  }, "radius": 55 },
+      { "pos": { "x": 750, "y": 900  }, "radius": 55 }
+    ],
+    "obstacles": [
+      { "pos": { "x": 400,  "y": 550  }, "w": 60, "h": 160, "obsType": 0 },
+      { "pos": { "x": 900,  "y": 280  }, "w": 160, "h": 60, "obsType": 0 },
+      { "pos": { "x": 900,  "y": 820  }, "w": 160, "h": 60, "obsType": 0 },
+      { "pos": { "x": 1300, "y": 350  }, "w": 60, "h": 100, "obsType": 0 },
+      { "pos": { "x": 1300, "y": 750  }, "w": 60, "h": 100, "obsType": 0 }
+    ],
+    "rivers": []
+  },
+
+  "playerSpawn": { "x": 100, "y": 550 },
+
+  "entities": [
+    {
+      "id": "door_exit",
+      "type": "door",
+      "pos": { "x": 1540, "y": 550 },
+      "radius": 45,
+      "rewardTag": "mystery",
+      "nextPool": "hunt_pool_crates_02",
+      "requiresCleared": true,
+      "label": "Exit"
+    }
+  ],
+
+  "spawnZones": [
+    {
+      "id": "sz_boss",
+      "rect": { "x": 950, "y": 400, "w": 250, "h": 300 },
+      "poolTag": "elite_brood_mother",
+      "budget": 1
+    },
+    {
+      "id": "sz_minions_w",
+      "rect": { "x": 200, "y": 150, "w": 500, "h": 800 },
+      "poolTag": "elite_minions",
+      "budget": 8
+    },
+    {
+      "id": "sz_minions_e",
+      "rect": { "x": 1000, "y": 150, "w": 450, "h": 800 },
+      "poolTag": "elite_minions",
+      "budget": 4
+    }
+  ],
+
+  "triggers": [
+    {
+      "id": "tr_start",
+      "rect": { "x": 200, "y": 0, "w": 1400, "h": 1100 },
+      "on": "enter",
+      "actions": ["spawn_all_zones", "lock_doors"]
+    },
+    {
+      "id": "tr_clear",
+      "on": "all_enemies_dead",
+      "actions": ["unlock_doors"]
+    }
+  ],
+
+  "waves": [],
+  "modifiers": [],
+  "mode": "combat"
+}

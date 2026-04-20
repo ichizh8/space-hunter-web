@@ -43,6 +43,7 @@ export function loadRoom(json: RoomJSON): LoadedRoom {
         requiresCleared: e.requiresCleared ?? false,
         label: e.label,
         consumed: false,
+        eliteType: e.eliteType,
       })),
     spawnZones: json.spawnZones.map((sz) => ({
       id: sz.id,

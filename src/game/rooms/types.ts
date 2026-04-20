@@ -35,6 +35,7 @@ export interface RuntimeDoor {
   label?: string;
   consumed: boolean;
   rewardCard?: UpgradeCard;
+  eliteType?: string;
 }
 
 export interface RuntimeSpawnZone {
