@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "id": "kepler_boss_01",
+  "name": "Kepler Overlord Chamber",
+  "kind": "fixed",
+  "biome": "station",
+  "contractTags": ["hunt"],
+  "difficulty": 5,
+  "planet": "kepler",
+  "roomType": "boss",
+  "size": { "w": 1400, "h": 1000 },
+
+  "terrain": {
+    "caves": [],
+    "voidPools": [],
+    "obstacles": [
+      { "pos": { "x": 40,   "y": 500 }, "w": 20,   "h": 940, "obsType": 0 },
+      { "pos": { "x": 1360, "y": 500 }, "w": 20,   "h": 940, "obsType": 0 },
+      { "pos": { "x": 700,  "y": 30  }, "w": 1340, "h": 20,  "obsType": 0 },
+      { "pos": { "x": 700,  "y": 970 }, "w": 1340, "h": 20,  "obsType": 0 },
+      { "pos": { "x": 300,  "y": 250 }, "w": 64,   "h": 64,  "obsType": 0 },
+      { "pos": { "x": 700,  "y": 200 }, "w": 64,   "h": 64,  "obsType": 0 },
+      { "pos": { "x": 1100, "y": 250 }, "w": 64,   "h": 64,  "obsType": 0 },
+      { "pos": { "x": 300,  "y": 750 }, "w": 64,   "h": 64,  "obsType": 0 },
+      { "pos": { "x": 700,  "y": 800 }, "w": 64,   "h": 64,  "obsType": 0 },
+      { "pos": { "x": 1100, "y": 750 }, "w": 64,   "h": 64,  "obsType": 0 },
+      { "pos": { "x": 500,  "y": 500 }, "w": 48,   "h": 48,  "obsType": 0 },
+      { "pos": { "x": 900,  "y": 500 }, "w": 48,   "h": 48,  "obsType": 0 },
+      { "pos": { "x": 200,  "y": 500 }, "w": 32,   "h": 128, "obsType": 0 },
+      { "pos": { "x": 1200, "y": 500 }, "w": 32,   "h": 128, "obsType": 0 }
+    ],
+    "rivers": []
+  },
+
+  "playerSpawn": { "x": 120, "y": 500 },
+
+  "entities": [],
+
+  "spawnZones": [
+    {
+      "id": "sz_boss",
+      "rect": { "x": 550, "y": 350, "w": 300, "h": 300 },
+      "poolTag": "boss_kepler_overlord",
+      "budget": 1
+    },
+    {
+      "id": "sz_adds",
+      "rect": { "x": 200, "y": 100, "w": 1000, "h": 800 },
+      "poolTag": "kepler_tier2",
+      "budget": 12
+    }
+  ],
+
+  "triggers": [
+    {
+      "id": "tr_start",
+      "rect": { "x": 200, "y": 0, "w": 1200, "h": 1000 },
+      "on": "enter",
+      "actions": ["spawn_all_zones"]
+    }
+  ],
+
+  "waves": [],
+  "modifiers": [],
+  "mode": "combat"
+}

@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "id": "kepler_extraction_01",
+  "name": "Kepler Extraction Point",
+  "kind": "fixed",
+  "biome": "station",
+  "contractTags": ["hunt"],
+  "difficulty": 0,
+  "planet": "kepler",
+  "roomType": "extraction",
+  "size": { "w": 900, "h": 650 },
+
+  "terrain": {
+    "caves": [],
+    "voidPools": [],
+    "obstacles": [
+      { "pos": { "x": 40,  "y": 325 }, "w": 20,  "h": 590, "obsType": 0 },
+      { "pos": { "x": 860, "y": 325 }, "w": 20,  "h": 590, "obsType": 0 },
+      { "pos": { "x": 450, "y": 30  }, "w": 840, "h": 20,  "obsType": 0 },
+      { "pos": { "x": 450, "y": 620 }, "w": 840, "h": 20,  "obsType": 0 },
+      { "pos": { "x": 300, "y": 200 }, "w": 64,  "h": 64,  "obsType": 0 },
+      { "pos": { "x": 300, "y": 450 }, "w": 64,  "h": 64,  "obsType": 0 },
+      { "pos": { "x": 500, "y": 325 }, "w": 80,  "h": 32,  "obsType": 0 }
+    ],
+    "rivers": []
+  },
+
+  "playerSpawn": { "x": 150, "y": 325 },
+
+  "entities": [
+    {
+      "id": "e_extract_terminal",
+      "type": "interactable",
+      "kind": "extract_terminal",
+      "pos": { "x": 700, "y": 325 },
+      "radius": 70,
+      "prompt": "Press E: Complete Extraction",
+      "action": "complete_extraction",
+      "label": "Extract"
+    }
+  ],
+
+  "spawnZones": [
+    {
+      "id": "sz_guards",
+      "rect": { "x": 400, "y": 120, "w": 400, "h": 440 },
+      "poolTag": "kepler_tier1",
+      "budget": 4
+    }
+  ],
+
+  "triggers": [
+    {
+      "id": "tr_start",
+      "rect": { "x": 200, "y": 0, "w": 700, "h": 650 },
+      "on": "enter",
+      "actions": ["spawn_all_zones"]
+    }
+  ],
+
+  "waves": [],
+  "modifiers": [],
+  "mode": "combat"
+}

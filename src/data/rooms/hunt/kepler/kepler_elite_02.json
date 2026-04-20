@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "id": "kepler_elite_02",
+  "name": "Kepler Industrial Hangar",
+  "kind": "pool",
+  "biome": "station",
+  "contractTags": ["hunt"],
+  "difficulty": 4,
+  "planet": "kepler",
+  "roomType": "elite",
+  "size": { "w": 1400, "h": 900 },
+
+  "terrain": {
+    "caves": [],
+    "voidPools": [],
+    "obstacles": [
+      { "pos": { "x": 40,   "y": 450 }, "w": 20,   "h": 840, "obsType": 0 },
+      { "pos": { "x": 1360, "y": 450 }, "w": 20,   "h": 840, "obsType": 0 },
+      { "pos": { "x": 700,  "y": 30  }, "w": 1340, "h": 20,  "obsType": 0 },
+      { "pos": { "x": 700,  "y": 870 }, "w": 1340, "h": 20,  "obsType": 0 },
+      { "pos": { "x": 350,  "y": 225 }, "w": 48,   "h": 48,  "obsType": 0 },
+      { "pos": { "x": 350,  "y": 675 }, "w": 48,   "h": 48,  "obsType": 0 },
+      { "pos": { "x": 580,  "y": 225 }, "w": 48,   "h": 48,  "obsType": 0 },
+      { "pos": { "x": 580,  "y": 675 }, "w": 48,   "h": 48,  "obsType": 0 },
+      { "pos": { "x": 820,  "y": 225 }, "w": 48,   "h": 48,  "obsType": 0 },
+      { "pos": { "x": 820,  "y": 675 }, "w": 48,   "h": 48,  "obsType": 0 },
+      { "pos": { "x": 1050, "y": 225 }, "w": 48,   "h": 48,  "obsType": 0 },
+      { "pos": { "x": 1050, "y": 675 }, "w": 48,   "h": 48,  "obsType": 0 },
+      { "pos": { "x": 465,  "y": 310 }, "w": 190,  "h": 20,  "obsType": 0 },
+      { "pos": { "x": 465,  "y": 590 }, "w": 190,  "h": 20,  "obsType": 0 },
+      { "pos": { "x": 935,  "y": 310 }, "w": 190,  "h": 20,  "obsType": 0 },
+      { "pos": { "x": 935,  "y": 590 }, "w": 190,  "h": 20,  "obsType": 0 },
+      { "pos": { "x": 200,  "y": 450 }, "w": 64,   "h": 200, "obsType": 0 },
+      { "pos": { "x": 1200, "y": 450 }, "w": 64,   "h": 200, "obsType": 0 }
+    ],
+    "rivers": []
+  },
+
+  "playerSpawn": { "x": 120, "y": 450 },
+
+  "entities": [
+    {
+      "id": "door_exit",
+      "type": "door",
+      "pos": { "x": 1345, "y": 450 },
+      "radius": 45,
+      "rewardTag": "mystery",
+      "nextPool": "kepler_extraction",
+      "requiresCleared": true,
+      "label": "Exit"
+    }
+  ],
+
+  "spawnZones": [
+    {
+      "id": "sz_elite",
+      "rect": { "x": 600, "y": 350, "w": 200, "h": 200 },
+      "poolTag": "elite_kepler_warden",
+      "budget": 1
+    },
+    {
+      "id": "sz_minions_top",
+      "rect": { "x": 300, "y": 80, "w": 800, "h": 180 },
+      "poolTag": "kepler_tier2",
+      "budget": 6
+    },
+    {
+      "id": "sz_minions_bot",
+      "rect": { "x": 300, "y": 640, "w": 800, "h": 180 },
+      "poolTag": "kepler_tier2",
+      "budget": 6
+    }
+  ],
+
+  "triggers": [
+    {
+      "id": "tr_start",
+      "rect": { "x": 200, "y": 0, "w": 1200, "h": 900 },
+      "on": "enter",
+      "actions": ["spawn_all_zones", "lock_doors"]
+    },
+    {
+      "id": "tr_clear",
+      "on": "all_enemies_dead",
+      "actions": ["unlock_doors"]
+    }
+  ],
+
+  "waves": [],
+  "modifiers": [],
+  "mode": "combat"
+}

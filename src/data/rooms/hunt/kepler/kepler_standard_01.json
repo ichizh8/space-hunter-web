@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "id": "kepler_standard_01",
+  "name": "Kepler Cargo Bay",
+  "kind": "pool",
+  "biome": "station",
+  "contractTags": ["hunt"],
+  "difficulty": 2,
+  "planet": "kepler",
+  "roomType": "standard",
+  "size": { "w": 900, "h": 650 },
+
+  "terrain": {
+    "caves": [],
+    "voidPools": [],
+    "obstacles": [
+      { "pos": { "x": 40,  "y": 325 }, "w": 20,  "h": 590, "obsType": 0 },
+      { "pos": { "x": 860, "y": 325 }, "w": 20,  "h": 590, "obsType": 0 },
+      { "pos": { "x": 450, "y": 30  }, "w": 840, "h": 20,  "obsType": 0 },
+      { "pos": { "x": 450, "y": 620 }, "w": 840, "h": 20,  "obsType": 0 },
+      { "pos": { "x": 240, "y": 160 }, "w": 96,  "h": 48,  "obsType": 0 },
+      { "pos": { "x": 660, "y": 160 }, "w": 96,  "h": 48,  "obsType": 0 },
+      { "pos": { "x": 240, "y": 490 }, "w": 96,  "h": 48,  "obsType": 0 },
+      { "pos": { "x": 660, "y": 490 }, "w": 96,  "h": 48,  "obsType": 0 },
+      { "pos": { "x": 450, "y": 325 }, "w": 48,  "h": 96,  "obsType": 0 }
+    ],
+    "rivers": []
+  },
+
+  "playerSpawn": { "x": 130, "y": 325 },
+
+  "entities": [
+    {
+      "id": "door_a",
+      "type": "door",
+      "pos": { "x": 845, "y": 160 },
+      "radius": 45,
+      "rewardTag": "weapon",
+      "nextPool": "kepler_elite",
+      "requiresCleared": true,
+      "label": "Weapon Cache"
+    },
+    {
+      "id": "door_b",
+      "type": "door",
+      "pos": { "x": 845, "y": 490 },
+      "radius": 45,
+      "rewardTag": "mystery",
+      "nextPool": "kepler_elite",
+      "requiresCleared": true,
+      "label": "Advance"
+    },
+    {
+      "id": "door_c",
+      "type": "door",
+      "pos": { "x": 450, "y": 55 },
+      "radius": 45,
+      "rewardTag": "perk",
+      "nextPool": "kepler_elite",
+      "requiresCleared": true,
+      "label": "Perk Corridor"
+    }
+  ],
+
+  "spawnZones": [
+    {
+      "id": "sz_nw",
+      "rect": { "x": 80, "y": 80, "w": 280, "h": 200 },
+      "poolTag": "kepler_tier1",
+      "budget": 4
+    },
+    {
+      "id": "sz_ne",
+      "rect": { "x": 540, "y": 80, "w": 280, "h": 200 },
+      "poolTag": "kepler_tier1",
+      "budget": 4
+    }
+  ],
+
+  "triggers": [
+    {
+      "id": "tr_start",
+      "rect": { "x": 200, "y": 0, "w": 700, "h": 650 },
+      "on": "enter",
+      "actions": ["spawn_all_zones", "lock_doors"]
+    },
+    {
+      "id": "tr_clear",
+      "on": "all_enemies_dead",
+      "actions": ["unlock_doors"]
+    }
+  ],
+
+  "waves": [],
+  "modifiers": [],
+  "mode": "combat"
+}
