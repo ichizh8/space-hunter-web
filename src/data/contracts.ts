@@ -86,11 +86,9 @@ function computeSpecial(type: string, difficulty: number): string {
   }
 }
 
-export function generateContracts(count: number = 3, reputation: Record<string, number> = {}): Contract[] {
-  const maxRep = Math.max(0, ...Object.values(reputation));
-  const avgRep = Object.values(reputation).length > 0
-    ? Object.values(reputation).reduce((a, b) => a + b, 0) / Object.values(reputation).length
-    : 0;
+export function generateContracts(count: number = 3, reputation: number = 0): Contract[] {
+  const maxRep = reputation;
+  const avgRep = reputation;
 
   const unlockedTypes = CONTRACT_TYPES.filter(t => maxRep >= (CONTRACT_UNLOCK_REP[t] ?? 0));
   const pool = unlockedTypes.length > 0 ? unlockedTypes : ['hunt'];

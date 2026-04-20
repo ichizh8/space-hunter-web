@@ -11,8 +11,8 @@ export function ContractBoard() {
   const setContract = useGameStore(s => s.setContract);
   const save = useSaveStore();
 
-  const reputation = save.reputation ?? {};
-  const maxRep = Math.max(0, ...Object.values(reputation));
+  const reputation = save.reputation ?? 0;
+  const maxRep = reputation;
 
   const [contracts, setContracts] = useState<Contract[]>(() => generateContracts(3, reputation));
 

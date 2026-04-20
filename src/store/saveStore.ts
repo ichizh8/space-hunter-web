@@ -16,7 +16,11 @@ export interface SaveState {
   kitT2Paths: Record<string, string>;
   activeBonuses: Record<string, boolean | number>;
   unlockedRecipes: string[];
-  reputation: Record<string, number>;
+  reputation: number;
+  planetClearance: Record<string, number>;
+  ingredientInventory: Record<string, number>;
+  kitchenStations: Record<string, number>;
+  recipesUnlocked: string[];
   introSeen: boolean;
   endowedProgress: boolean;
 }
@@ -30,7 +34,14 @@ export interface SaveActions {
   assignKit: (kitId: string, slot: number) => void;
   addIngredients: (items: Array<{ id: string }>) => void;
   cookRecipe: (cost: Record<string, number>, track: string, rep: number, bonus: string) => void;
-  getRepLevel: (track: string) => number;
+  getRepTier: () => number;
+  addReputation: (amount: number) => void;
+  addIngredient: (id: string, count: number) => void;
+  removeIngredients: (items: Record<string, number>) => void;
+  unlockRecipe: (id: string) => void;
+  upgradeKitchenStation: (station: string) => void;
+  completePlanetContract: (planet: string) => void;
+  getPlanetUnlocked: (planet: string) => boolean;
   getAvailableWeapons: () => string[];
   markIntroSeen: () => void;
   endowProgress: () => void;
@@ -58,7 +69,11 @@ export const useSaveStore = create<SaveState & SaveActions>()(
       kitT2Paths: {},
       activeBonuses: {},
       unlockedRecipes: ['field_ration', 'void_brew', 'cave_jerky', 'silt_stew'],
-      reputation: { contractor: 0, void_walker: 0, tactician: 0, scrapper: 0 },
+      reputation: 0,
+      planetClearance: { kepler: 0, tidal: 0, void_reach: 0, furnace: 0 },
+      ingredientInventory: {},
+      kitchenStations: { basic: 1, prep: 0, exotic: 0, void_infuser: 0, forge: 0 },
+      recipesUnlocked: [],
       introSeen: false,
       endowedProgress: false,
 
@@ -134,25 +149,58 @@ export const useSaveStore = create<SaveState & SaveActions>()(
         return { pantry };
       }),
 
-      cookRecipe: (cost, track, rep, bonus) => set(s => {
+      cookRecipe: (cost, _track, rep, bonus) => set(s => {
         const pantry = { ...s.pantry };
         for (const [k, v] of Object.entries(cost)) {
           pantry[k] = (pantry[k] ?? 0) - v;
         }
-        const reputation = { ...s.reputation };
-        reputation[track] = (reputation[track] ?? 0) + rep;
         const bonuses = { ...s.activeBonuses };
         if (bonus) bonuses[bonus] = true;
-        return { pantry, reputation, activeBonuses: bonuses };
+        return { pantry, reputation: s.reputation + rep, activeBonuses: bonuses };
       }),
 
-      getRepLevel: (track) => {
-        const pts = get().reputation[track] ?? 0;
+      getRepTier: () => {
+        const pts = get().reputation;
         let level = 0;
         for (let i = REP_THRESHOLDS.length - 1; i >= 0; i--) {
           if (pts >= REP_THRESHOLDS[i]) { level = i; break; }
         }
         return level;
+      },
+
+      addReputation: (amount) => set(s => ({ reputation: s.reputation + amount })),
+
+      addIngredient: (id, count) => set(s => ({
+        ingredientInventory: { ...s.ingredientInventory, [id]: (s.ingredientInventory[id] ?? 0) + count },
+      })),
+
+      removeIngredients: (items) => set(s => {
+        const inv = { ...s.ingredientInventory };
+        for (const [k, v] of Object.entries(items)) {
+          inv[k] = Math.max(0, (inv[k] ?? 0) - v);
+        }
+        return { ingredientInventory: inv };
+      }),
+
+      unlockRecipe: (id) => set(s => ({
+        recipesUnlocked: s.recipesUnlocked.includes(id) ? s.recipesUnlocked : [...s.recipesUnlocked, id],
+      })),
+
+      upgradeKitchenStation: (station) => set(s => ({
+        kitchenStations: { ...s.kitchenStations, [station]: (s.kitchenStations[station] ?? 0) + 1 },
+      })),
+
+      completePlanetContract: (planet) => set(s => ({
+        planetClearance: { ...s.planetClearance, [planet]: (s.planetClearance[planet] ?? 0) + 1 },
+      })),
+
+      getPlanetUnlocked: (planet) => {
+        const { planetClearance } = get();
+        if (planet === 'kepler') return true;
+        if (planet === 'tidal') return (planetClearance.kepler ?? 0) >= 5;
+        if (planet === 'void_reach') return (planetClearance.tidal ?? 0) >= 3;
+        if (planet === 'furnace') return (planetClearance.void_reach ?? 0) >= 3;
+        return false;
       },
 
       getAvailableWeapons: () => get().unlockedWeapons,
@@ -169,7 +217,9 @@ export const useSaveStore = create<SaveState & SaveActions>()(
         return {
           totalCredits: s.totalCredits + 5000,
           pantry: { rift_dust: 99, void_crystal: 99, cave_moss: 99, river_silt: 99, elite_core: 99 },
-          reputation: { contractor: 1200, void_walker: 1200, tactician: 1200, scrapper: 1200 },
+          reputation: 1200,
+          planetClearance: { kepler: 10, tidal: 10, void_reach: 10, furnace: 10 },
+          ingredientInventory: { ...s.ingredientInventory },
           unlockedWeapons: ALL_WEAPONS,
           unlockedKits: ALL_KITS,
           kitTiers,
@@ -178,17 +228,27 @@ export const useSaveStore = create<SaveState & SaveActions>()(
 
       endowProgress: () => set(s => {
         if (s.endowedProgress) return {};
-        const rep = { ...s.reputation };
-        for (const t of ['contractor', 'void_walker', 'tactician', 'scrapper']) {
-          rep[t] = (rep[t] ?? 0) + 5;
-        }
         const pantry = { ...s.pantry };
         for (const i of ['rift_dust', 'void_crystal', 'cave_moss', 'river_silt']) {
           pantry[i] = (pantry[i] ?? 0) + 1;
         }
-        return { reputation: rep, pantry, endowedProgress: true };
+        return { reputation: s.reputation + 5, pantry, endowedProgress: true };
       }),
     }),
-    { name: 'space_hunter_save' }
+    {
+      name: 'space_hunter_save',
+      version: 2,
+      migrate: (persistedState: unknown, version: number) => {
+        const state = persistedState as Record<string, unknown>;
+        if (version < 2) {
+          const oldRep = state.reputation;
+          if (oldRep && typeof oldRep === 'object') {
+            state.reputation = Object.values(oldRep as Record<string, number>)
+              .reduce((a: number, b: number) => a + b, 0);
+          }
+        }
+        return state;
+      },
+    }
   )
 );

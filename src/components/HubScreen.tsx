@@ -201,25 +201,23 @@ export function ShipTab({ save, huntResult, onContracts }: {
       </div>
 
       <SectionHeader text="REPUTATION" color="var(--color-accent-cyan)" />
-      {TRACK_ORDER.map(track => {
-        const pts = save.reputation[track] ?? 0;
-        const level = save.getRepLevel(track);
-        const color = TRACK_COLORS[track];
-        const maxed = level >= REP_THRESHOLDS.length - 1;
-        const nextPts = maxed ? pts : REP_THRESHOLDS[level + 1];
-        const prevPts = REP_THRESHOLDS[level];
+      {(() => {
+        const pts = save.reputation;
+        const tier = save.getRepTier();
+        const maxed = tier >= REP_THRESHOLDS.length - 1;
+        const nextPts = maxed ? pts : REP_THRESHOLDS[tier + 1];
+        const prevPts = REP_THRESHOLDS[tier];
         const frac = maxed ? 1 : Math.min((pts - prevPts) / (nextPts - prevPts), 1);
-
         return (
-          <div key={track} className="space-y-2">
+          <div className="space-y-2">
             <div className="flex justify-between text-sm">
-              <span style={{ color }}>{track.replace('_', ' ')} Lv{level}</span>
+              <span className="text-[var(--color-accent-cyan)]">Reputation Tier {tier}</span>
               <span className="text-[var(--color-text-muted)]">{maxed ? 'MAX' : `${pts}/${nextPts}`}</span>
             </div>
-            <div className="pixel-bar"><div className="pixel-bar-fill" style={{ width: `${frac * 100}%`, background: color }} /></div>
+            <div className="pixel-bar"><div className="pixel-bar-fill" style={{ width: `${frac * 100}%`, background: 'var(--color-accent-cyan)' }} /></div>
           </div>
         );
-      })}
+      })()}
 
       <SectionHeader text="KITCHEN" color="var(--color-accent-red)" />
       <KitchenSection save={save} />
@@ -239,7 +237,7 @@ function KitchenSection({ save }: { save: ReturnType<typeof useSaveStore.getStat
 
   const isUnlocked = (recipe: typeof RECIPES[string]) => {
     if (recipe.tier === 1) return true;
-    if (recipe.tier === 2) return save.unlockedRecipes.includes(recipe.id) || save.getRepLevel(recipe.track) >= 1;
+    if (recipe.tier === 2) return save.unlockedRecipes.includes(recipe.id) || save.getRepTier() >= 1;
     return save.unlockedRecipes.includes(recipe.id);
   };
 
