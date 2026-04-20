@@ -485,7 +485,6 @@ Permanent upgrades purchased with credits between runs. Persist across all contr
 
 | ID | Name | Max Lv | Level 1 | Level 2 | Level 3 | Costs |
 |----|------|--------|---------|---------|---------|-------|
-| `scanner` | Scanner | 3 | Caches visible on minimap | Elites always visible | All enemies visible | 60 / 120 / 200 cr |
 | `thrusters` | Thrusters | 3 | Dash (1 charge, 150px, 1.5s CD) | 2 dash charges | Cooldown -40% (0.9s) | 80 / 150 / 250 cr |
 | `salvage_module` | Salvage Module | 2 | +30% pickup drop chance (1.3× mult) | Guaranteed extra ingredient from elites | — | 100 / 200 cr |
 | `emergency_protocol` | Emergency Protocol | 1 | Once per contract: revive with 3 HP when killed | — | — | 300 cr |

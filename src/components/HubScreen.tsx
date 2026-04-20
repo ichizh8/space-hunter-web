@@ -11,11 +11,6 @@ import {
 
 const UTILITY_UPGRADE_DEFS = [
   {
-    id: 'scanner', name: 'Scanner', maxLevel: 3,
-    costs: [60, 120, 200],
-    descs: ['Caches visible on minimap', 'Elites always visible', 'All enemies visible'],
-  },
-  {
     id: 'thrusters', name: 'Thrusters', maxLevel: 3,
     costs: [80, 150, 250],
     descs: ['Dash ability (1 charge, 150px, 1.5s CD)', '2 dash charges', 'Cooldown -40%'],

@@ -479,24 +479,6 @@ export class VFXManager {
     // ── Drop capsules ──
     game.dropSystem.draw(g, game);
 
-    // ── Scanner: all-enemy dots in minimap-style corners (level 3) ──
-    const scannerLevel = game.shipUpgrades.scanner ?? 0;
-    if (scannerLevel >= 3) {
-      for (const e of game.enemies.enemies) {
-        if (e.hp <= 0 || e.isAlly) continue;
-        if (game.camera.isVisible(e.pos.x, e.pos.y, e.radius * 2)) continue;
-        // tiny dot near edge in world space
-        const dx = e.pos.x - game.player.pos.x;
-        const dy = e.pos.y - game.player.pos.y;
-        const ang = Math.atan2(dy, dx);
-        const edgeDist = Math.min(game.camera.viewW, game.camera.viewH) * 0.47;
-        const dotX = game.player.pos.x + Math.cos(ang) * edgeDist;
-        const dotY = game.player.pos.y + Math.sin(ang) * edgeDist;
-        const dc = e.isElite ? (e.color || 0xffdd11) : 0x888888;
-        g.circle(dotX, dotY, 3).fill({ color: dc, alpha: 0.7 });
-      }
-    }
-
     // ── Ally drones ──
     for (const d of game.allyDrones) {
       if (!game.camera.isVisible(d.x, d.y, 20)) continue;
