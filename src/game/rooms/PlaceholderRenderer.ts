@@ -191,9 +191,8 @@ export function drawRoom(
       const cy = isElite ? sy - r - 60 - ch : sy - r - 10 - ch;
       gfx.rect(cx, cy, cw, ch).fill({ color: 0x080818, alpha: 0.9 });
       gfx.rect(cx, cy, cw, ch).stroke({ width: isElite ? 2 : 1.5, color: border, alpha: 0.95 });
-      // Gem (star-shaped for elite, circle for regular)
+      // Gem (diamond for elite, circle for regular)
       if (isElite) {
-        // Small diamond gem
         const gx = cx + 13, gy = cy + ch / 2, gs = 5;
         gfx
           .moveTo(gx, gy - gs)
@@ -204,6 +203,17 @@ export function drawRoom(
           .fill({ color: 0xffcc00, alpha: 1 });
       } else {
         gfx.circle(cx + 13, cy + ch / 2, 4).fill({ color: border, alpha: 1 });
+      }
+      // Modifier polarity tag — small colored bar below the card
+      if (d.modifier) {
+        const tagColor =
+          d.modifier.polarity === 'negative' ? 0xff4444 :
+          d.modifier.polarity === 'positive' ? 0x44ff88 :
+          0xffcc44;
+        const tagH = 9;
+        const tagY = cy + ch + 2;
+        gfx.rect(cx, tagY, cw, tagH).fill({ color: tagColor, alpha: 0.18 });
+        gfx.rect(cx, tagY, cw, tagH).stroke({ width: 1, color: tagColor, alpha: 0.7 });
       }
     }
   }

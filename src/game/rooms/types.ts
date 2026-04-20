@@ -2,6 +2,7 @@
 
 import type { RoomJSON, TriggerOn } from '../../editor/editorStore';
 import type { UpgradeCard } from '../../data/upgrades';
+import type { RoomModifierDef } from '../../data/modifiers';
 
 export interface Vec2 {
   x: number;
@@ -36,6 +37,7 @@ export interface RuntimeDoor {
   consumed: boolean;
   rewardCard?: UpgradeCard;
   eliteType?: string;
+  modifier?: RoomModifierDef;
 }
 
 export interface RuntimeSpawnZone {

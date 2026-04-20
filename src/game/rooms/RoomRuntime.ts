@@ -21,6 +21,8 @@ import { evaluateTriggers } from './TriggerSystem';
 import { PLAYER_BASE_SPEED, PLAYER_BASE_HP, JOY_MAX_DIST, JOY_DEADZONE } from '../constants';
 import { generateDoorRewards, generateEliteDoorReward } from '../../data/upgrades';
 import type { ProgressionState, RunPathState } from '../../data/upgrades';
+import { pickDoorModifier } from '../../data/modifiers';
+import type { RoomModifierDef } from '../../data/modifiers';
 
 type PlayerDir =
   | 'east' | 'south-east' | 'south' | 'south-west'
@@ -64,6 +66,8 @@ export interface RoomRuntimeOptions {
   // Fires each frame with the net corruption delta for this frame (rate * dt).
   // Void rooms: +2/s, clean rooms: -1/s, river rooms: +1/s, cave: 0
   onBiomeTick?: (delta: number) => void;
+  // Modifier applied to this room (from the door the player entered through)
+  activeRoomModifier?: RoomModifierDef;
 }
 
 function biomeCorruptionRate(biome: string): number {
@@ -137,10 +141,17 @@ export async function createRoomRuntime(
   }
   let playerDir: PlayerDir = 'south';
 
-  type DoorCardText = { icon: Text; label: Text };
+  type DoorCardText = { icon: Text; label: Text; mod: Text | null };
   const doorCardTexts = new Map<string, DoorCardText>();
 
   const room = loadRoom(json);
+
+  // Apply Dense Pack: multiply every spawn zone's budget by 1.5
+  if (opts.activeRoomModifier?.id === 'dense_pack') {
+    for (const sz of room.spawnZones) {
+      sz.budget = Math.round(sz.budget * 1.5);
+    }
+  }
 
   // Seed placeholder handlers for interactable action IDs.
   const actionIds = new Set<string>();
@@ -169,6 +180,10 @@ export async function createRoomRuntime(
   const combat = createCombatState();
   combat.player.maxHp = PLAYER_BASE_HP;
   combat.player.hp = PLAYER_BASE_HP;
+  // Apply Armored: enemies absorb 25% of bullet damage
+  if (opts.activeRoomModifier?.id === 'armored') {
+    combat.enemyDamageReduction = 0.25;
+  }
 
   const keys = new Set<string>();
   let lastE = false;
@@ -300,6 +315,10 @@ export async function createRoomRuntime(
     if (opts.onBiomeTick) {
       const rate = biomeCorruptionRate(room.biome);
       if (rate !== 0) opts.onBiomeTick(rate * dt);
+      // Corrupted Air room modifier: +2 corruption/s on top of biome rate
+      if (opts.activeRoomModifier?.id === 'corrupted_air') {
+        opts.onBiomeTick(2 * dt);
+      }
     }
 
     // Movement
@@ -356,6 +375,9 @@ export async function createRoomRuntime(
           const rarityColor: Record<string, string> = {
             common: '#cccccc', rare: '#4499ff', legendary: '#ffcc00',
           };
+          const polarityColor: Record<string, string> = {
+            positive: '#44ff88', negative: '#ff4444', neutral: '#ffcc44',
+          };
           doorList.forEach((door, i) => {
             let card;
             if (door.eliteType) {
@@ -366,13 +388,22 @@ export async function createRoomRuntime(
             }
             if (!card) return;
             door.rewardCard = card;
+            // Elite doors skip the modifier — their special reward is the challenge itself
+            if (!door.eliteType) door.modifier = pickDoorModifier(card.rarity);
             const col = door.eliteType ? '#ffcc00' : (rarityColor[card.rarity] ?? '#cccccc');
             const iconText = new PIXI.Text(card.icon, { fontSize: 14, fill: col });
             const shortLabel = card.label.length > 13 ? card.label.slice(0, 12) + '\u2026' : card.label;
             const labelText = new PIXI.Text(shortLabel, { fontSize: 8, fill: '#bbbbbb' });
             app.stage.addChild(iconText);
             app.stage.addChild(labelText);
-            doorCardTexts.set(door.id, { icon: iconText, label: labelText });
+            let modText: Text | null = null;
+            if (door.modifier) {
+              const modCol = polarityColor[door.modifier.polarity] ?? '#aaaaaa';
+              const shortMod = door.modifier.name.length > 12 ? door.modifier.name.slice(0, 11) + '\u2026' : door.modifier.name;
+              modText = new PIXI.Text(shortMod, { fontSize: 7, fill: modCol });
+              app.stage.addChild(modText);
+            }
+            doorCardTexts.set(door.id, { icon: iconText, label: labelText, mod: modText });
           });
         }
 
@@ -451,6 +482,7 @@ export async function createRoomRuntime(
         if (!door || door.consumed) {
           texts.icon.visible = false;
           texts.label.visible = false;
+          if (texts.mod) texts.mod.visible = false;
           continue;
         }
         const sx = (door.pos.x - camera.x) * camera.zoom + W / 2;
@@ -464,6 +496,11 @@ export async function createRoomRuntime(
         texts.label.y = Math.round(cardTop + 22);
         texts.icon.visible = true;
         texts.label.visible = true;
+        if (texts.mod) {
+          texts.mod.x = Math.round(sx - 37);
+          texts.mod.y = Math.round(cardTop + ch + 4);
+          texts.mod.visible = true;
+        }
       }
     }
 
@@ -523,6 +560,7 @@ export async function createRoomRuntime(
       for (const texts of doorCardTexts.values()) {
         texts.icon.destroy();
         texts.label.destroy();
+        texts.mod?.destroy();
       }
       doorCardTexts.clear();
       // Remove ONLY our canvas (not all children) — another instance may

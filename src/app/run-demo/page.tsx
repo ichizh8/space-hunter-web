@@ -15,6 +15,7 @@ import phaseHunterCover from '../../data/rooms/hunt/elite/phase_hunter_cover.jso
 import broodMotherNest from '../../data/rooms/hunt/elite/brood_mother_nest.json';
 import { registerAction } from '../../game/rooms/ActionRegistry';
 import { useGameStore } from '../../store/gameStore';
+import type { RoomModifierDef } from '../../data/modifiers';
 
 // Index of rooms keyed by their `id` so doors can link via `nextPool`.
 const ROOM_INDEX: Record<string, RoomJSON> = {
@@ -87,6 +88,7 @@ export default function RunDemoPage() {
   const [prompt, setPrompt] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<'running' | 'success' | 'fail'>('running');
   const runStateRef = useRef<RunState>({ startedAt: Date.now(), kills: 0, roomsCleared: 0 });
+  const pendingModifierRef = useRef<RoomModifierDef | undefined>(undefined);
   const [tick, setTick] = useState(0);
   const [roomSummary, setRoomSummary] = useState<{ killsInRoom: number; timeMs: number } | null>(null);
 
@@ -118,6 +120,8 @@ export default function RunDemoPage() {
       setOutcome('success');
       return;
     }
+    // Carry door modifier into the next room
+    pendingModifierRef.current = door.modifier;
     setRoomSummary({
       killsInRoom: r?.getCombat().enemiesKilledTotal ?? 0,
       timeMs: Date.now() - runStateRef.current.startedAt,
@@ -161,6 +165,7 @@ export default function RunDemoPage() {
           onDoorUse: handleDoorUse,
           onPlayerDeath: handleDeath,
           onBiomeTick: (delta) => useGameStore.getState().addCorruption(delta),
+          activeRoomModifier: pendingModifierRef.current,
           debug: false,
         });
         if (cancelled) { handle.destroy(); return; }
