@@ -83,6 +83,7 @@ export interface RoomRuntimeHandle {
   getCombat: () => CombatState;
   getPlayerPos: () => Vec2;
   setPaused: (paused: boolean) => void;
+  triggerInteraction: () => void;
 }
 
 export async function createRoomRuntime(
@@ -189,6 +190,7 @@ export async function createRoomRuntime(
   let lastE = false;
   const joy = { active: false, baseX: 0, baseY: 0, knobX: 0, knobY: 0, dirX: 0, dirY: 0 };
   let currentPrompt: string | null = null;
+  let currentTarget: ReturnType<typeof findInteractionTarget> = null;
   let paused = false;
   const mouse = { x: player.x, y: player.y };  // world coords
   let mouseDown = false;
@@ -432,16 +434,17 @@ export async function createRoomRuntime(
 
     // Interaction target / prompt
     const target = findInteractionTarget(room, player);
+    currentTarget = target;
     const newPrompt = target
       ? target.kind === 'interactable'
         ? target.ref.prompt
         : target.ref.eliteType
           ? target.ref.rewardCard
-            ? `Press E: [ELITE] ${target.ref.eliteType} — ${target.ref.rewardCard.label}`
-            : `Press E: [ELITE] ${target.ref.eliteType} — rare reward guaranteed`
+            ? `[ELITE] ${target.ref.eliteType} — ${target.ref.rewardCard.label}`
+            : `[ELITE] ${target.ref.eliteType} — rare reward guaranteed`
           : target.ref.rewardCard
-            ? `Press E: Take — ${target.ref.rewardCard.label}`
-            : `Press E: Enter — ${target.ref.rewardTag}`
+            ? `Take — ${target.ref.rewardCard.label}`
+            : `Enter — ${target.ref.rewardTag}`
       : null;
     if (newPrompt !== currentPrompt) {
       currentPrompt = newPrompt;
@@ -530,6 +533,15 @@ export async function createRoomRuntime(
     getRoom: () => room,
     getCombat: () => combat,
     getPlayerPos: () => player,
+    triggerInteraction: () => {
+      if (!currentTarget) return;
+      if (currentTarget.kind === 'interactable') {
+        dispatchAction(currentTarget.ref.action, { room, player });
+      } else {
+        dispatchAction('__door_use', { room, player, door: currentTarget.ref });
+      }
+      opts.onInteract?.(currentTarget);
+    },
     setPaused: (b: boolean) => {
       paused = b;
       if (b) {

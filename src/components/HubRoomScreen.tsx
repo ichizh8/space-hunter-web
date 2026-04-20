@@ -142,19 +142,24 @@ export function HubRoomScreen() {
       <div className="flex-1 min-h-0 relative">
         <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
 
-        {/* Interaction prompt */}
+        {/* Interaction prompt — tappable on mobile */}
         {prompt && !modal && (
-          <div
-            className="absolute left-1/2 bottom-6 -translate-x-1/2 px-4 py-2 text-sm tracking-[1px]"
+          <button
+            className="absolute left-1/2 bottom-6 -translate-x-1/2 px-4 py-2 text-sm tracking-[1px] active:brightness-125"
             style={{
               border: '1px solid #ffcc00',
               color: '#ffcc00',
               background: 'rgba(13,13,26,0.85)',
-              pointerEvents: 'none',
+              cursor: 'pointer',
+              fontFamily: 'var(--font-pixel)',
+            }}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              runtimeRef.current?.triggerInteraction();
             }}
           >
             {prompt}
-          </div>
+          </button>
         )}
 
         {/* Movement hint */}
@@ -162,7 +167,7 @@ export function HubRoomScreen() {
           className="absolute top-2 right-2 text-[10px] pointer-events-none"
           style={{ color: 'var(--color-text-muted)' }}
         >
-          TOUCH / WASD + E
+          TOUCH / WASD
         </div>
       </div>
 

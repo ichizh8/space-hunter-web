@@ -29,7 +29,7 @@
       "kind": "contract_board",
       "pos": { "x": 600, "y": 220 },
       "radius": 60,
-      "prompt": "Press E: Contract Board",
+      "prompt": "Contract Board",
       "action": "open_contract_board",
       "label": "Contracts"
     },
@@ -39,7 +39,7 @@
       "kind": "workbench",
       "pos": { "x": 320, "y": 680 },
       "radius": 60,
-      "prompt": "Press E: Workbench (Upgrades)",
+      "prompt": "Workbench (Upgrades)",
       "action": "open_workbench",
       "label": "Workbench"
     },
@@ -49,7 +49,7 @@
       "kind": "kit_locker",
       "pos": { "x": 880, "y": 680 },
       "radius": 60,
-      "prompt": "Press E: Kit Locker",
+      "prompt": "Kit Locker",
       "action": "open_kit_locker",
       "label": "Kits"
     },
@@ -59,7 +59,7 @@
       "kind": "hal_console",
       "pos": { "x": 950, "y": 300 },
       "radius": 60,
-      "prompt": "Press E: HAL Console",
+      "prompt": "HAL Console",
       "action": "open_hal_console",
       "label": "HAL"
     }
