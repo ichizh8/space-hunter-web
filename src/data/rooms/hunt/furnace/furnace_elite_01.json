@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "id": "furnace_elite_01",
+  "name": "Slag Pit Arena",
+  "kind": "pool",
+  "biome": "furnace",
+  "contractTags": ["hunt"],
+  "difficulty": 5,
+  "planet": "furnace",
+  "roomType": "elite",
+  "size": { "w": 900, "h": 700 },
+
+  "terrain": {
+    "caves": [],
+    "voidPools": [],
+    "obstacles": [
+      { "pos": { "x": 40,  "y": 350 }, "w": 20,  "h": 660, "obsType": 0 },
+      { "pos": { "x": 860, "y": 350 }, "w": 20,  "h": 660, "obsType": 0 },
+      { "pos": { "x": 450, "y": 30  }, "w": 840, "h": 20,  "obsType": 0 },
+      { "pos": { "x": 450, "y": 670 }, "w": 840, "h": 20,  "obsType": 0 },
+      { "pos": { "x": 450, "y": 350 }, "w": 100, "h": 100, "obsType": 0 },
+      { "pos": { "x": 200, "y": 150 }, "w": 48, "h": 48, "obsType": 0 },
+      { "pos": { "x": 700, "y": 150 }, "w": 48, "h": 48, "obsType": 0 },
+      { "pos": { "x": 200, "y": 550 }, "w": 48, "h": 48, "obsType": 0 },
+      { "pos": { "x": 700, "y": 550 }, "w": 48, "h": 48, "obsType": 0 }
+    ],
+    "rivers": []
+  },
+
+  "playerSpawn": { "x": 130, "y": 600 },
+
+  "entities": [
+    {
+      "id": "door_a",
+      "type": "door",
+      "pos": { "x": 845, "y": 350 },
+      "radius": 45,
+      "rewardTag": "weapon",
+      "nextPool": "furnace_boss",
+      "requiresCleared": true,
+      "label": "Core Access"
+    }
+  ],
+
+  "spawnZones": [
+    {
+      "id": "sz_arena",
+      "rect": { "x": 150, "y": 80, "w": 600, "h": 540 },
+      "poolTag": "furnace_tier2",
+      "budget": 8
+    }
+  ],
+
+  "triggers": [
+    {
+      "id": "tr_start",
+      "rect": { "x": 100, "y": 0, "w": 800, "h": 700 },
+      "on": "enter",
+      "actions": ["spawn_all_zones", "lock_doors"]
+    },
+    {
+      "id": "tr_clear",
+      "on": "all_enemies_dead",
+      "actions": ["unlock_doors"]
+    }
+  ],
+
+  "waves": [],
+  "modifiers": [],
+  "mode": "combat"
+}

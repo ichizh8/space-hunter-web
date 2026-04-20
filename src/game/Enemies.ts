@@ -874,6 +874,96 @@ export class EnemySystem {
           break;
         }
 
+        case 'slag_brute': {
+          // Massive heavy tank: slow approach, ground-pound radial burst every 4s
+          // Phase 0: approach; Phase 1: wind-up (0.6s, stops); Phase 2: slam (fires radial burst)
+          // Below 30% HP: molten rage -- speed x1.8, slam cooldown 2.5s
+          const isRaging = e.hp < e.maxHp * 0.3;
+          const slamCooldown = isRaging ? 2.5 : 4.0;
+          const bruteSpeed = isRaging ? e.speed * 1.8 : e.speed;
+
+          if (e.phase === 0) {
+            // Approach
+            e.vel = v2mul(dirToPlayer, bruteSpeed);
+            e.phaseTimer -= dt;
+            if (e.phaseTimer <= 0 && distToPlayer < 200) {
+              e.phase = 1;
+              e.phaseTimer = 0.6; // wind-up
+            }
+          } else if (e.phase === 1) {
+            // Wind-up: stop and telegraph
+            e.vel = v2(0, 0);
+            e.phaseTimer -= dt;
+            if (e.phaseTimer <= 0) {
+              // SLAM: radial burst of 8 projectiles
+              e.phase = 2;
+              const count = isRaging ? 12 : 8;
+              for (let i = 0; i < count; i++) {
+                const a = (i / count) * Math.PI * 2;
+                this.enemyBullets.push({
+                  pos: v2(e.pos.x, e.pos.y),
+                  vel: v2fromAngle(a, 130),
+                  radius: 7,
+                  damage: e.rangedDmg,
+                  life: 2.0,
+                  color: isRaging ? 0xff2200 : 0xff6600,
+                });
+              }
+              e.hitFlash = 0.12;
+              e.phaseTimer = slamCooldown;
+            }
+          } else {
+            // Post-slam: resume approach, timer counts down to next slam opportunity
+            e.vel = v2mul(dirToPlayer, bruteSpeed);
+            e.phaseTimer -= dt;
+            if (e.phaseTimer <= 0) {
+              e.phase = 0;
+              e.phaseTimer = slamCooldown;
+            }
+          }
+          break;
+        }
+
+        case 'cinder_wasp': {
+          // Glass cannon: dash in straight line (phase 0, 1.2s), hover+aim (phase 1, 0.8s),
+          // fire single high-damage shot then pick new dash direction
+          if (e.phaseTimer === 0) {
+            e.phaseTimer = 1.2;
+            e.lockAngle = Math.atan2(toPlayer.y, toPlayer.x) + (Math.random() - 0.5) * 1.0;
+          }
+          if (e.phase === 0) {
+            // Dash
+            e.vel = v2fromAngle(e.lockAngle, e.speed);
+            e.phaseTimer -= dt;
+            if (e.phaseTimer <= 0) {
+              e.phase = 1;
+              e.phaseTimer = 0.8;
+            }
+          } else {
+            // Hover and decelerate
+            e.vel = v2mul(e.vel, 0.85);
+            e.phaseTimer -= dt;
+            if (e.phaseTimer <= 0) {
+              // Fire single accurate shot
+              const aimA = Math.atan2(toPlayer.y, toPlayer.x);
+              this.enemyBullets.push({
+                pos: v2(e.pos.x, e.pos.y),
+                vel: v2fromAngle(aimA, 220),
+                radius: 5,
+                damage: e.rangedDmg,
+                life: 2.2,
+                color: 0xffcc00,
+              });
+              e.hitFlash = 0.06;
+              // Pick new dash direction biased toward player
+              e.lockAngle = Math.atan2(toPlayer.y, toPlayer.x) + (Math.random() - 0.5) * 1.4;
+              e.phase = 0;
+              e.phaseTimer = 1.2;
+            }
+          }
+          break;
+        }
+
         default: {
           // Stop at melee range; strafe instead of stacking
           const meleeStop = ENEMY_MELEE_RANGE + e.radius + player.radius;

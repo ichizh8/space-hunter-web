@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "id": "furnace_standard_03",
+  "name": "Blast Chamber",
+  "kind": "pool",
+  "biome": "furnace",
+  "contractTags": ["hunt"],
+  "difficulty": 5,
+  "planet": "furnace",
+  "roomType": "standard",
+  "size": { "w": 800, "h": 800 },
+
+  "terrain": {
+    "caves": [],
+    "voidPools": [],
+    "obstacles": [
+      { "pos": { "x": 40,  "y": 400 }, "w": 20,  "h": 760, "obsType": 0 },
+      { "pos": { "x": 760, "y": 400 }, "w": 20,  "h": 760, "obsType": 0 },
+      { "pos": { "x": 400, "y": 30  }, "w": 740, "h": 20,  "obsType": 0 },
+      { "pos": { "x": 400, "y": 770 }, "w": 740, "h": 20,  "obsType": 0 },
+      { "pos": { "x": 400, "y": 400 }, "w": 120, "h": 120, "obsType": 0 },
+      { "pos": { "x": 200, "y": 200 }, "w": 56, "h": 56, "obsType": 0 },
+      { "pos": { "x": 600, "y": 200 }, "w": 56, "h": 56, "obsType": 0 },
+      { "pos": { "x": 200, "y": 600 }, "w": 56, "h": 56, "obsType": 0 },
+      { "pos": { "x": 600, "y": 600 }, "w": 56, "h": 56, "obsType": 0 },
+      { "pos": { "x": 400, "y": 150 }, "w": 40, "h": 40, "obsType": 0 },
+      { "pos": { "x": 400, "y": 650 }, "w": 40, "h": 40, "obsType": 0 }
+    ],
+    "rivers": []
+  },
+
+  "playerSpawn": { "x": 130, "y": 700 },
+
+  "entities": [
+    {
+      "id": "door_a",
+      "type": "door",
+      "pos": { "x": 740, "y": 100 },
+      "radius": 45,
+      "rewardTag": "perk",
+      "nextPool": "furnace_elite",
+      "requiresCleared": true,
+      "label": "Upper Forge"
+    },
+    {
+      "id": "door_b",
+      "type": "door",
+      "pos": { "x": 740, "y": 700 },
+      "radius": 45,
+      "rewardTag": "mystery",
+      "nextPool": "furnace_standard",
+      "requiresCleared": true,
+      "label": "Cooling Pit"
+    }
+  ],
+
+  "spawnZones": [
+    {
+      "id": "sz_top",
+      "rect": { "x": 100, "y": 60, "w": 600, "h": 250 },
+      "poolTag": "furnace_tier1",
+      "budget": 5
+    },
+    {
+      "id": "sz_bottom",
+      "rect": { "x": 100, "y": 500, "w": 600, "h": 250 },
+      "poolTag": "furnace_tier1",
+      "budget": 5
+    }
+  ],
+
+  "triggers": [
+    {
+      "id": "tr_start",
+      "rect": { "x": 50, "y": 0, "w": 700, "h": 800 },
+      "on": "enter",
+      "actions": ["spawn_all_zones", "lock_doors"]
+    },
+    {
+      "id": "tr_clear",
+      "on": "all_enemies_dead",
+      "actions": ["unlock_doors"]
+    }
+  ],
+
+  "waves": [],
+  "modifiers": [],
+  "mode": "combat"
+}

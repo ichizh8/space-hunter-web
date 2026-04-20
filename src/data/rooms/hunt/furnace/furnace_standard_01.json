@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "id": "furnace_standard_01",
+  "name": "Crucible Hall",
+  "kind": "pool",
+  "biome": "furnace",
+  "contractTags": ["hunt"],
+  "difficulty": 4,
+  "planet": "furnace",
+  "roomType": "standard",
+  "size": { "w": 900, "h": 700 },
+
+  "terrain": {
+    "caves": [],
+    "voidPools": [],
+    "obstacles": [
+      { "pos": { "x": 40,  "y": 350 }, "w": 20,  "h": 660, "obsType": 0 },
+      { "pos": { "x": 860, "y": 350 }, "w": 20,  "h": 660, "obsType": 0 },
+      { "pos": { "x": 450, "y": 30  }, "w": 840, "h": 20,  "obsType": 0 },
+      { "pos": { "x": 450, "y": 670 }, "w": 840, "h": 20,  "obsType": 0 },
+      { "pos": { "x": 300, "y": 250 }, "w": 80, "h": 80, "obsType": 0 },
+      { "pos": { "x": 600, "y": 250 }, "w": 80, "h": 80, "obsType": 0 },
+      { "pos": { "x": 450, "y": 450 }, "w": 100, "h": 60, "obsType": 0 },
+      { "pos": { "x": 150, "y": 350 }, "w": 48, "h": 120, "obsType": 0 },
+      { "pos": { "x": 750, "y": 350 }, "w": 48, "h": 120, "obsType": 0 }
+    ],
+    "rivers": []
+  },
+
+  "playerSpawn": { "x": 130, "y": 600 },
+
+  "entities": [
+    {
+      "id": "door_a",
+      "type": "door",
+      "pos": { "x": 845, "y": 175 },
+      "radius": 45,
+      "rewardTag": "weapon",
+      "nextPool": "furnace_elite",
+      "requiresCleared": true,
+      "label": "Slag Tunnel"
+    },
+    {
+      "id": "door_b",
+      "type": "door",
+      "pos": { "x": 845, "y": 525 },
+      "radius": 45,
+      "rewardTag": "perk",
+      "nextPool": "furnace_standard",
+      "requiresCleared": true,
+      "label": "Heat Duct"
+    }
+  ],
+
+  "spawnZones": [
+    {
+      "id": "sz_north",
+      "rect": { "x": 200, "y": 80, "w": 500, "h": 200 },
+      "poolTag": "furnace_tier1",
+      "budget": 5
+    },
+    {
+      "id": "sz_center",
+      "rect": { "x": 300, "y": 300, "w": 300, "h": 200 },
+      "poolTag": "furnace_tier1",
+      "budget": 5
+    }
+  ],
+
+  "triggers": [
+    {
+      "id": "tr_start",
+      "rect": { "x": 100, "y": 0, "w": 800, "h": 700 },
+      "on": "enter",
+      "actions": ["spawn_all_zones", "lock_doors"]
+    },
+    {
+      "id": "tr_clear",
+      "on": "all_enemies_dead",
+      "actions": ["unlock_doors"]
+    }
+  ],
+
+  "waves": [],
+  "modifiers": [],
+  "mode": "combat"
+}

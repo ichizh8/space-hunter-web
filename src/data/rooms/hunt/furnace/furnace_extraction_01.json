@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "id": "furnace_extraction_01",
+  "name": "Cooling Bay",
+  "kind": "pool",
+  "biome": "furnace",
+  "contractTags": ["hunt"],
+  "difficulty": 4,
+  "planet": "furnace",
+  "roomType": "extraction",
+  "size": { "w": 900, "h": 700 },
+
+  "terrain": {
+    "caves": [],
+    "voidPools": [],
+    "obstacles": [
+      { "pos": { "x": 40,  "y": 350 }, "w": 20,  "h": 660, "obsType": 0 },
+      { "pos": { "x": 860, "y": 350 }, "w": 20,  "h": 660, "obsType": 0 },
+      { "pos": { "x": 450, "y": 30  }, "w": 840, "h": 20,  "obsType": 0 },
+      { "pos": { "x": 450, "y": 670 }, "w": 840, "h": 20,  "obsType": 0 },
+      { "pos": { "x": 300, "y": 300 }, "w": 60, "h": 60, "obsType": 0 },
+      { "pos": { "x": 600, "y": 300 }, "w": 60, "h": 60, "obsType": 0 },
+      { "pos": { "x": 450, "y": 500 }, "w": 80, "h": 48, "obsType": 0 }
+    ],
+    "rivers": []
+  },
+
+  "playerSpawn": { "x": 130, "y": 350 },
+
+  "entities": [
+    {
+      "id": "door_extract",
+      "type": "door",
+      "pos": { "x": 845, "y": 350 },
+      "radius": 50,
+      "rewardTag": "mystery",
+      "nextPool": "extraction_complete",
+      "requiresCleared": true,
+      "label": "Extract"
+    }
+  ],
+
+  "spawnZones": [
+    {
+      "id": "sz_guard",
+      "rect": { "x": 250, "y": 100, "w": 500, "h": 500 },
+      "poolTag": "furnace_tier1",
+      "budget": 6
+    }
+  ],
+
+  "triggers": [
+    {
+      "id": "tr_start",
+      "rect": { "x": 100, "y": 0, "w": 800, "h": 700 },
+      "on": "enter",
+      "actions": ["spawn_all_zones", "lock_doors"]
+    },
+    {
+      "id": "tr_clear",
+      "on": "all_enemies_dead",
+      "actions": ["unlock_doors"]
+    }
+  ],
+
+  "waves": [],
+  "modifiers": [],
+  "mode": "combat"
+}

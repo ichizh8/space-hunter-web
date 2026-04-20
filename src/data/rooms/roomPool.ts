@@ -30,6 +30,16 @@ import voidElite02       from './hunt/void/void_elite_02.json';
 import voidBoss01        from './hunt/void/void_boss_01.json';
 import voidExtraction01  from './hunt/void/void_extraction_01.json';
 
+import furnaceOpening01    from './hunt/furnace/furnace_opening_01.json';
+import furnaceStandard01   from './hunt/furnace/furnace_standard_01.json';
+import furnaceStandard02   from './hunt/furnace/furnace_standard_02.json';
+import furnaceStandard03   from './hunt/furnace/furnace_standard_03.json';
+import furnaceStandard04   from './hunt/furnace/furnace_standard_04.json';
+import furnaceElite01      from './hunt/furnace/furnace_elite_01.json';
+import furnaceElite02      from './hunt/furnace/furnace_elite_02.json';
+import furnaceBoss01       from './hunt/furnace/furnace_boss_01.json';
+import furnaceExtraction01 from './hunt/furnace/furnace_extraction_01.json';
+
 // planet → roomType → available templates
 const POOL: Record<string, Record<string, readonly unknown[]>> = {
   kepler: {
@@ -52,6 +62,13 @@ const POOL: Record<string, Record<string, readonly unknown[]>> = {
     elite:      [voidElite01, voidElite02],
     boss:       [voidBoss01],
     extraction: [voidExtraction01],
+  },
+  furnace: {
+    opening:    [furnaceOpening01],
+    standard:   [furnaceStandard01, furnaceStandard02, furnaceStandard03, furnaceStandard04],
+    elite:      [furnaceElite01, furnaceElite02],
+    boss:       [furnaceBoss01],
+    extraction: [furnaceExtraction01],
   },
 };
 

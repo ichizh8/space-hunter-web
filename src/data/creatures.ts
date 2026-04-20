@@ -1,4 +1,4 @@
-export type EnemyBehavior = 'charge' | 'flank' | 'burst' | 'strafe' | 'pack' | 'lurker' | 'patrol_river' | 'elite' | 'mine_crawler' | 'sentry_drone' | 'tide_phantom' | 'coral_spitter' | 'void_weaver' | 'phase_stalker';
+export type EnemyBehavior = 'charge' | 'flank' | 'burst' | 'strafe' | 'pack' | 'lurker' | 'patrol_river' | 'elite' | 'mine_crawler' | 'sentry_drone' | 'tide_phantom' | 'coral_spitter' | 'void_weaver' | 'phase_stalker' | 'slag_brute' | 'cinder_wasp';
 
 export interface CreatureDef {
   name: string;
@@ -34,6 +34,9 @@ export const CREATURE_DEFS: Record<string, CreatureDef> = {
   // Void Reach enemies
   'Void Weaver':    { name: 'Void Weaver',    radius: 16, color: 0xaa44ff, speed: 60,  hp: 14, detection: 400, meleeDmg: 0, ranged: false, rangedDmg: 3, rangedCooldown: 0, voidType: true,  behavior: 'void_weaver',   ingredient: { id: 'living_tissue', name: 'Living Tissue' } },
   'Phase Stalker':  { name: 'Phase Stalker',  radius: 12, color: 0xdd22ff, speed: 135, hp: 7,  detection: 380, meleeDmg: 2, ranged: false, rangedDmg: 0, rangedCooldown: 0, voidType: true,  behavior: 'phase_stalker', ingredient: { id: 'crystal_shards', name: 'Crystal Shards' } },
+  // Furnace enemies
+  'Slag Brute':     { name: 'Slag Brute',     radius: 24, color: 0xff5500, speed: 35,  hp: 25, detection: 280, meleeDmg: 4, ranged: false, rangedDmg: 3, rangedCooldown: 0, voidType: false, behavior: 'slag_brute',    ingredient: { id: 'slag_core', name: 'Slag Core' } },
+  'Cinder Wasp':    { name: 'Cinder Wasp',    radius: 10, color: 0xffaa00, speed: 150, hp: 5,  detection: 400, meleeDmg: 0, ranged: false, rangedDmg: 4, rangedCooldown: 0, voidType: false, behavior: 'cinder_wasp',   ingredient: { id: 'ember_gland', name: 'Ember Gland' } },
 };
 
 export const CREATURE_NAMES = Object.keys(CREATURE_DEFS);
@@ -49,4 +52,5 @@ export const PLANET_POOLS: Record<string, string[]> = {
   kepler:     ['Mine Crawler', 'Sentry Drone'],
   tidal:      ['Tide Phantom', 'Coral Spitter'],
   void_reach: ['Void Weaver', 'Phase Stalker'],
+  furnace:    ['Slag Brute', 'Cinder Wasp'],
 };

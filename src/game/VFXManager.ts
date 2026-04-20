@@ -31,6 +31,7 @@ const BEHAVIOR_COLORS: Record<string, number> = {
   lurker: 0xAA44FF, burst: 0xFFFF00, strafe: 0x00FFFF, patrol_river: 0x888888,
   mine_crawler: 0xcc7722, sentry_drone: 0xff9933, tide_phantom: 0x22ccbb, coral_spitter: 0x33aacc,
   void_weaver: 0xaa44ff, phase_stalker: 0xdd22ff,
+  slag_brute: 0xff5500, cinder_wasp: 0xffaa00,
 };
 
 function subtleTint(color: number, strength: number): number {
@@ -139,6 +140,27 @@ export class VFXManager {
             // Magenta trail while phased out
             if (e.phase === 1 && Math.random() < 0.6) {
               game.particles.push({ x: e.pos.x + (Math.random()-0.5)*e.radius, y: e.pos.y + (Math.random()-0.5)*e.radius, vx: (Math.random()-0.5)*8, vy: (Math.random()-0.5)*8, life: 0.35, maxLife: 0.35, color: 0xdd22ff, radius: 2 + Math.random()*2 });
+            }
+            break;
+          case 'slag_brute':
+            // Heat shimmer + embers rising; molten rage (<30% HP) = more intense
+            if (Math.random() < (e.hp < e.maxHp * 0.3 ? 0.7 : 0.3)) {
+              game.particles.push({ x: e.pos.x + (Math.random()-0.5)*e.radius*1.5, y: e.pos.y + (Math.random()-0.5)*e.radius, vx: (Math.random()-0.5)*10, vy: -15 - Math.random()*20, life: 0.5, maxLife: 0.5, color: e.hp < e.maxHp * 0.3 ? 0xff2200 : 0xff6600, radius: 2 + Math.random()*3 });
+            }
+            // Wind-up telegraph: bright ring pulse during phase 1
+            if (e.phase === 1 && Math.random() < 0.8) {
+              const a = Math.random() * Math.PI * 2;
+              game.particles.push({ x: e.pos.x + Math.cos(a)*e.radius*2, y: e.pos.y + Math.sin(a)*e.radius*2, vx: Math.cos(a)*30, vy: Math.sin(a)*30, life: 0.3, maxLife: 0.3, color: 0xff4400, radius: 4 });
+            }
+            break;
+          case 'cinder_wasp':
+            // Amber spark trail when dashing (phase 0)
+            if (e.phase === 0 && spd > 60 && Math.random() < 0.5) {
+              game.particles.push({ x: e.pos.x, y: e.pos.y, vx: -e.vel.x*0.1 + (Math.random()-0.5)*15, vy: -e.vel.y*0.1 + (Math.random()-0.5)*15, life: 0.2, maxLife: 0.2, color: 0xffaa00, radius: 2 + Math.random()*2 });
+            }
+            // Aim glow when hovering (phase 1)
+            if (e.phase === 1 && Math.random() < 0.4) {
+              game.particles.push({ x: e.pos.x + (Math.random()-0.5)*6, y: e.pos.y + (Math.random()-0.5)*6, vx: 0, vy: 0, life: 0.15, maxLife: 0.15, color: 0xffcc00, radius: 3 });
             }
             break;
         }
@@ -467,6 +489,47 @@ export class VFXManager {
             g.moveTo(ex + Math.cos(ra) * er, ey + Math.sin(ra) * er)
               .lineTo(ex + Math.cos(ra) * er * 1.8, ey + Math.sin(ra) * er * 1.8)
               .stroke({ color: col, width: 1, alpha: 0.4 * sa });
+          }
+        } else if (e.behavior === 'slag_brute') {
+          // Heavy octagon with inner heat glow; molten rage = pulsing red core
+          const isRaging = e.hp < e.maxHp * 0.3;
+          for (let i = 0; i < 8; i++) {
+            const a1 = (i / 8) * Math.PI * 2;
+            const a2 = ((i + 1) / 8) * Math.PI * 2;
+            if (i === 0) g.moveTo(ex + Math.cos(a1) * er, ey + Math.sin(a1) * er);
+            g.lineTo(ex + Math.cos(a2) * er, ey + Math.sin(a2) * er);
+          }
+          g.closePath().fill({ color: col, alpha: 0.6 * sa });
+          for (let i = 0; i < 8; i++) {
+            const a1 = (i / 8) * Math.PI * 2;
+            const a2 = ((i + 1) / 8) * Math.PI * 2;
+            if (i === 0) g.moveTo(ex + Math.cos(a1) * er, ey + Math.sin(a1) * er);
+            g.lineTo(ex + Math.cos(a2) * er, ey + Math.sin(a2) * er);
+          }
+          g.closePath().stroke({ color: col, width: 3, alpha: 0.9 * sa });
+          if (isRaging) {
+            const pulse = 0.4 + Math.abs(Math.sin(game.elapsed * 8)) * 0.4;
+            g.circle(ex, ey, er * 0.5).fill({ color: 0xff2200, alpha: pulse });
+            g.circle(ex, ey, er * 1.6).stroke({ color: 0xff2200, width: 2, alpha: pulse * 0.5 });
+          }
+          // Wind-up indicator (phase 1 = about to slam)
+          if (e.phase === 1) {
+            const warn = 0.5 + Math.abs(Math.sin(game.elapsed * 12)) * 0.5;
+            g.circle(ex, ey, er * 2.2).stroke({ color: 0xff4400, width: 2.5, alpha: warn * 0.7 });
+          }
+        } else if (e.behavior === 'cinder_wasp') {
+          // Small triangle / wasp shape (amber) + direction line when dashing
+          g.moveTo(ex, ey - er).lineTo(ex + er * 0.8, ey + er * 0.6).lineTo(ex - er * 0.8, ey + er * 0.6).closePath();
+          g.fill({ color: col, alpha: 0.55 * sa });
+          g.moveTo(ex, ey - er).lineTo(ex + er * 0.8, ey + er * 0.6).lineTo(ex - er * 0.8, ey + er * 0.6).closePath();
+          g.stroke({ color: col, width: 1.5, alpha: 0.9 * sa });
+          if (e.phase === 0) {
+            const tx = ex + Math.cos(e.lockAngle) * er * 2.5;
+            const ty = ey + Math.sin(e.lockAngle) * er * 2.5;
+            g.moveTo(ex, ey).lineTo(tx, ty).stroke({ color: col, width: 1, alpha: 0.5 * sa });
+          } else {
+            // Aim glow when hovering
+            g.circle(ex, ey, er * 1.3).stroke({ color: 0xffcc00, width: 1.5, alpha: 0.4 * sa });
           }
         } else {
           g.rect(ex - er * 0.7, ey - er * 0.7, er * 1.4, er * 1.4).fill({ color: col, alpha: 0.5 * sa });
