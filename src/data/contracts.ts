@@ -164,6 +164,22 @@ function buildContract(type: string, planet: Planet, difficulty: number): Contra
   return base;
 }
 
+export function generateContractsForPlanet(
+  planet: Planet,
+  count: number,
+  clearance: number
+): Contract[] {
+  const difficulty = getPlanetDifficulty(planet, clearance);
+  const used = new Set<string>();
+  return Array.from({ length: count }, () => {
+    const pool = planet.allowedContractTypes.filter(t => !used.has(t));
+    const available = pool.length > 0 ? pool : planet.allowedContractTypes;
+    const type = available[Math.floor(Math.random() * available.length)];
+    used.add(type);
+    return buildContract(type, planet, difficulty);
+  });
+}
+
 export function generateContracts(
   count: number = 3,
   reputation: number = 0,
