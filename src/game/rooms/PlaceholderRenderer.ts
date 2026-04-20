@@ -162,6 +162,17 @@ export function drawRoom(
       gfx.rect(cx, cy, cw, ch).stroke({ width: 1.5, color: border, alpha: 0.95 });
       // Rarity gem
       gfx.circle(cx + 13, cy + ch / 2, 4).fill({ color: border, alpha: 1 });
+      // Modifier polarity tag — small colored bar below the card
+      if (d.modifier) {
+        const tagColor =
+          d.modifier.polarity === 'negative' ? 0xff4444 :
+          d.modifier.polarity === 'positive' ? 0x44ff88 :
+          0xffcc44;
+        const tagH = 9;
+        const tagY = cy + ch + 2;
+        gfx.rect(cx, tagY, cw, tagH).fill({ color: tagColor, alpha: 0.18 });
+        gfx.rect(cx, tagY, cw, tagH).stroke({ width: 1, color: tagColor, alpha: 0.7 });
+      }
     }
   }
 

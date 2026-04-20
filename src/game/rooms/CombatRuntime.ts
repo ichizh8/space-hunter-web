@@ -40,6 +40,8 @@ export interface CombatState {
   enemiesSpawnedTotal: number;
   enemiesKilledTotal: number;
   // Active spawn-zone budgets are tracked on the zones themselves
+  // Armored room modifier: fraction of bullet damage absorbed (0–1)
+  enemyDamageReduction: number;
 }
 
 // Enemy archetypes — stats baked in. Real balance comes post-Phase 4.
@@ -111,6 +113,7 @@ export function createCombatState(): CombatState {
     player: { hp: 10, maxHp: 10, shootCooldown: 0 },
     enemiesSpawnedTotal: 0,
     enemiesKilledTotal: 0,
+    enemyDamageReduction: 0,
   };
 }
 
@@ -197,7 +200,7 @@ export function tickCombat(
       const dy = e.pos.y - b.pos.y;
       const r = e.radius + b.radius;
       if (dx * dx + dy * dy <= r * r) {
-        e.hp -= b.damage;
+        e.hp -= b.damage * (1 - state.enemyDamageReduction);
         b.life = 0;
         if (e.hp <= 0) state.enemiesKilledTotal += 1;
         break;

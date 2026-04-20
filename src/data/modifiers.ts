@@ -2,6 +2,54 @@
 
 export type ModifierRarity = 'common' | 'rare';
 
+// ── Room Modifiers — shown on door previews, applied for one room ───────────
+
+export type RoomModifierPolarity = 'positive' | 'negative' | 'neutral';
+
+export interface RoomModifierDef {
+  id: string;
+  name: string;
+  desc: string;
+  polarity: RoomModifierPolarity;
+}
+
+export const ROOM_MODIFIER_DEFS: RoomModifierDef[] = [
+  // Positive
+  { id: 'armory_cache',   name: 'Armory Cache',   desc: '+20% fire rate',                      polarity: 'positive' },
+  { id: 'void_drain',     name: 'Void Drain',     desc: 'Kills reduce corruption by 2',        polarity: 'positive' },
+  { id: 'second_wind',    name: 'Second Wind',    desc: 'Regen 1 HP every 10s',                polarity: 'positive' },
+  // Negative
+  { id: 'corrupted_air',  name: 'Corrupted Air',  desc: '+2 corruption/s',                     polarity: 'negative' },
+  { id: 'dense_pack',     name: 'Dense Pack',     desc: '+50% enemies',                        polarity: 'negative' },
+  { id: 'armored',        name: 'Armored',        desc: 'Enemies: 25% damage reduction',       polarity: 'negative' },
+  { id: 'void_fog',       name: 'Void Fog',       desc: 'Reduced visibility',                  polarity: 'negative' },
+  // Neutral
+  { id: 'volatile',       name: 'Volatile',       desc: 'Enemies explode on death',            polarity: 'neutral' },
+  { id: 'void_resonance', name: 'Void Resonance', desc: 'Corruption scales all damage',        polarity: 'neutral' },
+  { id: 'close_quarters', name: 'Close Quarters', desc: 'Room 30% smaller effective area',     polarity: 'neutral' },
+];
+
+/**
+ * Pick a room modifier for a door reward of the given rarity.
+ * Better rewards skew toward negative modifiers (harder room, bigger payoff).
+ * Returns undefined ~35% of the time (no modifier).
+ */
+export function pickDoorModifier(rarity: string): RoomModifierDef | undefined {
+  if (Math.random() > 0.65) return undefined;
+  const pos = ROOM_MODIFIER_DEFS.filter(m => m.polarity === 'positive');
+  const neg = ROOM_MODIFIER_DEFS.filter(m => m.polarity === 'negative');
+  const neu = ROOM_MODIFIER_DEFS.filter(m => m.polarity === 'neutral');
+  let pool: RoomModifierDef[];
+  if (rarity === 'legendary') {
+    pool = [...neg, ...neg, ...neg, ...neu];
+  } else if (rarity === 'rare') {
+    pool = [...neg, ...neg, ...neu, ...pos];
+  } else {
+    pool = [...pos, ...pos, ...neu, ...neg];
+  }
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
 export interface ModifierDef {
   id: string;
   name: string;
