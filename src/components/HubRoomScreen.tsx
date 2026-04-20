@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { useSaveStore } from '../store/saveStore';
 import { HalMessage, UpgradesTab, KitsTab, HubScreen } from './HubScreen';
+import { KitchenScreen } from './KitchenScreen';
 import {
   halSay,
   HAL_FIRST_VISIT,
@@ -214,9 +215,7 @@ export function HubRoomScreen() {
       )}
       {modal === 'kitchen' && (
         <Modal title="KITCHEN" onClose={() => setModal(null)}>
-          <p className="text-sm text-[var(--color-text-secondary)] text-center tracking-[1px]">
-            Kitchen coming soon
-          </p>
+          <KitchenScreen />
         </Modal>
       )}
       {modal === 'launch_blocked' && (

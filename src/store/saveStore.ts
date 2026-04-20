@@ -36,10 +36,12 @@ export interface SaveActions {
   cookRecipe: (cost: Record<string, number>, track: string, rep: number, bonus: string) => void;
   getRepTier: () => number;
   addReputation: (amount: number) => void;
+  addCredits: (amount: number) => void;
   addIngredient: (id: string, count: number) => void;
   removeIngredients: (items: Record<string, number>) => void;
   unlockRecipe: (id: string) => void;
   upgradeKitchenStation: (station: string) => void;
+  buyKitchenStation: (station: string, cost: number) => boolean;
   completePlanetContract: (planet: string) => void;
   getPlanetUnlocked: (planet: string) => boolean;
   getAvailableWeapons: () => string[];
@@ -170,6 +172,8 @@ export const useSaveStore = create<SaveState & SaveActions>()(
 
       addReputation: (amount) => set(s => ({ reputation: s.reputation + amount })),
 
+      addCredits: (amount) => set(s => ({ totalCredits: s.totalCredits + amount })),
+
       addIngredient: (id, count) => set(s => ({
         ingredientInventory: { ...s.ingredientInventory, [id]: (s.ingredientInventory[id] ?? 0) + count },
       })),
@@ -189,6 +193,13 @@ export const useSaveStore = create<SaveState & SaveActions>()(
       upgradeKitchenStation: (station) => set(s => ({
         kitchenStations: { ...s.kitchenStations, [station]: (s.kitchenStations[station] ?? 0) + 1 },
       })),
+
+      buyKitchenStation: (station, cost) => {
+        const s = get();
+        if (s.totalCredits < cost || (s.kitchenStations[station] ?? 0) >= 1) return false;
+        set({ totalCredits: s.totalCredits - cost, kitchenStations: { ...s.kitchenStations, [station]: 1 } });
+        return true;
+      },
 
       completePlanetContract: (planet) => set(s => ({
         planetClearance: { ...s.planetClearance, [planet]: (s.planetClearance[planet] ?? 0) + 1 },
