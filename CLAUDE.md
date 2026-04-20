@@ -6,13 +6,13 @@ This version has breaking changes -- APIs, conventions, and file structure may a
 
 # Space Hunter Web -- Project Context
 
-**Last synced:** 2026-04-06
+**Last synced:** 2026-04-19
 
 ## What This Is
 
 Space Hunter Web is the HTML5/browser port of Space Hunter, a top-down arena survival shooter originally built in Godot 4.4. This fork uses Next.js 16 + PixiJS 8 + Zustand 5 + TypeScript.
 
-- **Live:** https://ichizh8.github.io/space-hunter/
+- **Live:** https://ichizh8.github.io/space-hunter-web/
 - **Repo:** github.com/ichizh8/space-hunter-web (public)
 - **Godot source (reference):** ~/Projects/space-hunter
 - **Deploy:** GitHub Pages via `gh workflow run pages.yml -R ichizh8/space-hunter-web`
@@ -44,7 +44,16 @@ Game loop: ShipHub -> ContractBoard (3 random contracts) -> Loadout -> Hunt -> R
 - Wave scaling: initial 30, hard cap 60, faster time-based scaling
 
 ### Architecture
-- Game.ts (~2500 lines): main loop, bullets, hits, spawning, drawing
+All modules live in `src/game/`. Each extracted module exports functions that take `game: Game` as a parameter (using `import type` to avoid circular deps).
+
+- Game.ts (~1,469 lines): coordinator -- delegates to extracted modules
+- BulletSystem.ts: bullet creation, update, collision, rendering
+- SpawnManager.ts: wave/elite/apex spawning
+- DropSystem.ts: drop capsule spawning, collection, effects
+- ContractObjectives.ts: 5 contract type update loops
+- KitAbilitySystem.ts: kit activation, cooldowns, effects
+- ProgressionManager.ts: XP, level-up, upgrades, mastery perks
+- VFXManager.ts: particles, sprites, entity rendering
 - Weapons.ts: firing patterns
 - Enemies.ts: behavior state machines (7 types)
 - Map.ts: biome rendering, getBiome()
@@ -56,7 +65,6 @@ Game loop: ShipHub -> ContractBoard (3 random contracts) -> Loadout -> Hunt -> R
 - Biome vignettes (need PixiJS v8 compatible approach)
 - Mastery perk effects (88 perks), resonance combos (10)
 - Recipe/crafting, damage floaters, minimap
-- Game.ts growing, needs refactor
 
 ## Design Docs (iCloud)
 Located at `~/Library/Mobile Documents/com~apple~CloudDocs/Claude/space-hunter/`:
