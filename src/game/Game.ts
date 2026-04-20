@@ -39,6 +39,7 @@ const BASE = process.env.NEXT_PUBLIC_BASE_PATH || '';
 const BEHAVIOR_COLORS: Record<string, number> = {
   charge: 0xFF3333, flank: 0xFF8800, pack: 0x33FF33,
   lurker: 0xAA44FF, burst: 0xFFFF00, strafe: 0x00FFFF, patrol_river: 0x888888,
+  mine_crawler: 0xcc7722, sentry_drone: 0xff9933, tide_phantom: 0x22ccbb, coral_spitter: 0x33aacc,
 };
 
 /** Blend a hex color toward white at the given strength (0=white, 1=full color). */

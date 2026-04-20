@@ -26,7 +26,7 @@ export class SpawnManager {
       game.waveCount++;
       const count = 20 + game.waveCount * 6 + Math.floor(game.elapsed / 60) * 4;
       const prevLen = game.enemies.enemies.length;
-      game.enemies.spawnWave(Math.min(count, 60), game.player.pos, game.map);
+      game.enemies.spawnWave(Math.min(count, 60), game.player.pos, game.map, undefined, game.planet);
       // Time-based enemy scaling: +10% HP per 2min, +5% speed per 3min
       const hpScale = 1 + Math.floor(game.elapsed / 120) * 0.1;
       const spdScale = 1 + Math.floor(game.elapsed / 180) * 0.05;
@@ -47,7 +47,7 @@ export class SpawnManager {
       if (game.contractType === 'payload_escort' && game.podHp > 0) {
         const podPos = game.getPodPos();
         const extraCount = Math.max(3, Math.floor(count * 0.5));
-        game.enemies.spawnWave(extraCount, podPos, game.map);
+        game.enemies.spawnWave(extraCount, podPos, game.map, undefined, game.planet);
       }
     }
   }

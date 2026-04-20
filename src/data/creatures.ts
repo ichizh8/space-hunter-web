@@ -1,4 +1,4 @@
-export type EnemyBehavior = 'charge' | 'flank' | 'burst' | 'strafe' | 'pack' | 'lurker' | 'patrol_river' | 'elite';
+export type EnemyBehavior = 'charge' | 'flank' | 'burst' | 'strafe' | 'pack' | 'lurker' | 'patrol_river' | 'elite' | 'mine_crawler' | 'sentry_drone' | 'tide_phantom' | 'coral_spitter';
 
 export interface CreatureDef {
   name: string;
@@ -25,6 +25,12 @@ export const CREATURE_DEFS: Record<string, CreatureDef> = {
   'Cave Lurker':    { name: 'Cave Lurker',    radius: 16, color: 0xaa8866, speed: 140, hp: 8,  detection: 250, meleeDmg: 3, ranged: false, rangedDmg: 0, rangedCooldown: 0, voidType: false, behavior: 'lurker',       ingredient: { id: 'cave_crystal', name: 'Cave Crystal' } },
   'Tide Wraith':    { name: 'Tide Wraith',    radius: 13, color: 0x3366cc, speed: 120, hp: 5,  detection: 380, meleeDmg: 0, ranged: true,  rangedDmg: 2, rangedCooldown: 2.0, voidType: false, behavior: 'patrol_river', ingredient: { id: 'tide_essence', name: 'Tide Essence' } },
   'Void Spawn':     { name: 'Void Spawn',     radius: 11, color: 0x9922dd, speed: 95,  hp: 6,  detection: 310, meleeDmg: 1, ranged: false, rangedDmg: 0, rangedCooldown: 0, voidType: true,  behavior: 'pack',         ingredient: { id: 'void_core', name: 'Void Core' } },
+  // Kepler Outpost enemies
+  'Mine Crawler':   { name: 'Mine Crawler',   radius: 20, color: 0xcc7722, speed: 40,  hp: 15, detection: 320, meleeDmg: 2, ranged: false, rangedDmg: 0, rangedCooldown: 0, voidType: false, behavior: 'mine_crawler',  ingredient: { id: 'proximity_coil', name: 'Proximity Coil' } },
+  'Sentry Drone':   { name: 'Sentry Drone',   radius: 10, color: 0xff9933, speed: 165, hp: 4,  detection: 420, meleeDmg: 0, ranged: false, rangedDmg: 1, rangedCooldown: 0, voidType: false, behavior: 'sentry_drone',  ingredient: { id: 'optics_chip', name: 'Optics Chip' } },
+  // Tidal Flats enemies
+  'Tide Phantom':   { name: 'Tide Phantom',   radius: 14, color: 0x22ccbb, speed: 105, hp: 10, detection: 360, meleeDmg: 3, ranged: false, rangedDmg: 0, rangedCooldown: 0, voidType: false, behavior: 'tide_phantom',  ingredient: { id: 'phase_membrane', name: 'Phase Membrane' } },
+  'Coral Spitter':  { name: 'Coral Spitter',  radius: 18, color: 0x33aacc, speed: 0,   hp: 20, detection: 390, meleeDmg: 0, ranged: false, rangedDmg: 2, rangedCooldown: 0, voidType: false, behavior: 'coral_spitter', ingredient: { id: 'coral_venom', name: 'Coral Venom' } },
 };
 
 export const CREATURE_NAMES = Object.keys(CREATURE_DEFS);
@@ -34,4 +40,9 @@ export const BIOME_POOLS: Record<string, string[]> = {
   river_bank: ['Abyss Worm', 'Tide Wraith', 'Nether Stalker'],
   cave:       ['Cave Lurker', 'Shadow Crawler'],
   void_pool:  ['Rift Parasite', 'Void Spawn', 'Void Leech'],
+};
+
+export const PLANET_POOLS: Record<string, string[]> = {
+  kepler: ['Mine Crawler', 'Sentry Drone'],
+  tidal:  ['Tide Phantom', 'Coral Spitter'],
 };
