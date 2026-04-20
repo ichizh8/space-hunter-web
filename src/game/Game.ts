@@ -454,6 +454,8 @@ export class Game {
     this.map = new GameMap();
     if (this.currentRoom) {
       this.map.generateFromRoom(this.currentRoom);
+      this.camera.worldW = this.map.roomW;
+      this.camera.worldH = this.map.roomH;
       this.loadRoomEntities(this.currentRoom);
     } else {
       this.map.generate();
@@ -560,17 +562,18 @@ export class Game {
     this.hud.showMessage('HUNT STARTED', 2);
     setTimeout(() => this.hud.showHalMessage(halSay(HAL_HUNT_START), 5), 2500);
 
-    // Ã¢ÂÂÃ¢ÂÂ Contract-specific setup Ã¢ÂÂÃ¢ÂÂ
-    if (this.contractType === 'void_breach') {
-      this.spawnManager.spawnBreaches(this);
+    // Contract-specific setup (only for legacy non-room mode)
+    if (!this.currentRoom) {
+      if (this.contractType === 'void_breach') {
+        this.spawnManager.spawnBreaches(this);
+      }
+      if (this.contractType === 'extraction_run') {
+        this.spawnManager.spawnCaches(this);
+      }
+      if (this.contractType === 'payload_escort') {
+        this.spawnManager.spawnPodPath(this);
+      }
     }
-    if (this.contractType === 'extraction_run') {
-      this.spawnManager.spawnCaches(this);
-    }
-    if (this.contractType === 'payload_escort') {
-      this.spawnManager.spawnPodPath(this);
-    }
-
     // Input
     this.setupInput();
   }
@@ -663,12 +666,38 @@ export class Game {
     this.enemies.enemyBullets = [];
     this.particles = [];
     this.explosions = [];
+    // Clear enemy sprites from previous room
+    for (const [id, spr] of this.spritePool) {
+      spr.destroy();
+    }
+    this.spritePool.clear();
     this.roomCleared = false;
 
     // Load new room
     this.currentRoom = nextRoom;
     this.map.generateFromRoom(nextRoom);
+    this.camera.worldW = this.map.roomW;
+    this.camera.worldH = this.map.roomH;
     this.loadRoomEntities(nextRoom);
+
+    // Clear old obstacle sprites and recreate for new room
+    this.obstacleLayer.removeChildren();
+    const OBS_KEYS = ['obs_asteroid', 'obs_crystal', 'obs_debris'];
+    for (const obs of this.map.obstacles) {
+      const key = OBS_KEYS[obs.obsType] ?? OBS_KEYS[0];
+      const tex = this.textures[key];
+      if (!tex) continue;
+      const spr = new Sprite(tex);
+      spr.anchor.set(0.5, 0.5);
+      spr.x = obs.pos.x;
+      spr.y = obs.pos.y;
+      const scaleX = obs.w / 64;
+      const scaleY = obs.h / 64;
+      spr.scale.set(Math.max(scaleX, scaleY));
+      spr.roundPixels = true;
+      spr.rotation = Math.random() * Math.PI * 2;
+      this.obstacleLayer.addChild(spr);
+    }
 
     // Redraw static map
     this.mapGfx.clear();

@@ -274,6 +274,9 @@ export class ContractObjectives {
       }
     }
 
+    // Room-based contracts: completion happens via extraction door in transitionToRoom
+    if (game.currentRoom) return;
+
     // HUNT: elite kills only count toward objective
     if (game.contractType === 'hunt' && game.eliteKillsForContract >= game.targetTotal && !game.complete) {
       game.complete = true;

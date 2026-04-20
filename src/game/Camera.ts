@@ -7,6 +7,9 @@ export class Camera {
   viewW: number;
   viewH: number;
   smoothing = 0.08;
+  /** World bounds for clamping (updated when room changes) */
+  worldW = WORLD_W;
+  worldH = WORLD_H;
 
   constructor(viewW: number, viewH: number) {
     this.viewW = viewW;
@@ -18,8 +21,8 @@ export class Camera {
     const ty = target.y - this.viewH / 2;
     const t = 1 - Math.pow(1 - this.smoothing, dt * 60);
     const next = v2lerp({ x: this.x, y: this.y }, { x: tx, y: ty }, t);
-    this.x = Math.max(0, Math.min(WORLD_W - this.viewW, next.x));
-    this.y = Math.max(0, Math.min(WORLD_H - this.viewH, next.y));
+    this.x = Math.max(0, Math.min(Math.max(0, this.worldW - this.viewW), next.x));
+    this.y = Math.max(0, Math.min(Math.max(0, this.worldH - this.viewH), next.y));
   }
 
   /** Convert world coords to screen coords */
