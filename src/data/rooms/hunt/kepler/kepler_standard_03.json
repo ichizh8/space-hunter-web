@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "id": "kepler_standard_03",
+  "name": "Kepler Service Corridor",
+  "kind": "pool",
+  "biome": "station",
+  "contractTags": ["hunt"],
+  "difficulty": 3,
+  "planet": "kepler",
+  "roomType": "standard",
+  "size": { "w": 900, "h": 800 },
+
+  "terrain": {
+    "caves": [],
+    "voidPools": [],
+    "obstacles": [
+      { "pos": { "x": 40,  "y": 400 }, "w": 20,  "h": 740, "obsType": 0 },
+      { "pos": { "x": 860, "y": 400 }, "w": 20,  "h": 740, "obsType": 0 },
+      { "pos": { "x": 450, "y": 30  }, "w": 840, "h": 20,  "obsType": 0 },
+      { "pos": { "x": 450, "y": 770 }, "w": 840, "h": 20,  "obsType": 0 },
+      { "pos": { "x": 635, "y": 605 }, "w": 430, "h": 310, "obsType": 0 },
+      { "pos": { "x": 210, "y": 350 }, "w": 80,  "h": 32,  "obsType": 0 },
+      { "pos": { "x": 210, "y": 570 }, "w": 80,  "h": 32,  "obsType": 0 },
+      { "pos": { "x": 600, "y": 200 }, "w": 80,  "h": 32,  "obsType": 0 },
+      { "pos": { "x": 700, "y": 310 }, "w": 32,  "h": 80,  "obsType": 0 }
+    ],
+    "rivers": []
+  },
+
+  "playerSpawn": { "x": 220, "y": 730 },
+
+  "entities": [
+    {
+      "id": "door_exit",
+      "type": "door",
+      "pos": { "x": 835, "y": 200 },
+      "radius": 45,
+      "rewardTag": "perk",
+      "nextPool": "kepler_elite",
+      "requiresCleared": true,
+      "label": "Upper Exit"
+    }
+  ],
+
+  "spawnZones": [
+    {
+      "id": "sz_upper",
+      "rect": { "x": 200, "y": 60, "w": 600, "h": 370 },
+      "poolTag": "kepler_tier1",
+      "budget": 5
+    },
+    {
+      "id": "sz_lower",
+      "rect": { "x": 80, "y": 480, "w": 320, "h": 270 },
+      "poolTag": "kepler_tier1",
+      "budget": 4
+    }
+  ],
+
+  "triggers": [
+    {
+      "id": "tr_start",
+      "rect": { "x": 100, "y": 0, "w": 700, "h": 800 },
+      "on": "enter",
+      "actions": ["spawn_all_zones", "lock_doors"]
+    },
+    {
+      "id": "tr_clear",
+      "on": "all_enemies_dead",
+      "actions": ["unlock_doors"]
+    }
+  ],
+
+  "waves": [],
+  "modifiers": [],
+  "mode": "combat"
+}
