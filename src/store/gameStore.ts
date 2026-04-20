@@ -44,6 +44,7 @@ export interface GameActions {
   incrementRoomsCleared: () => void;
   applyCorruptionDrift: () => void;
   applyMutation: (type: string) => void;
+  addCorruption: (delta: number) => void;
 }
 
 export const useGameStore = create<GameState & GameActions>((set) => ({
@@ -67,7 +68,10 @@ export const useGameStore = create<GameState & GameActions>((set) => ({
   setRunPath: (path) => set({ runPath: path }),
   incrementRoomsCleared: () => set(s => ({ roomsCleared: s.roomsCleared + 1 })),
   applyCorruptionDrift: () => set(s => ({
-    runCorruption: s.runCorruption + (s.runPath === 'clean' ? -3 : 5),
+    runCorruption: Math.max(0, Math.min(100, s.runCorruption + (s.runPath === 'clean' ? -3 : 5))),
+  })),
+  addCorruption: (delta) => set(s => ({
+    runCorruption: Math.max(0, Math.min(100, s.runCorruption + delta)),
   })),
   applyMutation: (type) => set({ weaponMutated: true, weaponMutationType: type }),
 }));

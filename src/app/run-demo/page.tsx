@@ -11,6 +11,7 @@ import crates01 from '../../data/rooms/hunt/pool/crates_01.json';
 import crates02 from '../../data/rooms/hunt/pool/crates_02.json';
 import extraction from '../../data/rooms/hunt/fixed/extraction.json';
 import { registerAction } from '../../game/rooms/ActionRegistry';
+import { useGameStore } from '../../store/gameStore';
 
 // Index of rooms keyed by their `id` so doors can link via `nextPool`.
 const ROOM_INDEX: Record<string, RoomJSON> = {
@@ -30,6 +31,10 @@ interface RunState {
 export default function RunDemoPage() {
   const containerRef = useRef<HTMLDivElement>(null);
   const runtimeRef = useRef<RoomRuntimeHandle | null>(null);
+
+  const runPath = useGameStore(s => s.runPath);
+  const runCorruption = useGameStore(s => s.runCorruption);
+  const setRunPath = useGameStore(s => s.setRunPath);
 
   const [currentRoomId, setCurrentRoomId] = useState<string>(START_ROOM_ID);
   const [hud, setHud] = useState<HUDSnapshot>({
@@ -60,6 +65,9 @@ export default function RunDemoPage() {
       runStateRef.current.kills += r.getCombat().enemiesKilledTotal;
       runStateRef.current.roomsCleared += 1;
     }
+    // Corruption drift fires on each room transition, but only after path is chosen (post-Fork)
+    const { runPath: path, applyCorruptionDrift } = useGameStore.getState();
+    if (path !== null) applyCorruptionDrift();
     const next = door.nextPool;
     if (!next || !ROOM_INDEX[next]) {
       // End of chain without extraction
@@ -107,6 +115,7 @@ export default function RunDemoPage() {
           onPromptChange: setPrompt,
           onDoorUse: handleDoorUse,
           onPlayerDeath: handleDeath,
+          onBiomeTick: (delta) => useGameStore.getState().addCorruption(delta),
           debug: false,
         });
         if (cancelled) { handle.destroy(); return; }
@@ -166,12 +175,31 @@ export default function RunDemoPage() {
           alignItems: 'center',
           gap: 16,
           fontSize: 12,
-          pointerEvents: 'none',
         }}
       >
-        <span style={{ color: '#556677', letterSpacing: 2 }}>HUNT DEMO</span>
-        <span style={{ color: '#aabbcc' }}>{roomName}</span>
-        <span style={{ marginLeft: 'auto', color: hud.cleared ? '#33e633' : '#ffaa44' }}>
+        <span style={{ color: '#556677', letterSpacing: 2, pointerEvents: 'none' }}>HUNT DEMO</span>
+        <span style={{ color: '#aabbcc', pointerEvents: 'none' }}>{roomName}</span>
+        {/* Path selector for testing */}
+        <span style={{ color: '#445566', fontSize: 10 }}>PATH:</span>
+        <button
+          onClick={() => setRunPath('clean')}
+          style={{
+            fontSize: 10, padding: '1px 6px', cursor: 'pointer',
+            border: `1px solid ${runPath === 'clean' ? '#44aaff' : '#334455'}`,
+            color: runPath === 'clean' ? '#44aaff' : '#556677',
+            background: runPath === 'clean' ? 'rgba(68,170,255,0.12)' : 'transparent',
+          }}
+        >CLEAN</button>
+        <button
+          onClick={() => setRunPath('void')}
+          style={{
+            fontSize: 10, padding: '1px 6px', cursor: 'pointer',
+            border: `1px solid ${runPath === 'void' ? '#aa44ff' : '#334455'}`,
+            color: runPath === 'void' ? '#aa44ff' : '#556677',
+            background: runPath === 'void' ? 'rgba(170,68,255,0.12)' : 'transparent',
+          }}
+        >VOID</button>
+        <span style={{ marginLeft: 'auto', color: hud.cleared ? '#33e633' : '#ffaa44', pointerEvents: 'none' }}>
           {hud.cleared ? 'CLEARED · exit through door' : `${hud.kills}/${hud.spawned} kills`}
         </span>
       </div>
@@ -202,6 +230,31 @@ export default function RunDemoPage() {
               width: `${hpPct * 100}%`,
               background: hpPct > 0.3 ? '#33e633' : '#cc4444',
               transition: 'width 80ms linear',
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Corruption bar */}
+      <div
+        style={{
+          position: 'absolute',
+          bottom: 12,
+          left: 210,
+          width: 140,
+          pointerEvents: 'none',
+        }}
+      >
+        <div style={{ fontSize: 10, letterSpacing: 2, color: runPath === 'void' ? '#aa44ff' : runPath === 'clean' ? '#44aaff' : '#556677', marginBottom: 2 }}>
+          CORRUPTION {Math.floor(runCorruption)}%
+        </div>
+        <div style={{ height: 8, background: '#1a0a2a', border: '1px solid #334455' }}>
+          <div
+            style={{
+              height: '100%',
+              width: `${Math.min(runCorruption, 100)}%`,
+              background: runCorruption >= 80 ? '#cc2200' : runCorruption >= 50 ? '#cc8800' : '#6622cc',
+              transition: 'width 120ms linear',
             }}
           />
         </div>

@@ -57,6 +57,16 @@ export interface RoomRuntimeOptions {
   onPlayerDeath?: () => void;
   onRoomCleared?: () => void;
   onHUD?: (hud: HUDSnapshot) => void;
+  // Fires each frame with the net corruption delta for this frame (rate * dt).
+  // Void rooms: +2/s, clean rooms: -1/s, river rooms: +1/s, cave: 0
+  onBiomeTick?: (delta: number) => void;
+}
+
+function biomeCorruptionRate(biome: string): number {
+  if (biome.includes('void')) return 2;
+  if (biome.includes('clean') || biome.includes('meadow') || biome.includes('plains')) return -1;
+  if (biome.includes('river')) return 1; // corruption gain halved vs void
+  return 0; // cave and unknown: neutral
 }
 
 export interface RoomRuntimeHandle {
@@ -277,6 +287,12 @@ export async function createRoomRuntime(
         opts.combat ? mouse : null
       );
       return;
+    }
+
+    // Biome corruption tick
+    if (opts.onBiomeTick) {
+      const rate = biomeCorruptionRate(room.biome);
+      if (rate !== 0) opts.onBiomeTick(rate * dt);
     }
 
     // Movement
