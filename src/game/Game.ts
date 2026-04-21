@@ -20,6 +20,7 @@ import {
   PLAYER_COLOR
 } from './constants';
 import { CREATURE_DEFS, BIOME_POOLS, PLANET_POOLS } from '../data/creatures';
+import { HOLLOW_BOSS_STATS } from '../data/elites';
 import { type ModifierDef } from '../data/modifiers';
 import { WEAPON_DEFS, WEAPON_LEVEL_PERKS, WEAPON_MUTATIONS } from '../data/weapons';
 import { KIT_DEFS } from '../data/kits';
@@ -302,6 +303,23 @@ export class Game {
   apexPhaseTransitionTimer = 0;
   apexInstabilityTimer = 8;
 
+  // Hollow Boss (final_hunt) state
+  hollowBossId = -1;
+  hollowPhase = 0;            // 0=not started, 1=swarm, 2=elites, 3=core, 4=collapse
+  hollowPhaseTimer = 0;       // countdown within current phase
+  hollowBossMaxHp = 0;
+  hollowSwarmTimer = 0;       // wave spawn timer in phase 1
+  hollowSwarmWaves = 0;       // waves spawned in phase 1
+  hollowEliteQueue: string[] = [];  // elite types to summon in phase 2
+  hollowEliteIdx = 0;         // current elite in queue
+  hollowEliteSummonTimer = 0; // timer between elite summons
+  hollowAttackTimer = 0;      // boss attack cooldown
+  hollowAttackCycle = 0;      // cycling attack pattern
+  hollowArenaRadius = 0;      // shrinking arena in phase 3/4
+  hollowArenaCenter = { x: 0, y: 0 };
+  hollowCollapseTimer = 0;    // arena shrink tick timer
+  hollowDenialTimer = 0;      // area denial zone spawn timer
+
   // Elite spawning
   eliteTimer = 0;
   eliteSpawnedCount = 0;
@@ -583,6 +601,21 @@ export class Game {
       if (this.contractType === 'payload_escort') {
         this.spawnManager.spawnPodPath(this);
       }
+    }
+    // Final Hunt: single arena, spawn Hollow Boss after brief setup
+    if (this.contractType === 'final_hunt') {
+      const W = this.map.roomW ?? WORLD_W;
+      const H = this.map.roomH ?? WORLD_H;
+      this.hollowArenaCenter = { x: W / 2, y: H / 2 };
+      this.hollowArenaRadius = Math.min(W, H) * 0.45;
+      this.hollowPhase = 1;
+      this.hollowSwarmTimer = 3; // first swarm wave after 3s
+      this.hollowSwarmWaves = 0;
+      this.hollowPhaseTimer = 0;
+      // Spawn boss dormant in center
+      this.spawnManager.spawnHollowBoss(this);
+      this.hud.showMessage('THE HOLLOW HEART', 4);
+      setTimeout(() => this.hud.showHalMessage('Void signature off the charts. This is the source.', 5), 3000);
     }
     // Input
     this.setupInput();
@@ -1748,6 +1781,283 @@ export class Game {
 
     const baseCd = 5;
     this.apexAttackTimer = baseCd * cdMult;
+  }
+
+  // ---------------------------------------------------------------------------
+  // HOLLOW BOSS: 4-phase final boss fight
+  // Phase 1 (The Swarm): mixed enemy waves, boss dormant/shielded in center
+  // Phase 2 (The Elites): boss awakens, summons planet elites one by one + area denial
+  // Phase 3 (The Core): boss aggressive, all attacks, arena shrinks, 2nd HP bar at threshold
+  // Phase 4 (Collapse): arena collapsing, constant spawns, corruption rising, race to finish
+  // ---------------------------------------------------------------------------
+  updateHollowBoss(dt: number) {
+    const boss = this.enemies.enemies.find(e => e.id === this.hollowBossId);
+    if (!boss || boss.hp <= 0) return;
+
+    const hpFrac = boss.hp / boss.maxHp;
+    const W = this.map.roomW ?? WORLD_W;
+    const H = this.map.roomH ?? WORLD_H;
+
+    // Enforce arena boundary: push player back inside shrinking arena
+    if (this.hollowArenaRadius > 0) {
+      const dx = this.player.pos.x - this.hollowArenaCenter.x;
+      const dy = this.player.pos.y - this.hollowArenaCenter.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist > this.hollowArenaRadius - 30) {
+        // Push back + damage if outside
+        const pushStr = Math.min(200, (dist - this.hollowArenaRadius + 30) * 3);
+        const nx = dx / (dist || 1);
+        const ny = dy / (dist || 1);
+        this.player.pos.x -= nx * pushStr * dt;
+        this.player.pos.y -= ny * pushStr * dt;
+        if (dist > this.hollowArenaRadius) {
+          this.player.hp -= 3 * dt;
+          this.player.corruption = Math.min(100, this.player.corruption + 5 * dt);
+        }
+      }
+    }
+
+    // ── PHASE 1: THE SWARM ──
+    if (this.hollowPhase === 1) {
+      // Boss is dormant/shielded, pulsing in center
+      boss.speed = 0;
+      boss.pos.x = this.hollowArenaCenter.x;
+      boss.pos.y = this.hollowArenaCenter.y;
+
+      // Spawn mixed enemy waves from all planet pools
+      this.hollowSwarmTimer -= dt;
+      if (this.hollowSwarmTimer <= 0) {
+        this.hollowSwarmWaves++;
+        const count = 15 + this.hollowSwarmWaves * 5;
+        // Mix planet pools: kepler, tidal, void_reach, furnace enemies
+        const allPools = ['kepler', 'tidal', 'void_reach', 'furnace'];
+        for (let i = 0; i < count; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const dist = 300 + Math.random() * 400;
+          const spawnPos = {
+            x: Math.max(100, Math.min(W - 100, this.hollowArenaCenter.x + Math.cos(angle) * dist)),
+            y: Math.max(100, Math.min(H - 100, this.hollowArenaCenter.y + Math.sin(angle) * dist)),
+          };
+          const pool = allPools[Math.floor(Math.random() * allPools.length)];
+          const planetPool = PLANET_POOLS[pool];
+          const biomePool = BIOME_POOLS.open;
+          const name = (planetPool && Math.random() < 0.5) ? pick(planetPool) : pick(biomePool);
+          const enemy = createEnemy(name, spawnPos, true);
+          // Scale up for endgame
+          enemy.hp = Math.floor(enemy.hp * 1.4);
+          enemy.maxHp = enemy.hp;
+          enemy.speed = Math.floor(enemy.speed * 1.1);
+          this.enemies.enemies.push(enemy);
+        }
+        this.hud.showMessage(`SWARM WAVE ${this.hollowSwarmWaves}`, 1.5);
+        this.hollowSwarmTimer = Math.max(8, 14 - this.hollowSwarmWaves * 1.5);
+      }
+
+      // Transition to Phase 2 after 5 swarm waves
+      if (this.hollowSwarmWaves >= 5) {
+        this.hollowPhase = 2;
+        this.hollowPhaseTimer = 1.5; // brief transition pause
+        boss.shieldHp = 0; // shield drops
+        boss.speed = HOLLOW_BOSS_STATS.speed;
+        this.hollowEliteIdx = 0;
+        this.hollowEliteQueue = [...HOLLOW_BOSS_STATS.eliteSummonTypes];
+        this.hollowEliteSummonTimer = 3;
+        this.hollowAttackTimer = 4;
+        this.hollowDenialTimer = 8;
+        this.shakeTimer = 0.8;
+        this.shakeAmt = 12;
+        this.screenFlash = 0.8;
+        this.hud.showMessage('PHASE 2: THE ELITES', 3);
+        setTimeout(() => this.hud.showHalMessage('The shield is down! It\'s summoning guardians!', 4), 1500);
+      }
+      return;
+    }
+
+    // ── Phase transition invulnerability ──
+    if (this.hollowPhaseTimer > 0) {
+      this.hollowPhaseTimer -= dt;
+      return;
+    }
+
+    // ── Check for phase transitions ──
+    if (this.hollowPhase === 2 && hpFrac <= HOLLOW_BOSS_STATS.phase3Threshold) {
+      this.hollowPhase = 3;
+      this.hollowPhaseTimer = 1.5;
+      this.hollowAttackTimer = 2;
+      this.hollowDenialTimer = 6;
+      this.shakeTimer = 1.0;
+      this.shakeAmt = 14;
+      this.screenFlash = 0.9;
+      this.hud.showMessage('PHASE 3: THE CORE', 3);
+      setTimeout(() => this.hud.showHalMessage('It\'s enraged. The arena is collapsing. End this fast.', 5), 1500);
+      return;
+    }
+
+    if (this.hollowPhase === 3 && hpFrac <= HOLLOW_BOSS_STATS.phase4Threshold) {
+      this.hollowPhase = 4;
+      this.hollowPhaseTimer = 1.0;
+      this.hollowAttackTimer = 1.5;
+      this.hollowCollapseTimer = 0;
+      this.hollowDenialTimer = 4;
+      this.shakeTimer = 1.5;
+      this.shakeAmt = 16;
+      this.screenFlash = 1.0;
+      this.hud.showMessage('FINAL PHASE: COLLAPSE', 3);
+      setTimeout(() => this.hud.showHalMessage('VOID COLLAPSE IMMINENT. EVERYTHING IT HAS. FINISH IT.', 5), 1500);
+      return;
+    }
+
+    // ── PHASE 2: THE ELITES ──
+    if (this.hollowPhase === 2) {
+      // Summon elites one at a time from the queue
+      this.hollowEliteSummonTimer -= dt;
+      if (this.hollowEliteSummonTimer <= 0 && this.hollowEliteIdx < this.hollowEliteQueue.length) {
+        const eliteType = this.hollowEliteQueue[this.hollowEliteIdx];
+        this.hollowEliteIdx++;
+        this.spawnManager.spawnElite(this);
+        // Boost the last spawned elite for the Hollow fight
+        const lastEnemy = this.enemies.enemies[this.enemies.enemies.length - 1];
+        if (lastEnemy?.isElite) {
+          lastEnemy.hp = Math.floor(lastEnemy.hp * 1.5);
+          lastEnemy.maxHp = lastEnemy.hp;
+        }
+        this.hollowEliteSummonTimer = 12; // 12s between elite summons
+        this.hud.showMessage(`GUARDIAN: ${eliteType.toUpperCase()}`, 2.5);
+        this.shakeTimer = 0.3;
+        this.shakeAmt = 6;
+      }
+
+      // After all elites summoned, keep spawning regular mobs
+      if (this.hollowEliteIdx >= this.hollowEliteQueue.length) {
+        this.hollowSwarmTimer -= dt;
+        if (this.hollowSwarmTimer <= 0 && this.enemies.enemies.length < 80) {
+          this.hollowSwarmTimer = 10;
+          const count = 8 + Math.floor(Math.random() * 5);
+          this.enemies.spawnWave(count, boss.pos, this.map, undefined, this.planet);
+        }
+      }
+    }
+
+    // ── PHASE 3: THE CORE ──
+    if (this.hollowPhase >= 3) {
+      // Arena shrinks slowly
+      this.hollowCollapseTimer -= dt;
+      if (this.hollowCollapseTimer <= 0) {
+        this.hollowCollapseTimer = 1;
+        const minR = this.hollowPhase >= 4 ? HOLLOW_BOSS_STATS.collapseMinRadius : HOLLOW_BOSS_STATS.collapseMinRadius + 200;
+        if (this.hollowArenaRadius > minR) {
+          this.hollowArenaRadius -= HOLLOW_BOSS_STATS.collapseRate * (this.hollowPhase >= 4 ? 2 : 1);
+        }
+      }
+
+      // Continuous mob spawns
+      this.hollowSwarmTimer -= dt;
+      if (this.hollowSwarmTimer <= 0 && this.enemies.enemies.length < 60) {
+        const interval = this.hollowPhase >= 4 ? 6 : 10;
+        this.hollowSwarmTimer = interval;
+        const count = this.hollowPhase >= 4 ? 12 : 6;
+        this.enemies.spawnWave(count, boss.pos, this.map, undefined, this.planet);
+      }
+    }
+
+    // ── PHASE 4: COLLAPSE ──
+    if (this.hollowPhase >= 4) {
+      // Corruption rises constantly
+      this.player.corruption = Math.min(100, this.player.corruption + 1.5 * this.player.corruptionResistMult * dt);
+
+      // Spawn instability zones around boss
+      this.hollowDenialTimer -= dt;
+      if (this.hollowDenialTimer <= 0) {
+        this.hollowDenialTimer = 3 + Math.random() * 2;
+        for (let i = 0; i < 3; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const dist = 100 + Math.random() * 250;
+          this.instabilityZones.push({
+            x: boss.pos.x + Math.cos(angle) * dist,
+            y: boss.pos.y + Math.sin(angle) * dist,
+            timer: 8, maxTimer: 8, radius: 70 + Math.random() * 40,
+          });
+        }
+      }
+    }
+
+    // ── Area denial zones (phases 2+) ──
+    if (this.hollowPhase >= 2 && this.hollowPhase < 4) {
+      this.hollowDenialTimer -= dt;
+      if (this.hollowDenialTimer <= 0) {
+        this.hollowDenialTimer = this.hollowPhase >= 3 ? 5 : 8;
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 80 + Math.random() * 200;
+        this.instabilityZones.push({
+          x: boss.pos.x + Math.cos(angle) * dist,
+          y: boss.pos.y + Math.sin(angle) * dist,
+          timer: 10, maxTimer: 10, radius: 90,
+        });
+      }
+    }
+
+    // ── Boss attacks (phases 2+) ──
+    const cdMult = this.hollowPhase >= 4 ? 0.5 : this.hollowPhase >= 3 ? 0.7 : 1.0;
+    this.hollowAttackTimer -= dt;
+    if (this.hollowAttackTimer > 0) return;
+
+    // Cycle through attacks: charge, slam, ring, burst (phase 3+ adds burst)
+    const attackPool = this.hollowPhase >= 3
+      ? ['charge', 'slam', 'ring', 'burst', 'ring'] as const
+      : ['charge', 'slam', 'ring'] as const;
+    const attack = attackPool[this.hollowAttackCycle % attackPool.length];
+    this.hollowAttackCycle++;
+
+    if (attack === 'charge') {
+      // Charge rush toward player
+      boss.phase = 30;
+      boss.phaseTimer = 0.6;
+      boss.aggroOrigin = { x: this.player.pos.x, y: this.player.pos.y };
+      boss.lockAngle = Math.atan2(this.player.pos.y - boss.pos.y, this.player.pos.x - boss.pos.x);
+    } else if (attack === 'slam') {
+      // Ground slam AOE
+      boss.phase = 10;
+      boss.phaseTimer = 0.7;
+    } else if (attack === 'ring') {
+      // Ring of projectiles (12 in final boss vs 8 in normal apex)
+      const ringCount = HOLLOW_BOSS_STATS.ringCount;
+      const offset = this.hollowPhase >= 3 ? (Math.random() * Math.PI / ringCount) : 0;
+      for (let i = 0; i < ringCount; i++) {
+        const angle = offset + (i / ringCount) * Math.PI * 2;
+        this.enemies.enemyBullets.push({
+          pos: { x: boss.pos.x, y: boss.pos.y },
+          vel: v2fromAngle(angle, 170 + this.hollowPhase * 10),
+          radius: 8,
+          damage: 4,
+          life: 3.0,
+          color: 0xff0044,
+        });
+      }
+      this.hud.showMessage('VOID RING!', 1.0);
+    } else if (attack === 'burst') {
+      // Spiral burst: 3 waves of 6 projectiles with rotation
+      for (let w = 0; w < 3; w++) {
+        setTimeout(() => {
+          if (boss.hp <= 0) return;
+          const baseAngle = Math.atan2(this.player.pos.y - boss.pos.y, this.player.pos.x - boss.pos.x);
+          for (let i = 0; i < 6; i++) {
+            const angle = baseAngle + (i / 6) * Math.PI * 2 + w * 0.3;
+            this.enemies.enemyBullets.push({
+              pos: { x: boss.pos.x, y: boss.pos.y },
+              vel: v2fromAngle(angle, 200),
+              radius: 6,
+              damage: 3,
+              life: 2.5,
+              color: 0xff2266,
+            });
+          }
+        }, w * 300);
+      }
+      this.hud.showMessage('VOID BURST!', 1.0);
+    }
+
+    const baseCd = 4;
+    this.hollowAttackTimer = baseCd * cdMult;
   }
 
 

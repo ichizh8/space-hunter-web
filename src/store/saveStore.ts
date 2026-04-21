@@ -72,7 +72,7 @@ export const useSaveStore = create<SaveState & SaveActions>()(
       activeBonuses: {},
       unlockedRecipes: ['field_ration', 'void_brew', 'cave_jerky', 'silt_stew'],
       reputation: 0,
-      planetClearance: { kepler: 0, tidal: 0, void_reach: 0, furnace: 0 },
+      planetClearance: { kepler: 0, tidal: 0, void_reach: 0, furnace: 0, hollow: 0 },
       ingredientInventory: {},
       kitchenStations: { basic: 1, prep: 0, exotic: 0, void_infuser: 0, forge: 0 },
       recipesUnlocked: [],
@@ -198,9 +198,10 @@ export const useSaveStore = create<SaveState & SaveActions>()(
       getPlanetUnlocked: (planet) => {
         const { planetClearance } = get();
         if (planet === 'kepler') return true;
-        if (planet === 'tidal') return (planetClearance.kepler ?? 0) >= 5;
-        if (planet === 'void_reach') return (planetClearance.tidal ?? 0) >= 3;
-        if (planet === 'furnace') return (planetClearance.void_reach ?? 0) >= 3;
+        if (planet === 'tidal') return (planetClearance.kepler ?? 0) >= 10;
+        if (planet === 'void_reach') return (planetClearance.tidal ?? 0) >= 12;
+        if (planet === 'furnace') return (planetClearance.void_reach ?? 0) >= 12;
+        if (planet === 'hollow') return (planetClearance.furnace ?? 0) >= 12 && get().reputation >= 800;
         return false;
       },
 
@@ -219,7 +220,7 @@ export const useSaveStore = create<SaveState & SaveActions>()(
           totalCredits: s.totalCredits + 5000,
           pantry: { rift_dust: 99, void_crystal: 99, cave_moss: 99, river_silt: 99, elite_core: 99 },
           reputation: 1200,
-          planetClearance: { kepler: 10, tidal: 10, void_reach: 10, furnace: 10 },
+          planetClearance: { kepler: 15, tidal: 15, void_reach: 15, furnace: 15, hollow: 0 },
           ingredientInventory: Object.fromEntries(Object.keys(INGREDIENTS).map(id => [id, 99])),
           unlockedWeapons: ALL_WEAPONS,
           unlockedKits: ALL_KITS,

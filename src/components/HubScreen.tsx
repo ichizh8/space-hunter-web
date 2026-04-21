@@ -14,40 +14,44 @@ import {
 const UTILITY_UPGRADE_DEFS = [
   {
     id: 'thrusters', name: 'Thrusters', maxLevel: 3,
-    costs: [80, 150, 250],
+    costs: [100, 250, 500],
     descs: ['Dash ability (1 charge, 150px, 1.5s CD)', '2 dash charges', 'Cooldown -40%'],
   },
   {
     id: 'salvage_module', name: 'Salvage Module', maxLevel: 2,
-    costs: [100, 200],
+    costs: [150, 400],
     descs: ['+30% pickup drop chance', 'Guaranteed extra ingredient from elites'],
   },
   {
     id: 'emergency_protocol', name: 'Emergency Protocol', maxLevel: 1,
-    costs: [300],
+    costs: [600],
     descs: ['Once per contract, revive with 3 HP when killed'],
   },
 ];
 
 const BONUS_UPGRADE_DEFS = [
-  { id: 'conditioning', name: 'Conditioning', desc: '+5% max HP per level', cost: 40, maxLevel: 5 },
-  { id: 'reflex_training', name: 'Reflex Training', desc: '+3% move speed per level', cost: 40, maxLevel: 5 },
-  { id: 'trigger_discipline', name: 'Trigger Discipline', desc: '+4% fire rate per level', cost: 50, maxLevel: 5 },
-  { id: 'combat_training', name: 'Combat Training', desc: '+3% damage per level', cost: 50, maxLevel: 5 },
-  { id: 'quick_hands', name: 'Quick Hands', desc: '-5% reload time per level', cost: 40, maxLevel: 5 },
+  { id: 'conditioning', name: 'Conditioning', desc: '+5% max HP per level', maxLevel: 5, costs: [40, 60, 100, 160, 250] },
+  { id: 'reflex_training', name: 'Reflex Training', desc: '+3% move speed per level', maxLevel: 5, costs: [40, 60, 100, 160, 250] },
+  { id: 'trigger_discipline', name: 'Trigger Discipline', desc: '+4% fire rate per level', maxLevel: 5, costs: [50, 75, 120, 200, 300] },
+  { id: 'combat_training', name: 'Combat Training', desc: '+3% damage per level', maxLevel: 5, costs: [50, 75, 120, 200, 300] },
+  { id: 'quick_hands', name: 'Quick Hands', desc: '-5% reload time per level', maxLevel: 5, costs: [40, 60, 100, 160, 250] },
 ];
 
 const WEAPON_UNLOCK_DEFS = [
-  { id: 'scatter', name: 'Scatter Pistol', desc: 'Close-range burst', cost: 120 },
-  { id: 'lance', name: 'Void Lance', desc: 'Piercing beam', cost: 150 },
-  { id: 'baton', name: 'Shock Baton', desc: 'Melee AOE', cost: 130 },
-  { id: 'dart', name: 'Homing Dart', desc: 'Homing shots', cost: 80 },
-  { id: 'flamethrower', name: 'Flamethrower', desc: 'Cone damage', cost: 180 },
-  { id: 'grenade_launcher', name: 'Grenade Launcher', desc: 'Explosive', cost: 160 },
-  { id: 'entropy_cannon', name: 'Entropy Cannon', desc: 'Void Walker rep weapon', cost: 200 },
-  { id: 'pulse_cannon', name: 'Pulse Cannon', desc: 'Tactician rep weapon', cost: 200 },
-  { id: 'sniper_carbine', name: 'Sniper Carbine', desc: 'Contractor rep weapon', cost: 220 },
-  { id: 'chain_rifle', name: 'Chain Rifle', desc: 'Scrapper rep weapon', cost: 200 },
+  // Kepler tier (no rep gate)
+  { id: 'dart', name: 'Homing Dart', desc: 'Homing shots', cost: 100, repTier: 0 },
+  { id: 'scatter', name: 'Scatter Pistol', desc: 'Close-range burst', cost: 150, repTier: 0 },
+  { id: 'baton', name: 'Shock Baton', desc: 'Melee AOE', cost: 160, repTier: 0 },
+  // Tidal tier (rep tier 1 = 50 rep)
+  { id: 'lance', name: 'Void Lance', desc: 'Piercing beam', cost: 250, repTier: 1 },
+  { id: 'flamethrower', name: 'Flamethrower', desc: 'Cone damage', cost: 300, repTier: 1 },
+  { id: 'grenade_launcher', name: 'Grenade Launcher', desc: 'Explosive', cost: 280, repTier: 1 },
+  // Void tier (rep tier 3 = 350 rep)
+  { id: 'entropy_cannon', name: 'Entropy Cannon', desc: 'Void beam', cost: 500, repTier: 3 },
+  { id: 'pulse_cannon', name: 'Pulse Cannon', desc: 'Bouncing AOE', cost: 500, repTier: 3 },
+  { id: 'sniper_carbine', name: 'Sniper Carbine', desc: 'High damage', cost: 550, repTier: 3 },
+  // Furnace tier (rep tier 4 = 700 rep)
+  { id: 'chain_rifle', name: 'Chain Rifle', desc: 'Rapid fire', cost: 600, repTier: 4 },
 ];
 
 const PLANET_COLORS: Record<string, string> = {
@@ -55,6 +59,7 @@ const PLANET_COLORS: Record<string, string> = {
   tidal: '#44d4ff',
   void_reach: '#aa44ff',
   furnace: '#ff4422',
+  hollow: '#ff0044',
 };
 
 const PLANET_LABELS: Record<string, string> = {
@@ -62,6 +67,7 @@ const PLANET_LABELS: Record<string, string> = {
   tidal: 'Tidal',
   void_reach: 'Void',
   furnace: 'Furnace',
+  hollow: 'Hollow',
 };
 
 type Tab = 'ship' | 'upgrades' | 'kits';
@@ -260,6 +266,7 @@ export function UpgradesTab({ save }: { save: ReturnType<typeof useSaveStore.get
       {BONUS_UPGRADE_DEFS.map(def => {
         const level = save.shipUpgrades[def.id] ?? 0;
         const maxed = level >= def.maxLevel;
+        const cost = def.costs[level] ?? 0;
         return (
           <div key={def.id} className="pixel-card flex items-center gap-3">
             <div className="flex-1">
@@ -269,9 +276,9 @@ export function UpgradesTab({ save }: { save: ReturnType<typeof useSaveStore.get
             <button
               className="pixel-btn text-sm py-2 px-4"
               style={{ borderColor: 'var(--color-accent-purple)', color: 'var(--color-accent-purple)' }}
-              disabled={maxed || save.totalCredits < def.cost}
-              onClick={() => buyUpgrade(def.id, def.cost, def.maxLevel)}>
-              {maxed ? 'MAX' : `${def.cost}cr`}
+              disabled={maxed || save.totalCredits < cost}
+              onClick={() => buyUpgrade(def.id, cost, def.maxLevel)}>
+              {maxed ? 'MAX' : `${cost}cr`}
             </button>
           </div>
         );
@@ -280,16 +287,19 @@ export function UpgradesTab({ save }: { save: ReturnType<typeof useSaveStore.get
       <SectionHeader text="WEAPONS" color="var(--color-accent-orange)" />
       {WEAPON_UNLOCK_DEFS.map(def => {
         const owned = save.unlockedWeapons.includes(def.id);
+        const playerRepTier = save.getRepTier();
+        const repLocked = def.repTier > 0 && playerRepTier < def.repTier;
         return (
-          <div key={def.id} className="pixel-card flex items-center gap-3">
+          <div key={def.id} className="pixel-card flex items-center gap-3" style={repLocked ? { opacity: 0.5 } : {}}>
             <div className="flex-1">
               <p className="text-sm font-bold">{def.name}</p>
               <p className="text-xs text-[var(--color-text-secondary)] mt-1">{def.desc}</p>
+              {repLocked && <p className="text-xs text-[var(--color-accent-red)]">Requires Rep Tier {def.repTier}</p>}
             </div>
             <button
               className="pixel-btn text-sm py-2 px-4"
               style={{ borderColor: 'var(--color-accent-orange)', color: 'var(--color-accent-orange)' }}
-              disabled={owned || save.totalCredits < def.cost}
+              disabled={owned || save.totalCredits < def.cost || repLocked}
               onClick={() => unlockWeapon(def.id, def.cost)}>
               {owned ? 'OWNED' : `${def.cost}cr`}
             </button>

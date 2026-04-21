@@ -27,6 +27,20 @@ export class ContractObjectives {
     if (game.contractType === 'boss_hunt' && game.apexSpawned) {
       game.updateApexBoss(dt);
     }
+    // Final Hunt: run Hollow Boss behavior + instability zones
+    if (game.contractType === 'final_hunt' && game.hollowPhase > 0) {
+      game.updateHollowBoss(dt);
+      // Update instability zones: damage + corruption inside
+      for (let i = game.instabilityZones.length - 1; i >= 0; i--) {
+        const iz = game.instabilityZones[i];
+        iz.timer -= dt;
+        if (iz.timer <= 0) { game.instabilityZones.splice(i, 1); continue; }
+        if (v2dist(game.player.pos, { x: iz.x, y: iz.y }) < iz.radius) {
+          game.player.hp -= 1.5 * dt;
+          game.player.corruption = Math.min(100, game.player.corruption + 3 * dt);
+        }
+      }
+    }
 
     // ── Dash update ──
     if (game.dashActive) {
@@ -304,6 +318,21 @@ export class ContractObjectives {
       game.hud.showHalMessage(halSay(HAL_CONTRACT_DONE), 5);
       setTimeout(() => game.finishHunt('COMPLETED'), 2000);
     }
+
+    // FINAL HUNT: Hollow Boss must be killed
+    if (game.contractType === 'final_hunt' && game.hollowBossId >= 0 && !game.complete) {
+      const bossAlive = game.enemies.enemies.some(e => e.id === game.hollowBossId && e.hp > 0);
+      if (!bossAlive && game.hollowPhase >= 4) {
+        game.complete = true;
+        game.apexKills++;
+        game.hud.showMessage('THE HOLLOW HEART IS SILENCED', 3);
+        game.hud.showHalMessage('It\'s... quiet now. The void is fading. Let\'s get out of here.', 6);
+        game.shakeTimer = 1.0;
+        game.shakeAmt = 12;
+        game.screenFlash = 1.0;
+        setTimeout(() => game.finishHunt('COMPLETED'), 3000);
+      }
+    }
   }
 
   /** Draw contract-specific world overlays (pod, breaches, caches, apex). */
@@ -490,6 +519,87 @@ export class ContractObjectives {
             .lineTo(ax + Math.cos(angle - 2.5) * sz, ay + Math.sin(angle - 2.5) * sz)
             .closePath().fill({ color: 0xff8000, alpha: 0.8 });
         }
+      }
+    }
+
+    // Final Hunt: Hollow Boss arena + boss indicator
+    if (game.contractType === 'final_hunt') {
+      // Arena boundary ring (pulsing, red/dark)
+      if (game.hollowArenaRadius > 0) {
+        const cx = game.hollowArenaCenter.x;
+        const cy = game.hollowArenaCenter.y;
+        const pulse = 0.3 + Math.sin(game.elapsed * 1.5) * 0.1;
+        g.circle(cx, cy, game.hollowArenaRadius).stroke({ color: 0xff0044, width: 3, alpha: pulse });
+        // Inner warning ring
+        g.circle(cx, cy, game.hollowArenaRadius - 30).stroke({ color: 0xff0044, width: 1, alpha: 0.1 });
+        // Shrinking visual: fill outside arena faintly
+        if (game.hollowPhase >= 3) {
+          const outerR = Math.max(game.hollowArenaRadius + 500, 3000);
+          g.circle(cx, cy, outerR).fill({ color: 0x050008, alpha: 0.15 });
+        }
+      }
+
+      const boss = game.enemies.enemies.find(e => e.id === game.hollowBossId);
+      if (boss && boss.hp > 0) {
+        // Phase indicator ring
+        const phaseColors = [0, 0xff0044, 0xff0044, 0xcc00ff, 0xffffff];
+        const color = phaseColors[game.hollowPhase] ?? 0xff0044;
+        const ringPulse = 1.0 + Math.sin(game.elapsed * 3) * 0.3;
+
+        // Shield glow in phase 1
+        if (game.hollowPhase === 1) {
+          g.circle(boss.pos.x, boss.pos.y, boss.radius * 3).fill({ color: 0xff0044, alpha: 0.08 + Math.sin(game.elapsed * 2) * 0.04 });
+          g.circle(boss.pos.x, boss.pos.y, boss.radius * 2.5).stroke({ color: 0xff0044, width: 3, alpha: 0.4 });
+          g.circle(boss.pos.x, boss.pos.y, boss.radius * 3.5).stroke({ color: 0xff0044, width: 1, alpha: 0.15 });
+        } else {
+          // Active boss indicator
+          g.circle(boss.pos.x, boss.pos.y, boss.radius * 2.5 * ringPulse).stroke({ color, width: 2, alpha: 0.5 });
+          g.circle(boss.pos.x, boss.pos.y, boss.radius * 4).stroke({ color, width: 1, alpha: 0.12 });
+        }
+
+        // Boss HP bar (large, centered above boss)
+        const hpFrac = boss.hp / boss.maxHp;
+        const barW = 120;
+        const barH = 8;
+        const barX = boss.pos.x - barW / 2;
+        const barY = boss.pos.y - boss.radius - 25;
+        g.rect(barX, barY, barW, barH).fill({ color: 0x110000, alpha: 0.9 });
+        g.rect(barX, barY, barW * hpFrac, barH).fill({ color, alpha: 0.9 });
+        g.rect(barX, barY, barW, barH).stroke({ color: 0xff0044, width: 1, alpha: 0.6 });
+
+        // Phase tick marks on HP bar
+        const thresholds = [0.75, 0.45, 0.20];
+        for (const t of thresholds) {
+          const tx = barX + barW * t;
+          g.moveTo(tx, barY).lineTo(tx, barY + barH);
+          g.stroke({ color: 0xffffff, width: 1, alpha: 0.4 });
+        }
+
+        // Off-screen arrow
+        const camCx = game.camera.x + game.camera.viewW / 2;
+        const camCy = game.camera.y + game.camera.viewH / 2;
+        const dx = boss.pos.x - camCx, dy = boss.pos.y - camCy;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > Math.max(game.camera.viewW, game.camera.viewH) * 0.4) {
+          const angle = Math.atan2(dy, dx);
+          const arrowDist = 120;
+          const ax = px + Math.cos(angle) * arrowDist;
+          const ay = py + Math.sin(angle) * arrowDist;
+          const sz = 10;
+          g.moveTo(ax + Math.cos(angle) * sz, ay + Math.sin(angle) * sz)
+            .lineTo(ax + Math.cos(angle + 2.5) * sz, ay + Math.sin(angle + 2.5) * sz)
+            .lineTo(ax + Math.cos(angle - 2.5) * sz, ay + Math.sin(angle - 2.5) * sz)
+            .closePath().fill({ color: 0xff0044, alpha: 0.9 });
+        }
+      }
+
+      // Instability zones (void hazard circles)
+      for (const iz of game.instabilityZones) {
+        const lifeFrac = iz.timer / iz.maxTimer;
+        const pulse = 0.5 + Math.sin(game.elapsed * 6) * 0.2;
+        g.circle(iz.x, iz.y, iz.radius).fill({ color: 0x660022, alpha: 0.15 * lifeFrac });
+        g.circle(iz.x, iz.y, iz.radius).stroke({ color: 0xff0044, width: 2, alpha: pulse * lifeFrac });
+        g.circle(iz.x, iz.y, iz.radius * 0.3).fill({ color: 0xff0044, alpha: 0.25 * lifeFrac });
       }
     }
   }

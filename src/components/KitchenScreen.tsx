@@ -25,9 +25,17 @@ const STATION_LABEL: Record<StationId, string> = {
 
 const STATION_COST: Record<StationId, number | null> = {
   basic: null, // default unlocked
-  prep: 500,
-  exotic: 1500,
-  forge: 3000,
+  prep: 800,
+  exotic: 2500,
+  forge: 5000,
+};
+
+// Planet clearance required to buy each station
+const STATION_CLEARANCE: Record<StationId, { planet: string; clears: number } | null> = {
+  basic: null,
+  prep: { planet: 'kepler', clears: 3 },
+  exotic: { planet: 'tidal', clears: 3 },
+  forge: { planet: 'void_reach', clears: 3 },
 };
 
 const TIER_COLOR: Record<string, string> = {
@@ -129,7 +137,9 @@ export function KitchenScreen() {
           {STATION_ORDER.map(id => {
             const unlocked = (stations[id] ?? 0) >= 1;
             const cost = STATION_COST[id];
-            const canAfford = cost !== null && save.totalCredits >= cost;
+            const clearReq = STATION_CLEARANCE[id];
+            const clearanceMet = !clearReq || (save.planetClearance[clearReq.planet] ?? 0) >= clearReq.clears;
+            const canAfford = cost !== null && save.totalCredits >= cost && clearanceMet;
             return (
               <div
                 key={id}
@@ -137,6 +147,7 @@ export function KitchenScreen() {
                 style={{
                   padding: '8px 4px',
                   borderColor: unlocked ? 'var(--color-border-light)' : 'var(--color-border)',
+                  opacity: !unlocked && !clearanceMet ? 0.5 : 1,
                 }}
               >
                 <div
@@ -148,6 +159,10 @@ export function KitchenScreen() {
                 {unlocked ? (
                   <div className="text-xs" style={{ color: 'var(--color-accent-green)' }}>
                     ON
+                  </div>
+                ) : !clearanceMet && clearReq ? (
+                  <div className="text-xs" style={{ color: 'var(--color-accent-red)', fontSize: 9 }}>
+                    {clearReq.clears} {clearReq.planet} clears
                   </div>
                 ) : cost !== null ? (
                   <button

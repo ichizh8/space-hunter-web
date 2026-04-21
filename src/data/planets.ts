@@ -1,4 +1,4 @@
-export type PlanetId = 'kepler' | 'tidal' | 'void_reach' | 'furnace';
+export type PlanetId = 'kepler' | 'tidal' | 'void_reach' | 'furnace' | 'hollow';
 
 export interface PlanetPhysics {
   moveSpeedMult: number;
@@ -64,7 +64,7 @@ export const PLANETS: Record<PlanetId, Planet> = {
   tidal: {
     id: 'tidal',
     name: 'Tidal Flats',
-    unlockCondition: { planet: 'kepler', clears: 5 },
+    unlockCondition: { planet: 'kepler', clears: 10 },
     difficultyRange: [2, 4],
     allowedContractTypes: ['hunt', 'payload_escort', 'extraction_run'],
     floorTiles: ['tidal_platform', 'tidal_sand', 'tidal_coral', 'tidal_shallows'],
@@ -92,7 +92,7 @@ export const PLANETS: Record<PlanetId, Planet> = {
   void_reach: {
     id: 'void_reach',
     name: 'Void Reach',
-    unlockCondition: { planet: 'tidal', clears: 3 },
+    unlockCondition: { planet: 'tidal', clears: 12 },
     difficultyRange: [3, 5],
     allowedContractTypes: ['hunt', 'void_breach', 'boss_hunt'],
     floorTiles: ['void_flesh', 'void_crystal', 'void_remnant'],
@@ -121,7 +121,7 @@ export const PLANETS: Record<PlanetId, Planet> = {
   furnace: {
     id: 'furnace',
     name: 'Furnace',
-    unlockCondition: { planet: 'void_reach', clears: 3 },
+    unlockCondition: { planet: 'void_reach', clears: 12 },
     difficultyRange: [4, 6],
     allowedContractTypes: ['hunt', 'boss_hunt'],
     floorTiles: ['furnace_metal', 'furnace_rock', 'furnace_grate'],
@@ -146,9 +146,37 @@ export const PLANETS: Record<PlanetId, Planet> = {
       { weaponId: 'pulse_cannon', bouncesAdd: -1 },
     ],
   },
+  hollow: {
+    id: 'hollow',
+    name: 'The Hollow',
+    unlockCondition: { planet: 'furnace', clears: 12 },
+    difficultyRange: [7, 7],
+    allowedContractTypes: ['final_hunt'],
+    floorTiles: ['hollow_void', 'hollow_bone', 'hollow_flesh'],
+    palette: { base: 0x050008, accent: 0xff0044, highlight: 0xffffff },
+    weatherVariants: ['collapse'],
+    physics: {
+      moveSpeedMult: 0.90,
+      inertia: 0.10,
+      bulletSpeedMult: 1.0,
+      bulletLifeMult: 1.0,
+      fireRateMult: 1.0,
+      enemySpeedMult: 1.15,
+      enemyHpMult: 1.40,
+      enemyDamageMult: 1.25,
+      knockbackMult: 0.5, // can't cheese with knockback
+    },
+    weaponMods: [
+      // All weapons slightly nerfed -- no single weapon dominates
+      { weaponId: 'scatter', spreadMult: 1.20 },
+      { weaponId: 'flamethrower', rangeMult: 0.85 },
+      { weaponId: 'sniper_carbine', damageMult: 0.85 },
+      { weaponId: 'entropy_cannon', rangeMult: 0.80 },
+    ],
+  },
 };
 
-export const PLANET_ORDER: PlanetId[] = ['kepler', 'tidal', 'void_reach', 'furnace'];
+export const PLANET_ORDER: PlanetId[] = ['kepler', 'tidal', 'void_reach', 'furnace', 'hollow'];
 
 export function isUnlocked(planetId: PlanetId, clearance: Record<string, number>): boolean {
   const cond = PLANETS[planetId].unlockCondition;

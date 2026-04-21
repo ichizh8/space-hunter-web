@@ -1,3 +1,28 @@
+// The Hollow Heart -- final boss stats
+export const HOLLOW_BOSS_STATS = {
+  totalHp: 1200,        // spread across 4 phases
+  phase2Threshold: 0.75, // shield drops at 75% swarm waves cleared
+  phase3Threshold: 0.45, // 45% HP -> Phase 3
+  phase4Threshold: 0.20, // 20% HP -> Phase 4 (collapse)
+  meleeDmg: 8,
+  radius: 50,
+  speed: 90,             // active speed (phases 2-4)
+  // Phase 2: sequential elite summons
+  eliteSummonTypes: [
+    'Void Hulk',       // kepler-style tank
+    'Phase Hunter',    // tidal-style speed
+    'Rift Colossus',   // void_reach-style heavy
+    'Tide Reaper',     // furnace-style DPS
+  ],
+  // Phase 3 attacks
+  ringCount: 12,        // projectiles in void ring
+  slamRadius: 180,      // ground slam AOE
+  chargeSpeed: 450,     // charge rush speed
+  // Phase 4
+  collapseRate: 8,      // arena shrinks 8px/s
+  collapseMinRadius: 400,
+};
+
 export const ELITE_TYPES = [
   'Void Hulk', 'Phase Hunter', 'Brood Mother', 'Rift Colossus',
   'Null Wraith', 'Stone Sentinel', 'Tide Reaper', 'Current Stalker',

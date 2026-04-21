@@ -51,7 +51,7 @@ export const PANTRY_COLORS: Record<string, number> = {
   elite_core: 0xffd900,
 };
 
-export const REP_THRESHOLDS = [0, 50, 150, 350, 700, 1200];
+export const REP_THRESHOLDS = [0, 30, 80, 200, 450, 800];
 
 // ---------------------------------------------------------------------------
 // Kitchen recipe system (planet ingredient cooking)
@@ -71,53 +71,53 @@ export interface KitchenRecipe {
 
 export const KITCHEN_RECIPES: Record<string, KitchenRecipe> = {
   // --- Kepler (common) ---
-  field_scrap:        { id: 'field_scrap',        name: 'Field Scrap Plate',      tier: 'common',    ingredients: { scrap_metal: 1 },                                    creditReward: 120, repReward: 15 },
-  mineral_cake:       { id: 'mineral_cake',        name: 'Mineral Cake',           tier: 'common',    ingredients: { mineral_dust: 1 },                                   creditReward: 100, repReward: 12 },
-  circuit_snack:      { id: 'circuit_snack',       name: 'Circuit Snack',          tier: 'common',    ingredients: { circuit_chips: 1 },                                  creditReward: 110, repReward: 13 },
+  field_scrap:        { id: 'field_scrap',        name: 'Field Scrap Plate',      tier: 'common',    ingredients: { scrap_metal: 1 },                                    creditReward: 35, repReward: 5 },
+  mineral_cake:       { id: 'mineral_cake',        name: 'Mineral Cake',           tier: 'common',    ingredients: { mineral_dust: 1 },                                   creditReward: 30, repReward: 4 },
+  circuit_snack:      { id: 'circuit_snack',       name: 'Circuit Snack',          tier: 'common',    ingredients: { circuit_chips: 1 },                                  creditReward: 35, repReward: 5 },
   // --- Kepler (standard) ---
-  reinforced_alloy:   { id: 'reinforced_alloy',    name: 'Reinforced Alloy Stew',  tier: 'standard',  ingredients: { scrap_metal: 2, circuit_chips: 1 },                  creditReward: 280, repReward: 40 },
-  reactor_fuel:       { id: 'reactor_fuel',        name: 'Reactor Fuel Tonic',     tier: 'standard',  ingredients: { reactor_core: 1, mineral_dust: 1 },                  creditReward: 320, repReward: 50 },
+  reinforced_alloy:   { id: 'reinforced_alloy',    name: 'Reinforced Alloy Stew',  tier: 'standard',  ingredients: { scrap_metal: 2, circuit_chips: 1 },                  creditReward: 80, repReward: 18 },
+  reactor_fuel:       { id: 'reactor_fuel',        name: 'Reactor Fuel Tonic',     tier: 'standard',  ingredients: { reactor_core: 1, mineral_dust: 1 },                  creditReward: 90, repReward: 20 },
   // --- Kepler (exotic) ---
-  nanoweave_plate:    { id: 'nanoweave_plate',     name: 'Nanoweave Plate',        tier: 'exotic',    ingredients: { nano_fiber: 1, bio_gel: 1 },                         creditReward: 500, repReward: 80 },
+  nanoweave_plate:    { id: 'nanoweave_plate',     name: 'Nanoweave Plate',        tier: 'exotic',    ingredients: { nano_fiber: 1, bio_gel: 1 },                         creditReward: 170, repReward: 35 },
   // --- Kepler (legendary) ---
-  wardens_extract:    { id: 'wardens_extract',     name: "Warden's Extract",       tier: 'legendary', ingredients: { wardens_heart: 1, reactor_core: 1, nano_fiber: 1 },  creditReward: 1200, repReward: 180 },
+  wardens_extract:    { id: 'wardens_extract',     name: "Warden's Extract",       tier: 'legendary', ingredients: { wardens_heart: 1, reactor_core: 1, nano_fiber: 1 },  creditReward: 400, repReward: 80 },
 
   // --- Tidal (common) ---
-  brine_broth:        { id: 'brine_broth',         name: 'Brine Broth',            tier: 'common',    ingredients: { salt_crystal: 1 },                                   creditReward: 110, repReward: 13 },
-  bio_paste:          { id: 'bio_paste',           name: 'Bio Paste',              tier: 'common',    ingredients: { bio_gel: 1 },                                        creditReward: 120, repReward: 15 },
-  coral_dust:         { id: 'coral_dust',          name: 'Coral Dust Wafer',       tier: 'common',    ingredients: { coral_fragment: 1 },                                 creditReward: 100, repReward: 12 },
+  brine_broth:        { id: 'brine_broth',         name: 'Brine Broth',            tier: 'common',    ingredients: { salt_crystal: 1 },                                   creditReward: 50, repReward: 7 },
+  bio_paste:          { id: 'bio_paste',           name: 'Bio Paste',              tier: 'common',    ingredients: { bio_gel: 1 },                                        creditReward: 55, repReward: 8 },
+  coral_dust:         { id: 'coral_dust',          name: 'Coral Dust Wafer',       tier: 'common',    ingredients: { coral_fragment: 1 },                                 creditReward: 45, repReward: 7 },
   // --- Tidal (standard) ---
-  deep_sea_tonic:     { id: 'deep_sea_tonic',      name: 'Deep Sea Tonic',         tier: 'standard',  ingredients: { bio_gel: 1, salt_crystal: 1 },                       creditReward: 260, repReward: 40 },
-  luminescent_brew:   { id: 'luminescent_brew',    name: 'Luminescent Brew',       tier: 'standard',  ingredients: { bioluminescent_extract: 1, coral_fragment: 1 },      creditReward: 350, repReward: 55 },
+  deep_sea_tonic:     { id: 'deep_sea_tonic',      name: 'Deep Sea Tonic',         tier: 'standard',  ingredients: { bio_gel: 1, salt_crystal: 1 },                       creditReward: 120, repReward: 25 },
+  luminescent_brew:   { id: 'luminescent_brew',    name: 'Luminescent Brew',       tier: 'standard',  ingredients: { bioluminescent_extract: 1, coral_fragment: 1 },      creditReward: 140, repReward: 28 },
   // --- Tidal (exotic) ---
-  pearl_infusion:     { id: 'pearl_infusion',      name: 'Pearl Infusion',         tier: 'exotic',    ingredients: { deep_pearl: 1, crystal_shards: 1 },                  creditReward: 550, repReward: 85 },
+  pearl_infusion:     { id: 'pearl_infusion',      name: 'Pearl Infusion',         tier: 'exotic',    ingredients: { deep_pearl: 1, crystal_shards: 1 },                  creditReward: 230, repReward: 45 },
   // --- Tidal (legendary) ---
-  leviathan_dish:     { id: 'leviathan_dish',      name: 'Leviathan Dish',         tier: 'legendary', ingredients: { leviathan_scale: 1, deep_pearl: 1, bioluminescent_extract: 1 }, creditReward: 1400, repReward: 200 },
+  leviathan_dish:     { id: 'leviathan_dish',      name: 'Leviathan Dish',         tier: 'legendary', ingredients: { leviathan_scale: 1, deep_pearl: 1, bioluminescent_extract: 1 }, creditReward: 550, repReward: 95 },
 
   // --- Void Reach (common) ---
-  void_tincture:      { id: 'void_tincture',       name: 'Void Tincture',          tier: 'common',    ingredients: { void_sap: 1 },                                       creditReward: 130, repReward: 16 },
-  crystal_dust:       { id: 'crystal_dust',        name: 'Crystal Dust Tablet',    tier: 'common',    ingredients: { crystal_shards: 1 },                                 creditReward: 115, repReward: 14 },
-  spore_concentrate:  { id: 'spore_concentrate',   name: 'Spore Concentrate',      tier: 'common',    ingredients: { corruption_spores: 1 },                              creditReward: 120, repReward: 15 },
+  void_tincture:      { id: 'void_tincture',       name: 'Void Tincture',          tier: 'common',    ingredients: { void_sap: 1 },                                       creditReward: 65, repReward: 9 },
+  crystal_dust:       { id: 'crystal_dust',        name: 'Crystal Dust Tablet',    tier: 'common',    ingredients: { crystal_shards: 1 },                                 creditReward: 60, repReward: 9 },
+  spore_concentrate:  { id: 'spore_concentrate',   name: 'Spore Concentrate',      tier: 'common',    ingredients: { corruption_spores: 1 },                              creditReward: 65, repReward: 10 },
   // --- Void Reach (standard) ---
-  rift_extract:       { id: 'rift_extract',        name: 'Rift Extract',           tier: 'standard',  ingredients: { void_sap: 1, rift_amber: 1 },                        creditReward: 380, repReward: 60 },
-  living_void_broth:  { id: 'living_void_broth',   name: 'Living Void Broth',      tier: 'standard',  ingredients: { living_tissue: 1, corruption_spores: 1 },            creditReward: 340, repReward: 55 },
+  rift_extract:       { id: 'rift_extract',        name: 'Rift Extract',           tier: 'standard',  ingredients: { void_sap: 1, rift_amber: 1 },                        creditReward: 160, repReward: 32 },
+  living_void_broth:  { id: 'living_void_broth',   name: 'Living Void Broth',      tier: 'standard',  ingredients: { living_tissue: 1, corruption_spores: 1 },            creditReward: 150, repReward: 30 },
   // --- Void Reach (exotic) ---
-  amber_crystal:      { id: 'amber_crystal',       name: 'Amber Crystal Fusion',   tier: 'exotic',    ingredients: { rift_amber: 1, magma_glass: 1 },                     creditReward: 600, repReward: 90 },
+  amber_crystal:      { id: 'amber_crystal',       name: 'Amber Crystal Fusion',   tier: 'exotic',    ingredients: { rift_amber: 1, magma_glass: 1 },                     creditReward: 280, repReward: 50 },
   // --- Void Reach (legendary) ---
-  hollow_essence:     { id: 'hollow_essence',      name: 'Hollow Essence',         tier: 'legendary', ingredients: { hollow_core: 1, living_tissue: 1, rift_amber: 1 },   creditReward: 1600, repReward: 220 },
+  hollow_essence:     { id: 'hollow_essence',      name: 'Hollow Essence',         tier: 'legendary', ingredients: { hollow_core: 1, living_tissue: 1, rift_amber: 1 },   creditReward: 650, repReward: 110 },
 
   // --- Furnace (common) ---
-  slag_gruel:         { id: 'slag_gruel',          name: 'Slag Gruel',             tier: 'common',    ingredients: { slag_chunk: 1 },                                     creditReward: 115, repReward: 14 },
-  magma_glass_shard:  { id: 'magma_glass_shard',   name: 'Magma Glass Shard',      tier: 'common',    ingredients: { magma_glass: 1 },                                    creditReward: 130, repReward: 16 },
-  heat_coil_tonic:    { id: 'heat_coil_tonic',     name: 'Heat Coil Tonic',        tier: 'common',    ingredients: { heat_coil: 1 },                                      creditReward: 120, repReward: 15 },
+  slag_gruel:         { id: 'slag_gruel',          name: 'Slag Gruel',             tier: 'common',    ingredients: { slag_chunk: 1 },                                     creditReward: 80, repReward: 11 },
+  magma_glass_shard:  { id: 'magma_glass_shard',   name: 'Magma Glass Shard',      tier: 'common',    ingredients: { magma_glass: 1 },                                    creditReward: 85, repReward: 12 },
+  heat_coil_tonic:    { id: 'heat_coil_tonic',     name: 'Heat Coil Tonic',        tier: 'common',    ingredients: { heat_coil: 1 },                                      creditReward: 80, repReward: 11 },
   // --- Furnace (standard) ---
-  molten_alloy:       { id: 'molten_alloy',        name: 'Molten Alloy Plate',     tier: 'standard',  ingredients: { slag_chunk: 1, heat_coil: 1 },                       creditReward: 300, repReward: 48 },
-  obsidian_extract:   { id: 'obsidian_extract',    name: 'Obsidian Extract',       tier: 'standard',  ingredients: { obsidian_shard: 1, molten_core: 1 },                 creditReward: 420, repReward: 65 },
+  molten_alloy:       { id: 'molten_alloy',        name: 'Molten Alloy Plate',     tier: 'standard',  ingredients: { slag_chunk: 1, heat_coil: 1 },                       creditReward: 180, repReward: 38 },
+  obsidian_extract:   { id: 'obsidian_extract',    name: 'Obsidian Extract',       tier: 'standard',  ingredients: { obsidian_shard: 1, molten_core: 1 },                 creditReward: 200, repReward: 42 },
   // --- Furnace (legendary) ---
-  forge_heart_dish:   { id: 'forge_heart_dish',    name: 'Forge Heart Dish',       tier: 'legendary', ingredients: { forge_heart: 1, molten_core: 1, obsidian_shard: 1 }, creditReward: 2000, repReward: 250 },
+  forge_heart_dish:   { id: 'forge_heart_dish',    name: 'Forge Heart Dish',       tier: 'legendary', ingredients: { forge_heart: 1, molten_core: 1, obsidian_shard: 1 }, creditReward: 700, repReward: 120 },
 
   // --- Cross-planet exotic ---
-  void_furnace_fusion: { id: 'void_furnace_fusion', name: 'Void-Furnace Fusion',   tier: 'exotic',    ingredients: { rift_amber: 1, molten_core: 1 },                     creditReward: 700, repReward: 100 },
+  void_furnace_fusion: { id: 'void_furnace_fusion', name: 'Void-Furnace Fusion',   tier: 'exotic',    ingredients: { rift_amber: 1, molten_core: 1 },                     creditReward: 300, repReward: 55 },
 };
 
 export function canCook(recipe: KitchenRecipe, inventory: Record<string, number>): boolean {

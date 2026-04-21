@@ -1,7 +1,7 @@
 import { v2, v2dist, randRange } from '../lib/math';
 import { createEnemy } from './Enemies';
 import { WORLD_W, WORLD_H } from './constants';
-import { ELITE_TYPES, APEX_TYPES, ELITE_OVERRIDES, ELITE_EPITHETS, rollAffixes } from '../data/elites';
+import { ELITE_TYPES, APEX_TYPES, ELITE_OVERRIDES, ELITE_EPITHETS, rollAffixes, HOLLOW_BOSS_STATS } from '../data/elites';
 import { halSay, HAL_ELITE_SPAWNED, HAL_WAVE_INCOMING } from '../data/hal';
 import type { Game } from './Game';
 
@@ -10,6 +10,9 @@ export class SpawnManager {
   update(dt: number, game: Game): void {
     // Room-based contracts: rooms have fixed spawn zones, no timed waves/elites
     if (game.currentRoom) return;
+
+    // Final Hunt: boss handles its own spawn logic via updateHollowBoss
+    if (game.contractType === 'final_hunt') return;
 
     // Boss Hunt: spawn apex after wave 2
     if (game.contractType === 'boss_hunt' && !game.apexSpawned && game.waveCount >= 2) {
@@ -170,6 +173,36 @@ export class SpawnManager {
       setTimeout(() => game.hud.showHalMessage(halSay(HAL_ELITE_SPAWNED), 4), 1500);
       game.halCooldown = 6;
     }
+  }
+
+  spawnHollowBoss(game: Game): void {
+    const W = game.map.roomW ?? WORLD_W;
+    const H = game.map.roomH ?? WORLD_H;
+    const cx = W / 2;
+    const cy = H / 2;
+
+    const boss = createEnemy('Cave Lurker', { x: cx, y: cy }, true);
+    boss.name = 'The Hollow Heart';
+    boss.hp = HOLLOW_BOSS_STATS.totalHp;
+    boss.maxHp = HOLLOW_BOSS_STATS.totalHp;
+    boss.speed = 0; // dormant in phase 1
+    boss.meleeDmg = HOLLOW_BOSS_STATS.meleeDmg;
+    boss.radius = HOLLOW_BOSS_STATS.radius;
+    boss.detection = 9999;
+    boss.behavior = 'elite';
+    boss.isElite = true;
+    boss.isTarget = true;
+    boss.leash = 9999;
+    boss.color = 0xff0044;
+    // Invulnerable during phase 1 (shielded)
+    boss.shieldHp = 999999;
+    boss.eliteAttackTimer = 999;
+    boss.eliteChargeTimer = 0;
+    boss.eliteAttackCycle = 0;
+
+    game.hollowBossId = boss.id;
+    game.hollowBossMaxHp = HOLLOW_BOSS_STATS.totalHp;
+    game.enemies.enemies.push(boss);
   }
 
   spawnBreaches(game: Game): void {
