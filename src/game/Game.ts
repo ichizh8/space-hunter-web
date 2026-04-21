@@ -906,13 +906,20 @@ export class Game {
   private setupInput() {
     const canvas = this.app.canvas;
 
-    // Touch
+    // Touch (with swipe-to-dash detection)
+    let swipeStartX = 0, swipeStartY = 0, swipeStartTime = 0;
+    const SWIPE_MIN_DIST = 50;  // pixels
+    const SWIPE_MAX_TIME = 300; // ms
+
     canvas.addEventListener('touchstart', (e) => {
       e.preventDefault();
       const t = e.touches[0];
       const rect = canvas.getBoundingClientRect();
       const tx = t.clientX - rect.left;
       const ty = t.clientY - rect.top;
+      swipeStartX = tx;
+      swipeStartY = ty;
+      swipeStartTime = performance.now();
       // Check kit button taps
       const kitBtnW = 72;
       const kitBtnH = 52;
@@ -943,6 +950,24 @@ export class Game {
 
     canvas.addEventListener('touchend', (e) => {
       e.preventDefault();
+      // Detect swipe for dash
+      if (e.changedTouches.length > 0) {
+        const t = e.changedTouches[0];
+        const rect = canvas.getBoundingClientRect();
+        const endX = t.clientX - rect.left;
+        const endY = t.clientY - rect.top;
+        const dx = endX - swipeStartX;
+        const dy = endY - swipeStartY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const elapsed = performance.now() - swipeStartTime;
+        if (dist >= SWIPE_MIN_DIST && elapsed <= SWIPE_MAX_TIME && this.dashMaxCharges > 0) {
+          // Override dash direction with swipe direction
+          const len = dist;
+          this.player.vel.x = (dx / len) * this.player.speed;
+          this.player.vel.y = (dy / len) * this.player.speed;
+          this.activateDash();
+        }
+      }
       this.player.onTouchEnd();
     }, { passive: false });
 
