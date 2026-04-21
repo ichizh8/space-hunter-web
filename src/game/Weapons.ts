@@ -49,6 +49,24 @@ export class WeaponSystem {
   parasiteDuration = 4;      // dart deep_parasite: 4s base, 6s with perk
   beamWidthMult = 1.0;       // entropy_cannon wide_lens: doubles beam hit radius
 
+  // Laser Pistol perks
+  laserMark = false;           // Tracer Rounds: every 3rd hit marks enemy
+  laserPierce = false;         // Overcharge: beam pierces first enemy
+  laserLinger = 0;             // Marksman Beam mutation: beam trail lingers
+  voidSeedOnHit = false;       // Entropy Beam mutation: plant void seeds
+  laserHitCount = 0;           // tracks hits for tracer marking
+
+  // Reworked weapon perks
+  lanceTrail = false;            // Resonant Shot: lance leaves damage trail
+  backblast = false;             // Backblast: burn kills explode
+  proximityFuse = false;         // Proximity Fuse: grenades detonate near enemies
+  siphonLink = false;            // Siphon Link: void beam hit gives player corruption
+  shatterBounce = false;         // Shatter Bounce: pulse cannon bounces emit shockwave
+  killstreak = -1;               // Killstreak: -1 = disabled, 0+ = consecutive hit count
+  spinUp = false;                // Spin Up: chain rifle fire rate ramps
+  spinUpTimer = 0;               // how long chain rifle has been firing continuously
+  shatterBounceQueue: Array<{ x: number; y: number }> = []; // positions where shatter bounces occurred
+
   // Mutation flags
   slowFieldOnLand = false;
   singularityOnHit = false;
@@ -84,7 +102,13 @@ export class WeaponSystem {
       return [];
     }
 
-    player.fireCooldown = Math.max(0.02, (def.fireRate + this.fireRateBonus) * this.planetFireRateMult);
+    let effectiveFireRate = def.fireRate + this.fireRateBonus;
+    // Spin Up: chain rifle fire rate ramps +10%/s (max +40%)
+    if (this.spinUp && def.id === 'chain_rifle') {
+      const spinBonus = Math.min(0.4, this.spinUpTimer * 0.1);
+      effectiveFireRate *= (1 - spinBonus);
+    }
+    player.fireCooldown = Math.max(0.02, effectiveFireRate * this.planetFireRateMult);
     if (def.magSize < 999) player.magAmmo--;
 
     const swingAngle = (def.pattern === 'melee_aoe' || def.pattern === 'laser') ? player.lastMoveAngle : player.aimAngle;
@@ -207,7 +231,7 @@ export class WeaponSystem {
       }
 
       case 'laser': {
-        const beamLife = 0.12;
+        const beamLife = 0.12 + this.laserLinger;
         return [makeBullet(angle, {
           vel: v2(0, 0),
           life: beamLife,
@@ -216,7 +240,7 @@ export class WeaponSystem {
           lineStart: v2(pos.x, pos.y),
           lineEnd: v2(pos.x + Math.cos(angle) * range, pos.y + Math.sin(angle) * range),
           tag: 'laser_beam',
-          piercing: false,
+          piercing: this.laserPierce,
         })];
       }
 
@@ -257,6 +281,16 @@ export class WeaponSystem {
       }
 
       b.pos = v2add(b.pos, v2mul(b.vel, dt));
+
+      // Proximity Fuse: grenades (aoeRadius > 0) detonate early if within 30px of enemy
+      if (this.proximityFuse && b.aoeRadius > 0 && b.fromPlayer && !b.hitSet.has(-999)) {
+        for (const e of enemies) {
+          if (v2dist(b.pos, e.pos) < 30) {
+            b.life = 0; // trigger explosion on next removal pass
+            break;
+          }
+        }
+      }
     }
   }
 
@@ -275,6 +309,10 @@ export class WeaponSystem {
         const a = Math.atan2(bullet.vel.y, bullet.vel.x) + randRange(-1, 1);
         const spd = v2len(bullet.vel);
         bullet.vel = v2fromAngle(a, spd);
+        // Shatter Bounce: queue shockwave at bounce position
+        if (this.shatterBounce) {
+          this.shatterBounceQueue.push({ x: bullet.pos.x, y: bullet.pos.y });
+        }
       } else {
         bullet.life = 0; // Mark for removal
       }

@@ -75,56 +75,99 @@ export class BulletSystem {
     for (const bullet of game.weapons.bullets) {
       if (!bullet.fromPlayer) continue;
 
-      // Laser beam: find nearest enemy on the line, stop there
+      // Laser beam: find enemies on line, sorted by distance
       if (bullet.tag === 'laser_beam' && bullet.lineStart && bullet.lineEnd) {
-        let nearestDist = Infinity;
-        let nearestEnemy: Enemy | null = null;
+        // Collect all enemies on the beam line, sorted nearest first
+        const beamHits: Array<{ enemy: Enemy; dist: number }> = [];
         for (const enemy of game.enemies.enemies) {
           if (enemy.hp <= 0 || enemy.isAlly || bullet.hitSet.has(enemy.id)) continue;
           if (!lineSegHitsCircle(bullet.lineStart, bullet.lineEnd, enemy.pos, enemy.radius + 4)) continue;
-          const d = v2dist(bullet.lineStart, enemy.pos);
-          if (d < nearestDist) { nearestDist = d; nearestEnemy = enemy; }
+          beamHits.push({ enemy, dist: v2dist(bullet.lineStart, enemy.pos) });
         }
-        if (nearestEnemy) {
-          bullet.hitSet.add(nearestEnemy.id);
-          // Shorten beam to stop at hit enemy
-          const dir = v2norm(v2sub(bullet.lineEnd, bullet.lineStart));
-          bullet.lineEnd = v2(nearestEnemy.pos.x - dir.x * nearestEnemy.radius, nearestEnemy.pos.y - dir.y * nearestEnemy.radius);
+        beamHits.sort((a, b) => a.dist - b.dist);
+
+        // How many enemies can we hit? 1 normally, 2 with laser_pierce
+        const maxHits = bullet.piercing ? 2 : 1;
+        let lastHitEnemy: Enemy | null = null;
+
+        for (let hi = 0; hi < Math.min(beamHits.length, maxHits); hi++) {
+          const { enemy: hitEnemy } = beamHits[hi];
+          bullet.hitSet.add(hitEnemy.id);
+          lastHitEnemy = hitEnemy;
+
           let finalDmg = bullet.damage;
-          if (nearestEnemy.markedTimer > 0) finalDmg = Math.floor(finalDmg * nearestEnemy.markedDmgBonus);
-          // headhunter mastery: +50% damage vs elites for sidearm
-          if (game.hasMod('headhunter') && nearestEnemy.isElite) finalDmg = Math.floor(finalDmg * 1.5);
-          // armor_pierce mastery: sidearm shots ignore the 'armored' affix
-          if (nearestEnemy.affixes.includes('armored') && !game.hasMod('armor_pierce')) finalDmg = Math.max(1, Math.floor(finalDmg * 0.5));
-          if (nearestEnemy.affixes.includes('shielded') && nearestEnemy.shieldHp > 0) {
-            if (nearestEnemy.shieldHp >= finalDmg) { nearestEnemy.shieldHp -= finalDmg; finalDmg = 0; }
-            else { finalDmg -= nearestEnemy.shieldHp; nearestEnemy.shieldHp = 0; }
+          if (hitEnemy.markedTimer > 0) finalDmg = Math.floor(finalDmg * hitEnemy.markedDmgBonus);
+          // headhunter mastery: +50% damage vs elites
+          if (game.hasMod('headhunter') && hitEnemy.isElite) finalDmg = Math.floor(finalDmg * 1.5);
+          // armor_pierce mastery: ignore armored affix
+          if (hitEnemy.affixes.includes('armored') && !game.hasMod('armor_pierce')) finalDmg = Math.max(1, Math.floor(finalDmg * 0.5));
+          if (hitEnemy.affixes.includes('shielded') && hitEnemy.shieldHp > 0) {
+            if (hitEnemy.shieldHp >= finalDmg) { hitEnemy.shieldHp -= finalDmg; finalDmg = 0; }
+            else { finalDmg -= hitEnemy.shieldHp; hitEnemy.shieldHp = 0; }
           }
-          nearestEnemy.hp -= finalDmg;
-          nearestEnemy.hitFlash = 0.1;
-          // suppressor mastery: sidearm shots don't aggro undetected enemies
-          if (!game.hasMod('suppressor') || nearestEnemy.isAggroed) nearestEnemy.isAggroed = true;
+          hitEnemy.hp -= finalDmg;
+          hitEnemy.hitFlash = 0.1;
+          // suppressor mastery: beam doesn't aggro undetected enemies
+          if (!game.hasMod('suppressor') || hitEnemy.isAggroed) hitEnemy.isAggroed = true;
           game.damageDealt += bullet.damage;
-          if (nearestEnemy.hp <= 0) {
-            game.onEnemyKilled(nearestEnemy);
-            // killcam mastery: next shot fires instantly after a sidearm kill
-            if (game.hasMod('killcam')) game.killcamReady = true;
-          }
-          // Entropy Gun (void sidearm) fragment spawn on hit
-          if (game.weapons.fragmentOnHit) {
-            const hitAngle = Math.atan2(nearestEnemy.pos.y - bullet.lineStart!.y, nearestEnemy.pos.x - bullet.lineStart!.x);
-            for (let _fi = 0; _fi < 3; _fi++) {
-              const fa = hitAngle + (Math.random() - 0.5) * Math.PI;
-              game.weapons.bullets.push({
-                pos: { x: nearestEnemy.pos.x, y: nearestEnemy.pos.y },
-                vel: { x: Math.cos(fa) * 240, y: Math.sin(fa) * 240 },
-                radius: 3, color: 0x9933ff, damage: Math.max(1, Math.floor(bullet.damage * 0.4)),
-                life: 0.45, maxLife: 0.45,
-                piercing: false, homing: game.hasMod('fragment_magnet'), bounces: 0, aoeRadius: 0,
-                fromPlayer: true, hitSet: new Set(), tag: 'fragment',
-              });
+
+          // Tracer Rounds: every 3rd hit marks enemy (+25% dmg from all sources 2s)
+          if (game.weapons.laserMark) {
+            game.weapons.laserHitCount++;
+            if (game.weapons.laserHitCount >= 3) {
+              game.weapons.laserHitCount = 0;
+              hitEnemy.markedTimer = 2.0;
+              hitEnemy.markedDmgBonus = 1.25;
+              hitEnemy.hitFlash = 0.3; // stronger flash for mark
             }
           }
+
+          // Entropy Beam (void sidearm): plant void seed on hit
+          if (game.weapons.voidSeedOnHit) {
+            hitEnemy.voidSeeds = (hitEnemy.voidSeeds ?? 0) + 1;
+            // void_resonance mastery: each seed adds +5 corruption to enemy
+            if (game.hasMod('void_resonance')) {
+              const ec = game.enemyCorruption.get(hitEnemy.id) ?? 0;
+              game.enemyCorruption.set(hitEnemy.id, ec + 5);
+            }
+            const seedThreshold = game.hasMod('deep_roots') ? 2 : 3;
+            if (hitEnemy.voidSeeds >= seedThreshold) {
+              hitEnemy.voidSeeds = 0;
+              // AOE detonation: 80px, 5 damage
+              for (const nearby of game.enemies.enemies) {
+                if (nearby.hp <= 0 || nearby.isAlly || nearby === hitEnemy) continue;
+                if (v2dist(hitEnemy.pos, nearby.pos) <= 80) {
+                  nearby.hp -= 5;
+                  nearby.hitFlash = 0.15;
+                  if (nearby.hp <= 0) game.onEnemyKilled(nearby);
+                  // seed_spread mastery: detonation plants 1 seed on nearby
+                  if (game.hasMod('seed_spread')) nearby.voidSeeds = (nearby.voidSeeds ?? 0) + 1;
+                }
+              }
+              // entropy_field mastery: detonation leaves 3s corruption zone
+              if (game.hasMod('entropy_field')) {
+                game.smokeZones.push({ x: hitEnemy.pos.x, y: hitEnemy.pos.y, radius: 50, life: 3, maxLife: 3, corruptionField: true, tickDamage: 0, pull: false } as typeof game.smokeZones[number]);
+              }
+              // VFX: purple explosion at enemy pos
+              for (let _p = 0; _p < 12; _p++) {
+                const pa = Math.random() * Math.PI * 2;
+                const ps = 60 + Math.random() * 80;
+                game.particles.push({ x: hitEnemy.pos.x, y: hitEnemy.pos.y, vx: Math.cos(pa) * ps, vy: Math.sin(pa) * ps, life: 0.5, maxLife: 0.5, radius: 3, color: 0xaa44ff });
+              }
+            }
+          }
+
+          if (hitEnemy.hp <= 0) {
+            game.onEnemyKilled(hitEnemy);
+            // killcam mastery: next shot fires instantly after kill
+            if (game.hasMod('killcam')) game.killcamReady = true;
+          }
+        }
+
+        // Shorten beam to stop at last hit enemy (or the furthest one we pierced through)
+        if (lastHitEnemy) {
+          const dir = v2norm(v2sub(bullet.lineEnd, bullet.lineStart));
+          bullet.lineEnd = v2(lastHitEnemy.pos.x + dir.x * lastHitEnemy.radius, lastHitEnemy.pos.y + dir.y * lastHitEnemy.radius);
         }
         continue;
       }
@@ -152,6 +195,10 @@ export class BulletSystem {
           enemy.hp -= finalDmg;
           enemy.hitFlash = 0.08;
           enemy.isAggroed = true;
+          // Siphon Link: beam on target gives player +2 corruption/s
+          if (game.weapons.siphonLink) {
+            game.player.corruption = Math.min(100, game.player.corruption + 2 * dt);
+          }
           if (enemy.hp <= 0) game.onEnemyKilled(enemy);
         }
         continue;
@@ -241,6 +288,11 @@ export class BulletSystem {
           if (game.hasMod('sp_damage') && game.player.weaponId === 'chain_rifle' && game.player.mutated === 'void') {
             const _baseSpd = CREATURE_DEFS[enemy.name]?.speed ?? enemy.speed;
             if (enemy.speed < _baseSpd * 0.95) finalDmg += 1;
+          }
+          // Killstreak: sniper consecutive hit bonus (+1 per hit, max +5)
+          if (bullet.tag === 'sniper_trail' && game.weapons.killstreak >= 0) {
+            finalDmg += Math.min(game.weapons.killstreak, 5);
+            game.weapons.killstreak++;
           }
           // Execute threshold (sniper clean)
           if (game.weapons.executeThreshold > 0 && enemy.hp > 0 && (enemy.hp / enemy.maxHp) <= game.weapons.executeThreshold) {
@@ -591,6 +643,24 @@ export class BulletSystem {
       game.corruptionBurstReady = true;
     }
 
+    // Process shatter bounce shockwaves (pulse cannon perk)
+    for (const sb of game.weapons.shatterBounceQueue) {
+      for (const enemy of game.enemies.enemies) {
+        if (enemy.hp <= 0 || enemy.isAlly) continue;
+        if (v2dist({ x: sb.x, y: sb.y }, enemy.pos) <= 20) {
+          enemy.hp -= 1;
+          enemy.hitFlash = 0.08;
+          if (enemy.hp <= 0) game.onEnemyKilled(enemy);
+        }
+      }
+      // VFX: small blue shockwave
+      for (let i = 0; i < 4; i++) {
+        const a = Math.random() * Math.PI * 2;
+        game.particles.push({ x: sb.x, y: sb.y, vx: Math.cos(a) * 30, vy: Math.sin(a) * 30, life: 0.25, maxLife: 0.25, radius: 2, color: 0x44aaff });
+      }
+    }
+    game.weapons.shatterBounceQueue = [];
+
     // Remove dead enemies
     game.enemies.enemies = game.enemies.enemies.filter(e => e.hp > 0);
 
@@ -631,6 +701,12 @@ export class BulletSystem {
           const czRadius = 80 + (game.hasMod('corr_zone_expand') ? 40 : 0);
           game.smokeZones.push({ x: b.pos.x, y: b.pos.y, radius: czRadius, life: 5, maxLife: 5, corruptionField: true, tickDamage: game.hasMod('zone_damage') ? 2 : 0, pull: game.hasMod('void_pull') });
         }
+      }
+    }
+    // Killstreak reset: if sniper bullet expires without hitting anyone, reset streak
+    for (const b of game.weapons.bullets) {
+      if (b.life <= 0 && b.tag === 'sniper_trail' && b.hitSet.size === 0 && game.weapons.killstreak > 0) {
+        game.weapons.killstreak = 0;
       }
     }
     game.weapons.bullets = game.weapons.bullets.filter(b => b.life > 0);

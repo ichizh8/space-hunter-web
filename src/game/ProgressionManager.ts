@@ -244,6 +244,28 @@ export class ProgressionManager {
           game.weapons.burnOnHit = true;
         } else if (card.perkEffect === 'deflect') {
           game.weapons.deflect = true;
+        } else if (card.perkEffect === 'laser_range') {
+          // Focused Lens: +40% range, +1 damage
+          game.weapons.rangeBonus = (game.weapons.rangeBonus ?? 0) + Math.floor(286 * 0.4);
+          game.weapons.bonusDamage = (game.weapons.bonusDamage ?? 0) + 1;
+        } else if (card.perkEffect === 'laser_mark') {
+          game.weapons.laserMark = true;
+        } else if (card.perkEffect === 'laser_pierce') {
+          game.weapons.laserPierce = true;
+        } else if (card.perkEffect === 'lance_trail') {
+          game.weapons.lanceTrail = true;
+        } else if (card.perkEffect === 'backblast') {
+          game.weapons.backblast = true;
+        } else if (card.perkEffect === 'proximity_fuse') {
+          game.weapons.proximityFuse = true;
+        } else if (card.perkEffect === 'siphon_link') {
+          game.weapons.siphonLink = true;
+        } else if (card.perkEffect === 'shatter_bounce') {
+          game.weapons.shatterBounce = true;
+        } else if (card.perkEffect === 'killstreak') {
+          game.weapons.killstreak = 0; // flag, tracking done in BulletSystem
+        } else if (card.perkEffect === 'spin_up') {
+          game.weapons.spinUp = true;
         }
         // Boolean perks stored as flags
         game.activeModifiers.push(card.id);
@@ -258,13 +280,14 @@ export class ProgressionManager {
 
         // Apply mutation stat changes per weapon
         if (wid === 'sidearm' && path === 'clean') {
-          // Marksman Rifle: fire rate halved, damage x3, +50% range
-          game.weapons.fireRateBonus += 0.225;
-          game.weapons.bonusDamage += 4;
-          game.weapons.rangeBonus += 110;
+          // Marksman Beam: fire rate halved, damage x3, +60% range, beam lingers 0.3s
+          game.weapons.fireRateBonus += 0.625; // half speed (1.25 -> ~2.5)
+          game.weapons.bonusDamage += Math.floor(2.8 * 2); // x3 total
+          game.weapons.rangeBonus += Math.floor(286 * 0.6);
+          game.weapons.laserLinger = 0.3;
         } else if (wid === 'sidearm' && path === 'void') {
-          // Entropy Gun: fragments on hit
-          game.weapons.fragmentOnHit = true;
+          // Entropy Beam: void seeds on hit, 3 seeds = AOE detonation
+          game.weapons.voidSeedOnHit = true;
         } else if (wid === 'scatter' && path === 'clean') {
           // Flechette: tighter spread, pierce 2
           game.weapons.piercingCount += 2;

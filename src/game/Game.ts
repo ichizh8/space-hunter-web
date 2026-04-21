@@ -1544,6 +1544,16 @@ export class Game {
       }
     }
 
+    // Spin Up: track continuous fire time for chain rifle
+    if (this.weapons.spinUp && this.player.weaponId === 'chain_rifle') {
+      if (this.player.fireCooldown > 0) {
+        this.weapons.spinUpTimer += dt;
+      } else {
+        // Not firing -- decay spin up timer
+        this.weapons.spinUpTimer = Math.max(0, this.weapons.spinUpTimer - dt * 3);
+      }
+    }
+
     // Player bullets update
     this.weapons.update(dt, this.enemies.enemies.map(e => ({ pos: e.pos, id: e.id })));
 
@@ -1585,6 +1595,23 @@ export class Game {
   }
 
   onEnemyKilled(enemy: Enemy) {
+    // Backblast: burning enemies explode on death (2 dmg, 60px)
+    if (this.weapons.backblast && enemy.burnTimer > 0) {
+      for (const nearby of this.enemies.enemies) {
+        if (nearby.hp <= 0 || nearby.isAlly || nearby === enemy) continue;
+        if (v2dist(enemy.pos, nearby.pos) <= 60) {
+          nearby.hp -= 2;
+          nearby.hitFlash = 0.12;
+          if (nearby.hp <= 0) this.onEnemyKilled(nearby);
+        }
+      }
+      // VFX: orange explosion
+      for (let i = 0; i < 8; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const s = 40 + Math.random() * 60;
+        this.particles.push({ x: enemy.pos.x, y: enemy.pos.y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 0.4, maxLife: 0.4, radius: 3, color: 0xff6622 });
+      }
+    }
     this.progression.onEnemyKilled(enemy, this);
   }
 

@@ -45,8 +45,11 @@ export type WeaponPerkEffect =
   | 'sniper_range'
   | 'chain_slow_boost' | 'chain_autocrit'
   | 'deflect' | 'beam_width'
+  | 'laser_range' | 'laser_mark' | 'laser_pierce'
+  | 'lance_trail' | 'backblast' | 'proximity_fuse' | 'siphon_link'
+  | 'shatter_bounce' | 'killstreak' | 'spin_up'
   // Fork effects (level 5 for weapons without named perks at 5)
-  | 'flamer_fork' | 'grenade_fork' | 'entropy_fork'
+  | 'sidearm_fork' | 'flamer_fork' | 'grenade_fork' | 'entropy_fork'
   | 'pulse_fork' | 'sniper_fork' | 'chain_fork';
 
 export interface WeaponPerk {
@@ -59,19 +62,19 @@ export interface WeaponPerk {
 
 export const WEAPON_LEVEL_PERKS: Record<string, Record<number, WeaponPerk>> = {
   sidearm: {
-    2: { icon: '⚡', name: 'Hair Trigger',   desc: 'Fire rate +25%',                    effect: 'fire_rate',     value: -0.09 },
-    3: { icon: '🎯', name: 'Hollow Point',   desc: '+2 damage per shot',                effect: 'damage',        value: 2 },
-    4: { icon: '💥', name: 'Overpressure',   desc: 'Bullets pierce 1 enemy',            effect: 'piercing',      value: true },
-    5: { icon: '🌀', name: 'Rapid Fire',     desc: 'Fire rate +40%, mag +6',            effect: 'fire_rate_mag', value: 0 },
+    2: { icon: '⚡', name: 'Focused Lens',    desc: 'Beam range +40%, +1 damage',        effect: 'laser_range',   value: 0.4 },
+    3: { icon: '🎯', name: 'Tracer Rounds',   desc: 'Every 3rd hit marks enemy: +25% dmg from all sources 2s', effect: 'laser_mark', value: true },
+    4: { icon: '💥', name: 'Overcharge',      desc: 'Beam pierces first enemy, hits 2nd', effect: 'laser_pierce', value: true },
+    5: { icon: '🌀', name: 'Fork',            desc: 'Clean: Marksman Beam | Void: Entropy Beam', effect: 'sidearm_fork', value: true },
   },
   scatter: {
     2: { icon: '↔',  name: 'Wide Bore',      desc: 'Cone spread +30%, 1 extra pellet',  effect: 'pellets',       value: 1 },
     3: { icon: '💥', name: 'Buckshot',       desc: '+1 damage per pellet',              effect: 'damage',        value: 1 },
-    4: { icon: '🔥', name: 'Incendiary',     desc: 'Pellets slow enemies 20% for 1s',   effect: 'slow',          value: true },
+    4: { icon: '🔥', name: 'Slug Shot',       desc: 'Pellets slow enemies 20% for 1s',   effect: 'slow',          value: true },
     5: { icon: '🌪', name: 'Salvo',          desc: 'Fire rate +30%, 2 extra pellets',   effect: 'pellets_rate',  value: 0 },
   },
   lance: {
-    2: { icon: '⚡', name: 'Charged Shot',   desc: 'Projectile speed +30%',             effect: 'bullet_speed',  value: 84 },
+    2: { icon: '⚡', name: 'Resonant Shot',   desc: 'Lance leaves 0.5s damage trail (30% dmg)', effect: 'lance_trail', value: true },
     3: { icon: '💎', name: 'Void Core',      desc: '+3 damage',                         effect: 'damage',        value: 3 },
     4: { icon: '🌀', name: 'Overload',       desc: 'On kill: fires a 2nd lance auto',   effect: 'on_kill_lance', value: true },
     5: { icon: '💥', name: 'Singularity',    desc: 'Explosion on impact, 60px AOE',     effect: 'explode',       value: true },
@@ -89,37 +92,37 @@ export const WEAPON_LEVEL_PERKS: Record<string, Record<number, WeaponPerk>> = {
     5: { icon: '💀', name: 'Voidseeker',     desc: 'On kill: splits into 2 new darts',  effect: 'split_on_kill', value: true },
   },
   flamethrower: {
-    2: { icon: 'F',  name: 'Fuel Tank',      desc: 'Range +30px',                       effect: 'range_bonus',   value: 30 },
+    2: { icon: 'F',  name: 'Backblast',      desc: 'Enemies that die while burning explode (2 dmg, 60px)', effect: 'backblast', value: true },
     3: { icon: 'N',  name: 'Napalm',         desc: 'Burn upgrade: 3 dmg/s (base 2), spreads on kill', effect: 'burning', value: true },
     4: { icon: 'P',  name: 'Pressurized',    desc: 'Fire rate +30%',                    effect: 'fire_rate',     value: -0.036 },
     5: { icon: 'T',  name: 'Fork',           desc: 'Clean: Cryo Flamer | Void: Corruption Spray', effect: 'flamer_fork', value: true },
   },
   grenade_launcher: {
-    2: { icon: 'H',  name: 'Heavy Ordinance', desc: '+3 AOE damage',                    effect: 'damage',            value: 3 },
+    2: { icon: 'H',  name: 'Proximity Fuse',  desc: 'Grenades detonate early within 30px of enemy', effect: 'proximity_fuse', value: true },
     3: { icon: 'C',  name: 'Cluster Bomb',    desc: 'Explosion spawns 3 mini grenades', effect: 'cluster',           value: true },
     4: { icon: 'S',  name: 'Stagger',         desc: 'Explosion knocks enemies back 80px', effect: 'grenade_knockback', value: true },
     5: { icon: 'A',  name: 'Fork',            desc: 'Clean: Airburst | Void: Void Grenade', effect: 'grenade_fork', value: true },
   },
   entropy_cannon: {
-    2: { icon: 'D',  name: 'Overcharge',      desc: '+1 base damage',                   effect: 'damage',        value: 1 },
+    2: { icon: 'D',  name: 'Siphon Link',     desc: 'Beam on target: +2 corruption/s to player', effect: 'siphon_link', value: true },
     3: { icon: 'R',  name: 'Rapid Decay',     desc: 'Rate of fire +20%',                effect: 'fire_rate',     value: -0.016 },
     4: { icon: 'W',  name: 'Wide Lens',        desc: 'Beam width x2, easier to hit',     effect: 'beam_width',    value: true },
     5: { icon: 'F',  name: 'Fork',            desc: 'Clean: Stabilized | Void: Resonance', effect: 'entropy_fork', value: true },
   },
   pulse_cannon: {
     2: { icon: 'B',  name: 'Extra Bounce',    desc: '+1 bounce (5 total)',               effect: 'bounce_extra',  value: 1 },
-    3: { icon: 'D',  name: 'Impact',          desc: '+1 damage',                         effect: 'damage',        value: 1 },
+    3: { icon: 'D',  name: 'Shatter Bounce',  desc: 'Each bounce releases 20px shockwave (1 dmg)', effect: 'shatter_bounce', value: true },
     4: { icon: 'R',  name: 'Wide Bounce',     desc: 'Bounce radius +60px',               effect: 'bounce_radius', value: 60 },
     5: { icon: 'F',  name: 'Fork',            desc: 'Clean: Overclock | Void: Void Chain', effect: 'pulse_fork', value: true },
   },
   sniper_carbine: {
-    2: { icon: 'D',  name: 'High Caliber',    desc: '+3 damage',                         effect: 'damage',        value: 3 },
+    2: { icon: 'D',  name: 'Killstreak',      desc: 'Consecutive hits: +1 dmg each (max +5), miss resets', effect: 'killstreak', value: true },
     3: { icon: 'R',  name: 'Long Barrel',     desc: 'Range +100px, speed +100',          effect: 'sniper_range',  value: true },
     4: { icon: 'P',  name: 'AP Rounds',       desc: 'Penetrates 2 enemies',              effect: 'piercing',      value: true },
     5: { icon: 'F',  name: 'Fork',            desc: 'Clean: Killshot | Void: Void Slug', effect: 'sniper_fork',  value: true },
   },
   chain_rifle: {
-    2: { icon: 'D',  name: 'Hardened Rounds',  desc: '+1 damage',                        effect: 'damage',           value: 1 },
+    2: { icon: 'D',  name: 'Spin Up',          desc: 'Fire rate +10%/s while firing (max +40%)', effect: 'spin_up', value: true },
     3: { icon: 'S',  name: 'Suppression',      desc: 'Slow +20%, stacks higher',         effect: 'chain_slow_boost', value: true },
     4: { icon: 'C',  name: 'Auto-Crit',        desc: 'Every 10th bullet auto-crits (3x)', effect: 'chain_autocrit',  value: true },
     5: { icon: 'F',  name: 'Fork',             desc: 'Clean: Precision Mode | Void: Suppressor', effect: 'chain_fork', value: true },
@@ -136,8 +139,8 @@ export interface MutationDef {
 
 export const WEAPON_MUTATIONS: Record<string, Record<string, MutationDef>> = {
   sidearm: {
-    clean: { icon: 'G', name: 'Marksman Rifle', desc: 'Fire rate halved, damage x3, +50% range. First shot after reload: instant.' },
-    void:  { icon: 'V', name: 'Entropy Gun',    desc: 'Each bullet splits into 3 fragments on hit. Fragments bounce off walls once.' },
+    clean: { icon: 'G', name: 'Marksman Beam', desc: 'Fire rate halved, damage x3, beam range +60%. Beam lingers 0.3s (visual trail).' },
+    void:  { icon: 'V', name: 'Entropy Beam',  desc: 'Each hit plants a void seed. 3 seeds on same enemy = AOE detonation (80px, 5 dmg).' },
   },
   scatter: {
     clean: { icon: 'G', name: 'Flechette',      desc: 'Tighter cone, pellets pierce 2 enemies.' },
@@ -195,15 +198,15 @@ export const WEAPON_MASTERY: Record<string, Record<string, MasteryPerk[]>> = {
     clean: [
       { id: 'killcam',          icon: 'K', name: 'Killcam',       desc: 'After a kill: next shot fires instantly (no cooldown).' },
       { id: 'headhunter',       icon: 'H', name: 'Headhunter',    desc: '+50% damage vs elites.' },
-      { id: 'suppressor',       icon: 'S', name: 'Suppressor',    desc: 'Shots do not aggro nearby undetected enemies.' },
-      { id: 'armor_pierce',     icon: 'A', name: 'Armor Pierce',  desc: 'Ignore corrupted-path armor on hit.' },
-      { id: 'marksman_reload',  icon: 'R', name: 'Quick Draw',    desc: 'Reload time -50% for Marksman Rifle.' },
+      { id: 'suppressor',       icon: 'S', name: 'Suppressor',    desc: 'Beam does not aggro nearby undetected enemies.' },
+      { id: 'armor_pierce',     icon: 'A', name: 'Armor Pierce',  desc: 'Beam ignores armored affix.' },
+      { id: 'lingering_beam',   icon: 'R', name: 'Lingering Beam', desc: 'Beam trail lasts 0.5s (was 0.3s), damages enemies passing through.' },
     ],
     void: [
-      { id: 'fragment_magnet',  icon: 'M', name: 'Fragment Magnet', desc: 'Fragments home slightly toward nearest enemy.' },
-      { id: 'cascade',          icon: 'C', name: 'Cascade',         desc: 'Fragments can fragment once more on hit.' },
-      { id: 'entropy_field',    icon: 'E', name: 'Entropy Field',   desc: 'Each fragment leaves a 0.5s damage patch.' },
-      { id: 'overheat',         icon: 'V', name: 'Overheat',        desc: 'Every 10th shot fires 2x fragments automatically.' },
+      { id: 'seed_spread',      icon: 'M', name: 'Seed Spread',    desc: 'Void seed detonations plant 1 seed on nearby enemies.' },
+      { id: 'deep_roots',       icon: 'C', name: 'Deep Roots',     desc: 'Seeds detonate at 2 stacks instead of 3.' },
+      { id: 'entropy_field',    icon: 'E', name: 'Entropy Field',   desc: 'Detonation leaves a 3s corruption zone.' },
+      { id: 'void_resonance',   icon: 'V', name: 'Void Resonance', desc: 'Each seed adds +5 corruption to the enemy.' },
     ],
   },
   scatter: {

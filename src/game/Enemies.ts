@@ -61,6 +61,8 @@ export interface Enemy {
   eliteSummonTimer: number;    // 15s cooldown for summoning minions
   // Planet-enemy behavior fields
   minePhaseActive: boolean;    // mine_crawler: true once HP < 50% mine-drop mode starts
+  // Laser pistol void seeds
+  voidSeeds: number;           // Entropy Beam: stacks to 3 then detonates
 }
 
 let nextEnemyId = 1;
@@ -119,6 +121,7 @@ export function createEnemy(name: string, pos: Vec2, aggroed = false): Enemy {
     eliteAttackCycle: 0,
     eliteSummonTimer: 15,
     minePhaseActive: false,
+    voidSeeds: 0,
   };
 }
 

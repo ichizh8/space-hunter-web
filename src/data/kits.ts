@@ -16,7 +16,7 @@ export const KIT_DEFS: Record<string, KitDef> = {
   chain_kit:    { id: 'chain_kit',    name: 'Chain',       icon: 'C', desc: 'Tether enemy 3s',             cooldown: 12, charges: -1, unlockCost: 150, tierCosts: [150, 120, 220] },
   charge_kit:   { id: 'charge_kit',   name: 'Charge',      icon: 'X', desc: 'Knockback blast 150px',       cooldown: 12, charges: -1, unlockCost: 120, tierCosts: [120, 100, 200] },
   mirage_kit:   { id: 'mirage_kit',   name: 'Mirage',      icon: 'M', desc: 'Decoy draws aggro 6s',        cooldown: 18, charges: -1, unlockCost: 180, tierCosts: [180, 140, 260] },
-  turret_kit:   { id: 'turret_kit',   name: 'Turret',      icon: 'R', desc: 'Auto-turret 12s',             cooldown: 0,  charges: 1,  unlockCost: 150, tierCosts: [150, 120, 220] },
+  turret_kit:   { id: 'turret_kit',   name: 'Turret',      icon: 'R', desc: 'Auto-turret 12s',             cooldown: 20, charges: -1, unlockCost: 150, tierCosts: [150, 120, 220] },
   smoke_kit:    { id: 'smoke_kit',    name: 'Smoke',       icon: 'K', desc: 'Smoke screen 150px 6s',       cooldown: 14, charges: -1, unlockCost: 100, tierCosts: [100, 80, 180] },
   anchor_kit:   { id: 'anchor_kit',   name: 'Anchor',      icon: 'A', desc: 'Gravity pull 400px 4s',       cooldown: 20, charges: -1, unlockCost: 180, tierCosts: [180, 150, 280] },
   drone_kit:    { id: 'drone_kit',    name: 'Drone',       icon: 'D', desc: 'Intercepts 1 bullet/4s',      cooldown: 0,  charges: -1, unlockCost: 200, tierCosts: [200, 150, 300] },
@@ -84,7 +84,7 @@ export interface KitPerkDef {
 export const KIT_PERKS: Record<string, KitPerkDef[]> = {
   stim_pack: [
     { id: 'withdrawal',       icon: 'W', name: 'Withdrawal',       rarity: 'common', desc: 'After stim wears off: next hit absorbed (0 dmg).' },
-    { id: 'adrenaline_spike', icon: 'A', name: 'Adrenaline Spike', rarity: 'rare',   desc: 'Stim causes nearby enemies to scatter 80px.' },
+    { id: 'overdose',         icon: 'A', name: 'Overdose',         rarity: 'rare',   desc: 'Stim above 50% corruption: +2 extra HP, +10 extra corruption.' },
   ],
   flash_trap: [
     { id: 'trap_magnetism',   icon: 'M', name: 'Trap Magnetism',   rarity: 'rare',   desc: 'Stunned enemy pulls 2 nearby enemies toward it.' },
@@ -108,22 +108,22 @@ export const KIT_PERKS: Record<string, KitPerkDef[]> = {
   ],
   charge_kit: [
     { id: 'aftershock',       icon: 'A', name: 'Aftershock',       rarity: 'common', desc: 'Charge impact leaves a 3s slow field at landing point.' },
-    { id: 'redirect',         icon: 'R', name: 'Redirect',         rarity: 'rare',   desc: 'Hitting a wall during charge bounces you perpendicular.' },
+    { id: 'battering_ram',    icon: 'R', name: 'Battering Ram',    rarity: 'rare',   desc: 'Enemies hit by charge knock into others (3 dmg to both).' },
   ],
   mirage_kit: [
-    { id: 'magnet_decoy',     icon: 'M', name: 'Magnet Decoy',     rarity: 'common', desc: 'Decoy pulls enemies within 120px toward it.' },
+    { id: 'fragile_clone',    icon: 'M', name: 'Fragile Clone',    rarity: 'common', desc: 'Decoy explodes when destroyed (80px, 3 dmg).' },
     { id: 'copycat',          icon: 'X', name: 'Copycat',          rarity: 'rare',   desc: 'Decoy fires your last weapon shot every 3s.' },
   ],
   turret_kit: [
-    { id: 'target_priority',  icon: 'T', name: 'Target Priority',  rarity: 'common', desc: 'Turret only fires at enemies you have hit in the last 2s.' },
+    { id: 'overclocked',      icon: 'T', name: 'Overclocked',      rarity: 'common', desc: 'Turret fire rate doubles when player is within 60px.' },
     { id: 'overheat_turret',  icon: 'O', name: 'Overheat',         rarity: 'rare',   desc: 'Turret explodes on death (70px AOE, 4 dmg) instead of disappearing.' },
   ],
   drone_kit: [
     { id: 'intercept_link',   icon: 'I', name: 'Intercept Link',   rarity: 'rare',   desc: 'Drone-intercepted bullets explode (20px AOE) damaging the shooter.' },
-    { id: 'shepherd',         icon: 'H', name: 'Shepherd',         rarity: 'common', desc: 'Drone slowly herds pickups toward player.' },
+    { id: 'overclock_drone',  icon: 'H', name: 'Overclock Protocol', rarity: 'common', desc: 'After intercepting, next intercept cooldown halved.' },
   ],
   pack_kit: [
-    { id: 'sacrifice',        icon: 'S', name: 'Sacrifice',        rarity: 'rare',   desc: 'When an ally dies, you gain 2s invincibility.' },
+    { id: 'rally_cry',        icon: 'S', name: 'Rally Cry',        rarity: 'rare',   desc: 'On summon: all enemies within 200px are feared 1.5s.' },
     { id: 'frenzy_aura',      icon: 'F', name: 'Frenzy Aura',      rarity: 'common', desc: 'Each nearby ally increases your fire rate 8% (max 3).' },
   ],
   void_surge: [
@@ -136,7 +136,7 @@ export const KIT_PERKS: Record<string, KitPerkDef[]> = {
   ],
   rupture_kit: [
     { id: 'scatter_field',    icon: 'S', name: 'Scatter',          rarity: 'common', desc: 'Rupture launches shrapnel in 8 directions (3 dmg each).' },
-    { id: 'drain_aura',       icon: 'D', name: 'Drain Aura',       rarity: 'rare',   desc: 'While inside rupture field, player regenerates 1 HP per 2s.' },
+    { id: 'aftershock_rupture', icon: 'D', name: 'Aftershock',     rarity: 'rare',   desc: 'Rupture field persists 3s longer, pulls enemies inward.' },
   ],
 };
 
