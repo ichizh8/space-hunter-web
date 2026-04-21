@@ -51,7 +51,7 @@ const WEAPON_UNLOCK_DEFS = [
   { id: 'pulse_cannon', name: 'Pulse Cannon', desc: 'Bouncing AOE', cost: 500, repTier: 3 },
   { id: 'sniper_carbine', name: 'Sniper Carbine', desc: 'High damage', cost: 550, repTier: 3 },
   // Furnace tier (rep tier 4 = 700 rep)
-  { id: 'chain_rifle', name: 'Chain Rifle', desc: 'Rapid fire', cost: 600, repTier: 4 },
+  { id: 'void_swarm', name: 'Void Swarm', desc: 'Void fragments', cost: 600, repTier: 4 },
 ];
 
 const PLANET_COLORS: Record<string, string> = {

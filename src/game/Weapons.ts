@@ -68,6 +68,14 @@ export class WeaponSystem {
   shatterBounceQueue: Array<{ x: number; y: number }> = []; // positions where shatter bounces occurred
   lingerFlames = false;          // Lingering Flames: flame particles last longer, leave fire patches
 
+  // Void Swarm flags
+  swarmHunger = false;
+  swarmDeepRoot = false;
+  swarmFrenzy = false;
+  swarmDispatch = false;   // clean mutation: no corruption cost, +60px range, 50% faster
+  swarmDevour = false;     // void mutation: 80px range, heal 0.3 HP/s per latch, erupt on kill
+  swarmRange = 120;        // detection range (modified by perks/mutations)
+
   // Mutation flags
   slowFieldOnLand = false;
   singularityOnHit = false;
@@ -96,6 +104,7 @@ export class WeaponSystem {
   fire(player: Player, enemies?: Array<{ pos: Vec2; hp: number; isAlly: boolean }>): Bullet[] {
     const def = WEAPON_DEFS[player.weaponId];
     if (!def) return [];
+    if (def.pattern === 'swarm') return []; // Fragments auto-manage via Game.updateSwarmFragments
     if (player.fireCooldown > 0) return [];
     if (player.reloadTimer > 0) return [];
     if (player.magAmmo <= 0 && def.magSize < 999) {
@@ -103,12 +112,7 @@ export class WeaponSystem {
       return [];
     }
 
-    let effectiveFireRate = def.fireRate + this.fireRateBonus;
-    // Spin Up: chain rifle fire rate ramps +10%/s (max +40%)
-    if (this.spinUp && def.id === 'chain_rifle') {
-      const spinBonus = Math.min(0.4, this.spinUpTimer * 0.1);
-      effectiveFireRate *= (1 - spinBonus);
-    }
+    const effectiveFireRate = def.fireRate + this.fireRateBonus;
     player.fireCooldown = Math.max(0.02, effectiveFireRate * this.planetFireRateMult);
     if (def.magSize < 999) player.magAmmo--;
 

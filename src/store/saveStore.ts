@@ -210,7 +210,7 @@ export const useSaveStore = create<SaveState & SaveActions>()(
       markIntroSeen: () => set({ introSeen: true }),
 
       devGiveResources: () => set(s => {
-        const ALL_WEAPONS = ['sidearm', 'scatter', 'lance', 'baton', 'dart', 'flamethrower', 'grenade_launcher', 'entropy_cannon', 'pulse_cannon', 'sniper_carbine', 'chain_rifle'];
+        const ALL_WEAPONS = ['sidearm', 'scatter', 'lance', 'baton', 'dart', 'flamethrower', 'grenade_launcher', 'entropy_cannon', 'pulse_cannon', 'sniper_carbine', 'void_swarm'];
         const ALL_KITS = ['stim_pack', 'flash_trap', 'smoke_kit', 'blink_kit', 'charge_kit', 'chain_kit', 'turret_kit', 'familiar_kit', 'mirage_kit', 'anchor_kit', 'drone_kit', 'pack_kit', 'void_surge', 'rupture_kit'];
         const kitTiers = { ...s.kitTiers };
         for (const k of ALL_KITS) {
