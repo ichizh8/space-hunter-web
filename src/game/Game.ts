@@ -76,6 +76,22 @@ interface ExtractionCache {
 
 
 
+
+// ── Swarm fragment (void_swarm weapon) ──
+export interface SwarmFragment {
+  id: number;
+  pos: { x: number; y: number };
+  vel: { x: number; y: number };
+  state: 'idle' | 'launching' | 'latched' | 'returning';
+  targetId: number;
+  jitterPhase: number;
+  frenzyChains: number;
+  deepRootTimer: number;
+  latchStayTimer: number;
+  returnPath: Array<{ x: number; y: number }>;
+  returnPathIdx: number;
+}
+
 export interface GameCallbacks {
   onDeath: () => void;
   onComplete: () => void;
@@ -414,6 +430,10 @@ export class Game {
   vcDrainAccum = 0;              // vc_drain: accumulate 0.5 HP per bounce
   enemyCorruption = new Map<number, number>(); // vc_corrupt / res_aura: per-enemy corruption buildup
 
+  // Void Swarm state
+  swarmFragments: SwarmFragment[] = [];
+  swarmLaunchTimer = 0;
+
   constructor(
     app: Application,
     kits: string[],
@@ -539,6 +559,9 @@ export class Game {
     this.hud = new HUD(vw, vh);
     this.spawnManager = new SpawnManager();
     this.bulletSystem = new BulletSystem();
+
+    // Initialize void swarm fragments
+    if (this.player.weaponId === 'void_swarm') this.initSwarmFragments();
 
     // Build scene graph
     this.worldLayer = new Container();
@@ -1398,20 +1421,6 @@ export class Game {
             }
           }
         }
-        // chain rifle shot counting for pm_crit and sp_burst
-        if (this.player.weaponId === 'chain_rifle') {
-          this.chainRifleShotCount++;
-          // pm_crit mastery: every 5th precision-mode shot crits (2x damage)
-          if (this.hasMod('pm_crit') && this.player.mutated === 'clean' && this.chainRifleShotCount % 5 === 0) {
-            for (const b of _fired) b.damage *= 2;
-          }
-          // sp_burst mastery: every 20th suppressor bullet creates 100px AOE slow zone
-          if (this.hasMod('sp_burst') && this.player.mutated === 'void' && this.chainRifleShotCount % 20 === 0) {
-            const b0 = _fired[0];
-            this.smokeZones.push({ x: b0.pos.x, y: b0.pos.y, radius: 100, life: 2, maxLife: 2, slowing: true } as typeof this.smokeZones[number]);
-            this.explosions.push({ x: b0.pos.x, y: b0.pos.y, radius: 0, maxRadius: 100, life: 0.4, maxLife: 0.4 });
-          }
-        }
         // entropy cannon shot count for stable_crit
         if (this.player.weaponId === 'entropy_cannon') this.entropyShotCount++;
       }
@@ -1514,15 +1523,6 @@ export class Game {
           e.pos.y += dragDir.y * 20 * dt;
         }
       }
-      // sp_corrupt mastery: chain rifle void slowed enemies take 3 dmg/s corruption DoT
-      if (this.hasMod('sp_corrupt') && this.player.weaponId === 'chain_rifle' && this.player.mutated === 'void' && !e.isAlly) {
-        const _baseSpd2 = CREATURE_DEFS[e.name]?.speed ?? e.speed;
-        if (e.speed < _baseSpd2 * 0.95) {
-          e.hp -= 3 * dt;
-          e.hitFlash = Math.max(e.hitFlash, 0.05);
-          if (e.hp <= 0) this.onEnemyKilled(e);
-        }
-      }
       // Skip affix processing for non-elites
       if (e.affixes.length === 0) continue;
       // Teleporter: blink toward player every 8s
@@ -1576,20 +1576,12 @@ export class Game {
       }
     }
 
-    // Spin Up: track continuous fire time for chain rifle
-    if (this.weapons.spinUp && this.player.weaponId === 'chain_rifle') {
-      if (this.player.fireCooldown > 0) {
-        this.weapons.spinUpTimer += dt;
-      } else {
-        // Not firing -- decay spin up timer
-        this.weapons.spinUpTimer = Math.max(0, this.weapons.spinUpTimer - dt * 3);
-      }
-    }
-
     // Player bullets update
     this.weapons.update(dt, this.enemies.enemies.map(e => ({ pos: e.pos, id: e.id })));
 
     this.bulletSystem.processHits(dt, this);
+
+    this.updateSwarmFragments(dt);
 
     this.kitSystem.update(dt, this);
 
@@ -1624,6 +1616,260 @@ export class Game {
     // HUD
     const enemiesLeft = this.currentRoom ? this.enemies.enemies.filter(e => e.hp > 0 && !e.isAlly).length : -1;
     this.hud.draw(this.player, dt, this.totalKills, this.elapsed, this.equippedKits, this.kitCooldowns, this.screenFlash, enemiesLeft);
+  }
+
+  // ── Void Swarm fragment system ──
+
+  createSwarmFragment(id: number): SwarmFragment {
+    const angle = (id / 4) * Math.PI * 2;
+    return {
+      id,
+      pos: { x: this.player.pos.x + Math.cos(angle) * 30, y: this.player.pos.y + Math.sin(angle) * 30 },
+      vel: { x: 0, y: 0 },
+      state: 'idle',
+      targetId: -1,
+      jitterPhase: angle,
+      frenzyChains: 0,
+      deepRootTimer: 0,
+      latchStayTimer: 0,
+      returnPath: [],
+      returnPathIdx: 0,
+    };
+  }
+
+  initSwarmFragments() {
+    this.swarmFragments = [];
+    for (let i = 0; i < 4; i++) this.swarmFragments.push(this.createSwarmFragment(i));
+  }
+
+  private initFragmentReturn(frag: SwarmFragment) {
+    frag.returnPath = [];
+    frag.returnPathIdx = 0;
+    frag.deepRootTimer = 0;
+    frag.latchStayTimer = 0;
+    const steps = 2 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < steps; i++) {
+      const t = (i + 1) / (steps + 1);
+      const mx = frag.pos.x + (this.player.pos.x - frag.pos.x) * t;
+      const my = frag.pos.y + (this.player.pos.y - frag.pos.y) * t;
+      const jitter = 25 + Math.random() * 35;
+      const a = Math.random() * Math.PI * 2;
+      frag.returnPath.push({ x: mx + Math.cos(a) * jitter, y: my + Math.sin(a) * jitter });
+    }
+    frag.state = 'returning';
+  }
+
+  updateSwarmFragments(dt: number) {
+    if (this.player.weaponId !== 'void_swarm') return;
+
+    const range = this.weapons.swarmRange;
+    const dotBase = 1.5;
+    let latchedCount = 0;
+
+    for (const frag of this.swarmFragments) {
+      switch (frag.state) {
+        case 'idle': {
+          // Jitter chaotically near player within ~50px
+          frag.jitterPhase += dt * (5 + frag.id * 1.3);
+          const tx = this.player.pos.x + Math.cos(frag.jitterPhase * 0.7) * (35 + frag.id * 5);
+          const ty = this.player.pos.y + Math.sin(frag.jitterPhase * 0.9) * (35 + frag.id * 5);
+          frag.vel.x += (tx - frag.pos.x) * dt * 6 + (Math.random() - 0.5) * 150 * dt;
+          frag.vel.y += (ty - frag.pos.y) * dt * 6 + (Math.random() - 0.5) * 150 * dt;
+          const damp = Math.pow(0.05, dt);
+          frag.vel.x *= damp;
+          frag.vel.y *= damp;
+          frag.pos.x += frag.vel.x * dt;
+          frag.pos.y += frag.vel.y * dt;
+          break;
+        }
+
+        case 'launching': {
+          const target = this.enemies.enemies.find(e => e.id === frag.targetId && e.hp > 0 && !e.isAlly);
+          if (!target) { this.initFragmentReturn(frag); break; }
+          const dx = target.pos.x - frag.pos.x;
+          const dy = target.pos.y - frag.pos.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const spd = this.weapons.swarmDispatch ? 450 : 300;
+          if (dist < 12) {
+            frag.state = 'latched';
+          } else {
+            frag.vel.x = (dx / dist) * spd;
+            frag.vel.y = (dy / dist) * spd;
+            frag.pos.x += frag.vel.x * dt;
+            frag.pos.y += frag.vel.y * dt;
+          }
+          break;
+        }
+
+        case 'latched': {
+          const target = this.enemies.enemies.find(e => e.id === frag.targetId && e.hp > 0 && !e.isAlly);
+          if (!target) {
+            // Target dead -- Frenzy: chain to next
+            if (this.weapons.swarmFrenzy && frag.frenzyChains < 2) {
+              const next = this.enemies.enemies.find(e => e.hp > 0 && !e.isAlly && e.id !== frag.targetId &&
+                !this.swarmFragments.some(f => f !== frag && (f.state === 'latched' || f.state === 'launching') && f.targetId === e.id));
+              if (next) {
+                frag.frenzyChains++;
+                frag.targetId = next.id;
+                frag.state = 'launching';
+                break;
+              }
+            }
+            frag.frenzyChains = 0;
+            this.initFragmentReturn(frag);
+            break;
+          }
+
+          // Stick to enemy
+          frag.pos.x = target.pos.x;
+          frag.pos.y = target.pos.y;
+
+          // Check if enemy left detection range
+          const distToPlayer = v2dist(frag.pos, this.player.pos);
+          if (distToPlayer > range * 1.5) {
+            const stayLimit = this.weapons.swarmDeepRoot
+              ? (this.hasMod('swarm_latch') ? 1.0 : 0.5)
+              : (this.hasMod('swarm_latch') ? 1.0 : 0);
+            frag.latchStayTimer += dt;
+            if (frag.latchStayTimer >= stayLimit) {
+              frag.frenzyChains = 0;
+              this.initFragmentReturn(frag);
+              break;
+            }
+          } else {
+            frag.latchStayTimer = 0;
+          }
+
+          // Deep Root: slow enemy 30%
+          if (this.weapons.swarmDeepRoot && CREATURE_DEFS[target.name]) {
+            target.speed = Math.max(20, CREATURE_DEFS[target.name].speed * 0.7);
+          }
+
+          // DOT tick
+          let dot = dotBase;
+          if (this.hasMod('swarm_boost')) dot *= (1 + 0.15 * this.swarmFragments.filter(f => f.state === 'latched').length);
+          target.hp -= dot * dt;
+          target.hitFlash = Math.max(target.hitFlash, 0.06);
+          target.isAggroed = true;
+          this.damageDealt += dot * dt;
+
+          // Hunger: heal 15% of DOT dealt -- inactive when clean mutation
+          if (this.weapons.swarmHunger && this.player.mutated !== 'clean') {
+            this.player.hp = Math.min(this.player.hp + dot * dt * 0.15, this.player.maxHp);
+          }
+
+          // Devour: heal 0.3 HP/s per latched fragment
+          if (this.weapons.swarmDevour) {
+            const healRate = this.hasMod('swarm_leech') ? 0.45 : 0.3;
+            this.player.hp = Math.min(this.player.hp + healRate * dt, this.player.maxHp);
+          }
+
+          latchedCount++;
+
+          if (target.hp <= 0) {
+            this.onEnemyKilled(target);
+            // Devour: erupt 2 mini-fragments
+            if (this.weapons.swarmDevour) {
+              const miniLife = this.hasMod('swarm_longer') ? 4 : 2;
+              for (let mi = 0; mi < 2; mi++) {
+                const a = (mi / 2) * Math.PI * 2 + Math.random() * 0.5;
+                this.weapons.bullets.push({
+                  pos: { x: target.pos.x, y: target.pos.y },
+                  vel: { x: Math.cos(a) * 260, y: Math.sin(a) * 260 },
+                  radius: 4, color: 0x6611cc, damage: 1.5,
+                  life: miniLife, maxLife: miniLife,
+                  piercing: this.hasMod('swarm_erupt'), homing: true,
+                  bounces: 0, aoeRadius: 0, fromPlayer: true, hitSet: new Set(), tag: 'swarm_mini',
+                });
+              }
+            }
+            // Frenzy chain after kill
+            if (this.weapons.swarmFrenzy && frag.frenzyChains < 2) {
+              const next = this.enemies.enemies.find(e => e.hp > 0 && !e.isAlly && e.id !== frag.targetId &&
+                !this.swarmFragments.some(f => f !== frag && (f.state === 'latched' || f.state === 'launching') && f.targetId === e.id));
+              if (next) {
+                frag.frenzyChains++;
+                frag.targetId = next.id;
+                frag.state = 'launching';
+                break;
+              }
+            }
+            frag.frenzyChains = 0;
+            this.initFragmentReturn(frag);
+          }
+          break;
+        }
+
+        case 'returning': {
+          const returnSpd = this.hasMod('swarm_speed') ? 375 : 250;
+          const dest = frag.returnPath[frag.returnPathIdx] ?? this.player.pos;
+          const dx = dest.x - frag.pos.x;
+          const dy = dest.y - frag.pos.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 10) {
+            if (frag.returnPathIdx < frag.returnPath.length - 1) {
+              frag.returnPathIdx++;
+            } else {
+              // Move directly to player
+              const pdx = this.player.pos.x - frag.pos.x;
+              const pdy = this.player.pos.y - frag.pos.y;
+              if (Math.sqrt(pdx * pdx + pdy * pdy) < 20) {
+                frag.state = 'idle';
+                frag.pos.x = this.player.pos.x;
+                frag.pos.y = this.player.pos.y;
+                frag.vel.x = 0;
+                frag.vel.y = 0;
+              } else {
+                frag.pos.x += (pdx / Math.sqrt(pdx * pdx + pdy * pdy)) * returnSpd * dt;
+                frag.pos.y += (pdy / Math.sqrt(pdx * pdx + pdy * pdy)) * returnSpd * dt;
+              }
+            }
+          } else {
+            frag.pos.x += (dx / dist) * returnSpd * dt;
+            frag.pos.y += (dy / dist) * returnSpd * dt;
+          }
+          break;
+        }
+      }
+
+      // Particle trail
+      if (this.particles.length < 600 && Math.random() < 0.4) {
+        const col = frag.state === 'latched' ? 0x550088 : frag.state === 'launching' ? 0xaa33ff : 0x7722cc;
+        this.particles.push({ x: frag.pos.x, y: frag.pos.y, vx: (Math.random() - 0.5) * 35, vy: (Math.random() - 0.5) * 35, life: 0.18, maxLife: 0.18, color: col, radius: 2 });
+      }
+    }
+
+    // Player corruption from latched fragments (skip if Dispatch / clean mutation)
+    if (latchedCount > 0 && !this.weapons.swarmDispatch) {
+      const corrRate = this.weapons.swarmDevour ? 2.25 : 1.5; // Devour +50%
+      this.player.corruption = Math.min(100, this.player.corruption + corrRate * latchedCount * dt);
+    }
+
+    // Auto-launch: find uncovered enemy in range and send an idle fragment
+    this.swarmLaunchTimer = Math.max(0, this.swarmLaunchTimer - dt);
+    if (this.swarmLaunchTimer <= 0) {
+      const idle = this.swarmFragments.find(f => f.state === 'idle');
+      if (idle) {
+        let best: typeof this.enemies.enemies[0] | null = null;
+        let bestDist = Infinity;
+        for (const e of this.enemies.enemies) {
+          if (e.hp <= 0 || e.isAlly) continue;
+          const d = v2dist(this.player.pos, e.pos);
+          if (d > range) continue;
+          if (this.swarmFragments.some(f => (f.state === 'latched' || f.state === 'launching') && f.targetId === e.id)) continue;
+          if (d < bestDist) { bestDist = d; best = e; }
+        }
+        if (best) {
+          idle.state = 'launching';
+          idle.targetId = best.id;
+          idle.frenzyChains = 0;
+          this.swarmLaunchTimer = 0.5;
+        }
+      }
+    }
+
+    // Update HUD ammo to show available (idle) fragment count
+    this.player.magAmmo = this.swarmFragments.filter(f => f.state === 'idle').length;
   }
 
   onEnemyKilled(enemy: Enemy) {

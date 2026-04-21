@@ -284,11 +284,6 @@ export class BulletSystem {
               finalDmg += 4;
             }
           }
-          // sp_damage mastery: chain rifle void +1 damage to slowed enemies
-          if (game.hasMod('sp_damage') && game.player.weaponId === 'chain_rifle' && game.player.mutated === 'void') {
-            const _baseSpd = CREATURE_DEFS[enemy.name]?.speed ?? enemy.speed;
-            if (enemy.speed < _baseSpd * 0.95) finalDmg += 1;
-          }
           // Killstreak: sniper consecutive hit bonus (+1 per hit, max +5)
           if (bullet.tag === 'sniper_trail' && game.weapons.killstreak >= 0) {
             finalDmg += Math.min(game.weapons.killstreak, 5);
@@ -858,9 +853,53 @@ export class BulletSystem {
         g.circle(b.pos.x, b.pos.y, b.radius).fill({ color: 0xffffff, alpha: 1 });
         continue;
       }
+      if (b.tag === 'swarm_mini') {
+        // Devour mini-fragment: small spinning shard
+        const mfrac = b.life / b.maxLife;
+        g.circle(b.pos.x, b.pos.y, 7).fill({ color: 0x440088, alpha: 0.12 * mfrac });
+        g.circle(b.pos.x, b.pos.y, 4).fill({ color: 0x7711cc, alpha: 0.85 * mfrac });
+        g.circle(b.pos.x, b.pos.y, 2).fill({ color: 0xdd88ff, alpha: 0.7 * mfrac });
+        continue;
+      }
       g.circle(b.pos.x, b.pos.y, b.radius * 3).fill({ color: b.color, alpha: 0.1 });
       g.circle(b.pos.x, b.pos.y, b.radius * 1.5).fill({ color: b.color, alpha: 0.8 });
       g.circle(b.pos.x, b.pos.y, b.radius * 0.8).fill({ color: 0xffffff, alpha: 0.6 });
+    }
+
+    // Draw void swarm fragments
+    for (const frag of game.swarmFragments) {
+      if (!game.camera.isVisible(frag.pos.x, frag.pos.y, 20)) continue;
+      const isLatched = frag.state === 'latched';
+      const isIdle = frag.state === 'idle';
+      const pulse = isLatched ? (0.6 + Math.sin(game.elapsed * 7 + frag.id * 1.4) * 0.4) : 1.0;
+      const rot = (game.elapsed * (isIdle ? 1.5 : 3) + frag.id * 1.2) % (Math.PI * 2);
+      const cos = Math.cos(rot), sin = Math.sin(rot);
+      const sz = isLatched ? 5 : 6;
+      const col = isLatched ? 0x5500aa : frag.state === 'returning' ? 0x6622bb : 0x7733cc;
+
+      // Outer glow
+      g.circle(frag.pos.x, frag.pos.y, sz * 3).fill({ color: col, alpha: 0.08 * pulse });
+
+      // Jagged 4-pointed shard (star shape)
+      const pts: [number, number][] = [
+        [0, -sz * 1.8], [sz * 0.45, -sz * 0.45],
+        [sz * 1.6, 0],  [sz * 0.45, sz * 0.45],
+        [0, sz * 1.8],  [-sz * 0.45, sz * 0.45],
+        [-sz * 1.6, 0], [-sz * 0.45, -sz * 0.45],
+      ];
+      const rp = pts.map(([px, py]): [number, number] => [
+        frag.pos.x + px * cos - py * sin,
+        frag.pos.y + px * sin + py * cos,
+      ]);
+      g.moveTo(rp[0][0], rp[0][1]);
+      for (let pi = 1; pi < rp.length; pi++) g.lineTo(rp[pi][0], rp[pi][1]);
+      g.closePath().fill({ color: col, alpha: 0.85 * pulse });
+      g.moveTo(rp[0][0], rp[0][1]);
+      for (let pi = 1; pi < rp.length; pi++) g.lineTo(rp[pi][0], rp[pi][1]);
+      g.closePath().stroke({ color: isLatched ? 0xcc44ff : 0xaa66ff, width: 1.5, alpha: 0.95 * pulse });
+
+      // Bright inner core
+      g.circle(frag.pos.x, frag.pos.y, sz * 0.5).fill({ color: 0xee99ff, alpha: 0.65 * pulse });
     }
 
     // Draw turrets

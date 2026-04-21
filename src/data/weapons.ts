@@ -1,4 +1,4 @@
-export type FiringPattern = 'single' | 'scatter' | 'piercing' | 'melee_aoe' | 'homing' | 'cone_stream' | 'arc_aoe' | 'bounce' | 'beam_stream' | 'laser';
+export type FiringPattern = 'single' | 'scatter' | 'piercing' | 'melee_aoe' | 'homing' | 'cone_stream' | 'arc_aoe' | 'bounce' | 'beam_stream' | 'laser' | 'swarm';
 
 export interface WeaponDef {
   id: string;
@@ -26,7 +26,7 @@ export const WEAPON_DEFS: Record<string, WeaponDef> = {
   entropy_cannon:   { id: 'entropy_cannon',   name: 'Void Beam', desc: 'Corruption-scaling beam',  fireRate: 0.08, damage: 0.4, bulletSpeed: 800, bulletRadius: 3, color: 0xaa44ff, range: 250, pattern: 'beam_stream', magSize: 80, reloadTime: 1.0 },
   pulse_cannon:     { id: 'pulse_cannon',     name: 'Pulse',    desc: 'Slow orb — AOE pulses in flight', fireRate: 1.0, damage: 3, bulletSpeed: 140, bulletRadius: 7, color: 0x44aaff, range: 550, pattern: 'bounce',      magSize: 8,  reloadTime: 1.5 },
   sniper_carbine:   { id: 'sniper_carbine',   name: 'Sniper',   desc: 'Near-perfect accuracy, blazing fast round', fireRate: 2.5,  damage: 8, bulletSpeed: 1800, bulletRadius: 3,  color: 0xffffff, range: 600, pattern: 'single',      magSize: 4,  reloadTime: 2.5 },
-  chain_rifle:      { id: 'chain_rifle',      name: 'Chain',    desc: 'Rapid suppression',         fireRate: 0.13, damage: 1, bulletSpeed: 450, bulletRadius: 3,  color: 0x88ffaa, range: 280, pattern: 'single',      magSize: 40, reloadTime: 3.0 },
+  void_swarm:       { id: 'void_swarm',       name: 'Void Swarm', desc: 'Void fragments auto-latch enemies', fireRate: 0.5, damage: 0, bulletSpeed: 300, bulletRadius: 5, color: 0x8833cc, range: 120, pattern: 'swarm',      magSize: 4,  reloadTime: 0 },
 };
 
 export const ALL_WEAPON_IDS = Object.keys(WEAPON_DEFS);
@@ -43,14 +43,14 @@ export type WeaponPerkEffect =
   | 'cluster' | 'grenade_knockback'
   | 'bounce_extra' | 'bounce_radius'
   | 'sniper_range'
-  | 'chain_slow_boost' | 'chain_autocrit'
+  | 'swarm_hunger' | 'swarm_deep_root' | 'swarm_frenzy'
   | 'deflect' | 'beam_width'
   | 'laser_range' | 'laser_mark' | 'laser_pierce'
   | 'lance_trail' | 'backblast' | 'proximity_fuse' | 'siphon_link' | 'linger_flames'
   | 'shatter_bounce' | 'killstreak' | 'spin_up'
   // Fork effects (level 5 for weapons without named perks at 5)
   | 'sidearm_fork' | 'flamer_fork' | 'grenade_fork' | 'entropy_fork'
-  | 'pulse_fork' | 'sniper_fork' | 'chain_fork';
+  | 'pulse_fork' | 'sniper_fork' | 'swarm_fork';
 
 export interface WeaponPerk {
   icon: string;
@@ -121,11 +121,11 @@ export const WEAPON_LEVEL_PERKS: Record<string, Record<number, WeaponPerk>> = {
     4: { icon: 'P',  name: 'AP Rounds',       desc: 'Penetrates 2 enemies',              effect: 'piercing',      value: true },
     5: { icon: 'F',  name: 'Fork',            desc: 'Clean: Killshot | Void: Void Slug', effect: 'sniper_fork',  value: true },
   },
-  chain_rifle: {
-    2: { icon: 'D',  name: 'Spin Up',          desc: 'Fire rate +10%/s while firing (max +40%)', effect: 'spin_up', value: true },
-    3: { icon: 'S',  name: 'Suppression',      desc: 'Slow +20%, stacks higher',         effect: 'chain_slow_boost', value: true },
-    4: { icon: 'C',  name: 'Auto-Crit',        desc: 'Every 10th bullet auto-crits (3x)', effect: 'chain_autocrit',  value: true },
-    5: { icon: 'F',  name: 'Fork',             desc: 'Clean: Precision Mode | Void: Suppressor', effect: 'chain_fork', value: true },
+  void_swarm: {
+    2: { icon: 'H',  name: 'Hunger',    desc: 'Latched fragments heal 15% of DOT dealt (inactive with clean mutation)', effect: 'swarm_hunger',    value: true },
+    3: { icon: 'R',  name: 'Deep Root', desc: 'Latched enemies slowed 30%. Fragment stays 0.5s after leaving range',    effect: 'swarm_deep_root', value: true },
+    4: { icon: 'F',  name: 'Frenzy',   desc: 'On kill: fragment lunges at next enemy (chains up to 2x before return)', effect: 'swarm_frenzy',    value: true },
+    5: { icon: 'V',  name: 'Fork',     desc: 'Clean: Dispatch | Void: Devour',                                          effect: 'swarm_fork',      value: true },
   },
 };
 
@@ -178,9 +178,9 @@ export const WEAPON_MUTATIONS: Record<string, Record<string, MutationDef>> = {
     clean: { icon: 'K', name: 'Killshot',        desc: 'One-shots enemies under 20% HP.' },
     void:  { icon: 'V', name: 'Void Slug',       desc: 'Leaves corruption trail along bullet path.' },
   },
-  chain_rifle: {
-    clean: { icon: 'P', name: 'Precision Mode',  desc: 'Fire rate halved, each bullet does 4x damage, no slow.' },
-    void:  { icon: 'S', name: 'Suppressor',       desc: 'Slowed enemies take +30% from all sources, +50% corruption on hit.' },
+  void_swarm: {
+    clean: { icon: 'D', name: 'Dispatch', desc: 'No corruption cost to player. Detection range +60px (180px total), fragments 50% faster.' },
+    void:  { icon: 'V', name: 'Devour',   desc: 'Range 80px (melee). Corruption cost +50%. Heal 0.3 HP/s per latched fragment. On kill: erupts 2 mini-fragments for 2s.' },
   },
 };
 
@@ -335,18 +335,18 @@ export const WEAPON_MASTERY: Record<string, Record<string, MasteryPerk[]>> = {
       { id: 'vs_burst',   icon: 'B', name: 'Void Impact',     desc: 'Headshots on elites create 60px corruption burst.' },
     ],
   },
-  chain_rifle: {
+  void_swarm: {
     clean: [
-      { id: 'pm_damage',  icon: 'D', name: 'Heavy Rounds',    desc: '+2 damage in precision mode.' },
-      { id: 'pm_pierce',  icon: 'P', name: 'AP Rounds',       desc: 'Precision shots pierce 1 enemy.' },
-      { id: 'pm_range',   icon: 'R', name: 'Extended Barrel',  desc: 'Range +60px.' },
-      { id: 'pm_crit',    icon: 'C', name: 'Focused Fire',    desc: 'Every 5th shot crits (2x).' },
+      { id: 'swarm_extra',  icon: 'E', name: 'Fifth Shard',  desc: '+1 fragment (5 total).' },
+      { id: 'swarm_speed',  icon: 'S', name: 'Quick Return', desc: 'Fragment return speed +50%.' },
+      { id: 'swarm_range',  icon: 'R', name: 'Long Reach',   desc: 'Detection range +40px.' },
+      { id: 'swarm_latch',  icon: 'L', name: 'Sticky',       desc: 'Fragment stays latched 1s after enemy leaves range.' },
     ],
     void: [
-      { id: 'sp_slow',    icon: 'S', name: 'Deep Suppression', desc: 'Slow cap raised to 70%.' },
-      { id: 'sp_damage',  icon: 'D', name: 'Void Rounds',     desc: '+1 damage to slowed enemies.' },
-      { id: 'sp_corrupt', icon: 'C', name: 'Corruption Feed', desc: 'Slowed enemies gain +3 corruption/s.' },
-      { id: 'sp_burst',   icon: 'B', name: 'Suppression Wave', desc: 'Every 20th bullet: AOE slow 100px.' },
+      { id: 'swarm_longer', icon: 'X', name: 'Linger',            desc: 'Devour mini-fragments last 4s (was 2s).' },
+      { id: 'swarm_leech',  icon: 'H', name: 'Deep Leech',        desc: 'Devour latch heal +50% (0.45 HP/s per fragment).' },
+      { id: 'swarm_erupt',  icon: 'A', name: 'Chain Eruption',    desc: 'Devour mini-fragments pierce through enemies.' },
+      { id: 'swarm_boost',  icon: 'B', name: 'Corruption Frenzy', desc: 'Each latched fragment adds +15% to swarm DOT damage.' },
     ],
   },
 };

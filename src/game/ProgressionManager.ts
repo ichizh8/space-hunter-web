@@ -268,6 +268,12 @@ export class ProgressionManager {
           game.weapons.spinUp = true;
         } else if (card.perkEffect === 'linger_flames') {
           game.weapons.lingerFlames = true;
+        } else if (card.perkEffect === 'swarm_hunger') {
+          game.weapons.swarmHunger = true;
+        } else if (card.perkEffect === 'swarm_deep_root') {
+          game.weapons.swarmDeepRoot = true;
+        } else if (card.perkEffect === 'swarm_frenzy') {
+          game.weapons.swarmFrenzy = true;
         }
         // Boolean perks stored as flags
         game.activeModifiers.push(card.id);
@@ -351,13 +357,14 @@ export class ProgressionManager {
         } else if (wid === 'sniper_carbine' && path === 'void') {
           // Void Slug: penetrates all, corruption trail
           game.weapons.piercingCount += 99;
-        } else if (wid === 'chain_rifle' && path === 'clean') {
-          // Precision Mode: fire rate halved, 4x damage
-          game.weapons.fireRateBonus += 0.05; // slower
-          game.weapons.bonusDamage += 3;
-        } else if (wid === 'chain_rifle' && path === 'void') {
-          // Suppressor: slow stacking on hit
-          game.weapons.slowOnHit = true;
+        } else if (wid === 'void_swarm' && path === 'clean') {
+          // Dispatch: no corruption, +60px range, faster fragments
+          game.weapons.swarmDispatch = true;
+          game.weapons.swarmRange = 180;
+        } else if (wid === 'void_swarm' && path === 'void') {
+          // Devour: melee range, heal on latch, erupt on kill
+          game.weapons.swarmDevour = true;
+          game.weapons.swarmRange = 80;
         }
 
         game.activeModifiers.push(card.id);
@@ -399,6 +406,14 @@ export class ProgressionManager {
         if (card.id === 'oc_speed') game.weapons.bulletSpeedBonus += 35; // 25% of base 140
         if (card.id === 'oc_range') game.weapons.rangeBonus += 80;
         if (card.id === 'vc_extra') game.weapons.bounceExtra += 2;
+        // Void Swarm mastery perks requiring immediate application
+        if (card.id === 'swarm_extra') {
+          // +1 fragment
+          game.swarmFragments.push(game.createSwarmFragment(game.swarmFragments.length));
+        }
+        if (card.id === 'swarm_range') {
+          game.weapons.swarmRange += 40;
+        }
         this.applyMasteryPerk(card.id, game);
         game.hud.showMessage(`MASTERY: ${card.label}`, 2);
         break;
