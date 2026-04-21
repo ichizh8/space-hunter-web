@@ -1345,7 +1345,7 @@ export class Game {
         this.killcamReady = false;
       }
       const prevBulletCount = this.weapons.bullets.length;
-      const _fired = this.weapons.fire(this.player);
+      const _fired = this.weapons.fire(this.player, this.enemies.enemies);
       const newBulletCount = this.weapons.bullets.length - prevBulletCount;
       if (_fired.length > 0) {
         // overheat mastery: every 10th sidearm shot auto-fires an extra fragment burst

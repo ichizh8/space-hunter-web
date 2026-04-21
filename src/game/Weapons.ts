@@ -92,7 +92,7 @@ export class WeaponSystem {
   // Runtime state (updated each frame by Game)
   corruptionLevel = 0;
 
-  fire(player: Player): Bullet[] {
+  fire(player: Player, enemies?: Array<{ pos: Vec2; hp: number; isAlly: boolean }>): Bullet[] {
     const def = WEAPON_DEFS[player.weaponId];
     if (!def) return [];
     if (player.fireCooldown > 0) return [];
@@ -111,7 +111,31 @@ export class WeaponSystem {
     player.fireCooldown = Math.max(0.02, effectiveFireRate * this.planetFireRateMult);
     if (def.magSize < 999) player.magAmmo--;
 
-    const swingAngle = (def.pattern === 'melee_aoe' || def.pattern === 'laser') ? player.lastMoveAngle : player.aimAngle;
+    let swingAngle: number;
+    if (def.pattern === 'laser' && enemies) {
+      // Laser Pistol: auto-target closest enemy in range
+      const range = def.range + this.rangeBonus;
+      let closest: { pos: Vec2 } | null = null;
+      let closestDist = Infinity;
+      for (const e of enemies) {
+        if (e.hp <= 0 || e.isAlly) continue;
+        const d = v2dist(player.pos, e.pos);
+        if (d < closestDist && d <= range * 1.2) {
+          closestDist = d;
+          closest = e;
+        }
+      }
+      if (closest) {
+        swingAngle = Math.atan2(closest.pos.y - player.pos.y, closest.pos.x - player.pos.x);
+      } else {
+        // No enemy in range -- fire in movement direction as fallback
+        swingAngle = player.lastMoveAngle;
+      }
+    } else if (def.pattern === 'melee_aoe') {
+      swingAngle = player.lastMoveAngle;
+    } else {
+      swingAngle = player.aimAngle;
+    }
     const newBullets = this.createBullets(player.pos, swingAngle, def);
     this.bullets.push(...newBullets);
 
