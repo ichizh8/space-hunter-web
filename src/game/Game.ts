@@ -1111,6 +1111,34 @@ export class Game {
       }
     }
 
+    // Dash (thrusters) update
+    if (this.dashActive) {
+      this.dashTimer -= dt;
+      if (this.dashTimer <= 0) {
+        this.dashActive = false;
+        this.dashTimer = 0;
+      } else {
+        // Apply dash velocity override
+        this.player.pos.x += this.dashVelX * dt;
+        this.player.pos.y += this.dashVelY * dt;
+        this.player.pos.x = Math.max(this.player.radius, Math.min(this.map.roomW - this.player.radius, this.player.pos.x));
+        this.player.pos.y = Math.max(this.player.radius, Math.min(this.map.roomH - this.player.radius, this.player.pos.y));
+        this.player.iFrames = Math.max(this.player.iFrames, 0.05); // invulnerable during dash
+      }
+    }
+    // Recharge dash charges
+    if (this.dashCharges < this.dashMaxCharges) {
+      this.dashCooldown -= dt;
+      if (this.dashCooldown <= 0) {
+        this.dashCharges++;
+        if (this.dashCharges < this.dashMaxCharges) {
+          this.dashCooldown = this.dashMaxCooldown; // start next charge recharge
+        } else {
+          this.dashCooldown = 0;
+        }
+      }
+    }
+
     // Speed multipliers: void surge + stim T3 clean + instability zone slow
     let speedMult = 1.0;
     if (this.voidSurgeActive) speedMult *= 1.8;
