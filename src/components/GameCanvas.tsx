@@ -59,6 +59,7 @@ export function GameCanvas() {
     let destroyed = false;
 
     (async () => {
+      try {
       const PIXI = await import('pixi.js');
       const { Application } = PIXI;
       const { Game } = await import('../game/Game');
@@ -166,6 +167,9 @@ export function GameCanvas() {
       app.ticker.add((ticker) => {
         if (!destroyed) game.update(ticker.deltaMS / 1000);
       });
+      } catch (err) {
+        console.error('[GameCanvas] Runtime error:', err);
+      }
     })();
 
     return () => {

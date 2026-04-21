@@ -477,6 +477,7 @@ export class Game {
 
     this.camera = new Camera(vw, vh);
     this.map = new GameMap();
+    this.doorLabelLayer = new Container();
     if (this.currentRoom) {
       this.map.generateFromRoom(this.currentRoom);
       this.camera.worldW = this.map.roomW;
@@ -548,8 +549,6 @@ export class Game {
     this.entityGfx = new Graphics();
     this.bulletGfx = new Graphics();
     this.hudLayer = new Container();
-
-    this.doorLabelLayer = new Container();
 
     this.worldLayer.addChild(this.mapGfx);
     this.worldLayer.addChild(this.dynamicGfx);
