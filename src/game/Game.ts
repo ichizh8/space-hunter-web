@@ -189,8 +189,14 @@ export class Game {
   // Stim T3 clean speed timer
   stimSpeedTimer = 0;
 
-  // Blink T3 clean empowered shot
+  // Blink T3 clean empowered shot (legacy, now used by Phase Shift T3 clean: fire rate boost)
   blinkEmpowered = false;
+
+  // Phase Shift state
+  phaseShiftTimer = 0;
+  phaseShiftDuration = 1.5;
+  phaseShiftRadius = 250;
+  phaseShiftActive = false;
 
   // Kit T3 path choices (persisted per run)
   kitT3Choices: Record<string, string> = {};
@@ -1135,6 +1141,63 @@ export class Game {
           this.dashCooldown = this.dashMaxCooldown; // start next charge recharge
         } else {
           this.dashCooldown = 0;
+        }
+      }
+    }
+
+    // Phase Shift update
+    if (this.phaseShiftActive) {
+      this.phaseShiftTimer -= dt;
+      this.player.iFrames = Math.max(this.player.iFrames, 0.1); // invulnerable during shift
+      // Slow enemies in radius (scale velocity directly)
+      for (const e of this.enemies.enemies) {
+        if (e.hp <= 0 || e.isAlly) continue;
+        const d = Math.sqrt((e.pos.x - this.player.pos.x) ** 2 + (e.pos.y - this.player.pos.y) ** 2);
+        if (d < this.phaseShiftRadius) {
+          e.vel.x *= 0.3; // 70% slow
+          e.vel.y *= 0.3;
+          // T3 void: corruption damage to enemies in range
+          if (this.kitT3Choices['blink_kit'] === 'void') {
+            const corrDmg = 2 * dt;
+            e.hp -= corrDmg;
+            e.hitFlash = 0.05;
+            if (e.hp <= 0) this.onEnemyKilled(e);
+          }
+        }
+      }
+      // T3 clean: fire rate boost during shift
+      if (this.kitT3Choices['blink_kit'] === 'clean') {
+        this.player.fireCooldown *= 0.5;
+      }
+      if (this.phaseShiftTimer <= 0) {
+        this.phaseShiftActive = false;
+        // Phase Pulse perk: shockwave on exit
+        if (this.hasPerk('phase_pulse')) {
+          for (const e of this.enemies.enemies) {
+            if (e.hp <= 0 || e.isAlly) continue;
+            const d = Math.sqrt((e.pos.x - this.player.pos.x) ** 2 + (e.pos.y - this.player.pos.y) ** 2);
+            if (d < 200) {
+              e.hp -= 4;
+              e.hitFlash = 0.1;
+              if (e.hp <= 0) this.onEnemyKilled(e);
+            }
+          }
+          this.explosions.push({ x: this.player.pos.x, y: this.player.pos.y, radius: 0, maxRadius: 200, life: 0.3, maxLife: 0.3 });
+        }
+        // Phase Mark perk: mark enemies for +30% damage
+        if (this.hasPerk('phase_mark')) {
+          for (const e of this.enemies.enemies) {
+            if (e.hp <= 0 || e.isAlly) continue;
+            const d = Math.sqrt((e.pos.x - this.player.pos.x) ** 2 + (e.pos.y - this.player.pos.y) ** 2);
+            if (d < this.phaseShiftRadius) {
+              e.markedTimer = 3;
+              e.markedDmgBonus = 1.3;
+            }
+          }
+        }
+        // Smoke resonance: drop smoke on deactivate
+        if (this.hasMod('smoke_blink')) {
+          this.smokeZones.push({ x: this.player.pos.x, y: this.player.pos.y, radius: 150, life: 6, maxLife: 6 } as typeof this.smokeZones[number]);
         }
       }
     }

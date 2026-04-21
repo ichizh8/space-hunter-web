@@ -73,80 +73,29 @@ export class KitAbilitySystem {
         break;
       }
       case 'blink_kit': {
-        const oldPos = { x: game.player.pos.x, y: game.player.pos.y };
-        const blinkDist = 200;
-        const aim = game.player.nearestEnemyPos;
-        if (aim) {
-          const dx = aim.x - game.player.pos.x;
-          const dy = aim.y - game.player.pos.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist > 0) {
-            game.player.pos.x += (dx / dist) * blinkDist;
-            game.player.pos.y += (dy / dist) * blinkDist;
-          }
-        } else {
-          game.player.pos.y -= blinkDist;
-        }
-        game.player.pos.x = Math.max(0, Math.min(game.map.roomW, game.player.pos.x));
-        game.player.pos.y = Math.max(0, Math.min(game.map.roomH, game.player.pos.y));
-        // T2: stun field at departure point
+        // Phase Shift: invulnerability + enemy slow field
+        let duration = 1.5;
+        // T2: also stun enemies in range briefly on activation
         if (tier >= 2) {
           for (const e of game.enemies.enemies) {
-            if (e.hp > 0 && !e.isAlly && v2dist(oldPos, e.pos) < 100) {
-              e.stunTimer = 1.5;
+            if (e.hp > 0 && !e.isAlly && v2dist(game.player.pos, e.pos) < 250) {
+              e.stunTimer = 0.5;
             }
           }
-          game.explosions.push({ x: oldPos.x, y: oldPos.y, radius: 0, maxRadius: 100, life: 0.3, maxLife: 0.3 });
+          game.explosions.push({ x: game.player.pos.x, y: game.player.pos.y, radius: 0, maxRadius: 250, life: 0.4, maxLife: 0.4, type: 'phase' });
         }
-        // T3 clean: empowered next shot (3x damage)
+        // T3 clean: extended duration (3s) + fire rate boost (handled in update)
         if (tier >= 3 && t3Choice === 'clean') {
-          game.blinkEmpowered = true;
+          duration = 3.0;
         }
-        // T3 void: pull enemies with you
+        // T3 void: corruption damage over time (handled in update)
         if (tier >= 3 && t3Choice === 'void') {
-          for (const e of game.enemies.enemies) {
-            if (e.hp > 0 && !e.isAlly && v2dist(oldPos, e.pos) < 150) {
-              e.pos.x = game.player.pos.x + (Math.random() - 0.5) * 80;
-              e.pos.y = game.player.pos.y + (Math.random() - 0.5) * 80;
-            }
-          }
+          duration = 2.0;
         }
-        // Arrival Strike perk: push enemies 100px at landing
-        if (game.hasPerk('arrival_strike')) {
-          for (const e of game.enemies.enemies) {
-            if (e.hp > 0 && !e.isAlly && v2dist(game.player.pos, e.pos) < 100) {
-              const pd = v2norm(v2sub(e.pos, game.player.pos));
-              e.pos.x += pd.x * 100;
-              e.pos.y += pd.y * 100;
-            }
-          }
-          game.explosions.push({ x: game.player.pos.x, y: game.player.pos.y, radius: 0, maxRadius: 100, life: 0.2, maxLife: 0.2 });
-        }
-        // Swap perk: teleport to nearest enemy instead
-        if (game.hasPerk('swap')) {
-          let swapBest = 400;
-          let swapEnemy: Enemy | null = null;
-          for (const e of game.enemies.enemies) {
-            if (e.hp <= 0 || e.isAlly) continue;
-            const d = v2dist(oldPos, e.pos);
-            if (d < swapBest) { swapBest = d; swapEnemy = e; }
-          }
-          if (swapEnemy) {
-            game.player.pos.x = swapEnemy.pos.x;
-            game.player.pos.y = swapEnemy.pos.y;
-            swapEnemy.pos.x = oldPos.x;
-            swapEnemy.pos.y = oldPos.y;
-          }
-        }
-        // linked_fuse: override blink destination to last triggered flash_trap position
-        if (game.hasMod('linked_fuse') && game.lastFlashTrapPos) {
-          game.player.pos.x = Math.max(0, Math.min(game.map.roomW, game.lastFlashTrapPos.x));
-          game.player.pos.y = Math.max(0, Math.min(game.map.roomH, game.lastFlashTrapPos.y));
-        }
-        // smoke_blink: drop smoke cloud at blink landing point
-        if (game.hasMod('smoke_blink')) {
-          game.smokeZones.push({ x: game.player.pos.x, y: game.player.pos.y, radius: 150, life: 6, maxLife: 6 });
-        }
+        game.phaseShiftActive = true;
+        game.phaseShiftTimer = duration;
+        game.phaseShiftDuration = duration;
+        game.screenFlash = 0.2;
         break;
       }
       case 'turret_kit': {

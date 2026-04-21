@@ -445,6 +445,18 @@ export class VFXManager {
       }
     }
 
+    // Phase Shift visual: expanding/contracting ring + ghostly aura
+    if (game.phaseShiftActive) {
+      const shiftFrac = game.phaseShiftTimer / game.phaseShiftDuration;
+      const pulseR = game.phaseShiftRadius * (0.8 + Math.sin(game.elapsed * 6) * 0.2);
+      // Outer time-distortion ring
+      g.circle(px, py, pulseR).stroke({ color: 0x8844ff, width: 3, alpha: shiftFrac * 0.4 });
+      g.circle(px, py, pulseR * 0.7).stroke({ color: 0xaa66ff, width: 1.5, alpha: shiftFrac * 0.25 });
+      // Inner shield glow
+      g.circle(px, py, pr * 3).fill({ color: 0x6622cc, alpha: shiftFrac * 0.15 });
+      g.circle(px, py, pr * 2.5).stroke({ color: 0xcc88ff, width: 2, alpha: shiftFrac * 0.6 });
+    }
+
     // Player glow ring
     g.circle(px, py, pr * 2.2).fill({ color: 0x0066aa, alpha: 0.06 * pAlpha });
     g.circle(px, py, pr * 1.5).stroke({ color: 0x00aaff, width: 1, alpha: 0.2 * pAlpha });

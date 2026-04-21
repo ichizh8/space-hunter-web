@@ -12,7 +12,7 @@ export interface KitDef {
 export const KIT_DEFS: Record<string, KitDef> = {
   stim_pack:    { id: 'stim_pack',    name: 'Stim Pack',  icon: 'S', desc: '+4 HP, +15 corruption',       cooldown: 8,  charges: -1, unlockCost: 0,   tierCosts: [0, 60, 120] },
   flash_trap:   { id: 'flash_trap',   name: 'Flash Trap', icon: 'T', desc: 'Stun trap 80px 2s',           cooldown: 0,  charges: 2,  unlockCost: 0,   tierCosts: [0, 80, 160] },
-  blink_kit:    { id: 'blink_kit',    name: 'Blink',      icon: 'B', desc: 'Teleport 200px',              cooldown: 10, charges: -1, unlockCost: 120, tierCosts: [120, 100, 200] },
+  blink_kit:    { id: 'blink_kit',    name: 'Phase Shift', icon: 'B', desc: 'Invulnerable 1.5s, slow enemies 70%', cooldown: 12, charges: -1, unlockCost: 120, tierCosts: [120, 100, 200] },
   chain_kit:    { id: 'chain_kit',    name: 'Chain',       icon: 'C', desc: 'Tether enemy 3s',             cooldown: 12, charges: -1, unlockCost: 150, tierCosts: [150, 120, 220] },
   charge_kit:   { id: 'charge_kit',   name: 'Charge',      icon: 'X', desc: 'Knockback blast 150px',       cooldown: 12, charges: -1, unlockCost: 120, tierCosts: [120, 100, 200] },
   mirage_kit:   { id: 'mirage_kit',   name: 'Mirage',      icon: 'M', desc: 'Decoy draws aggro 6s',        cooldown: 18, charges: -1, unlockCost: 180, tierCosts: [180, 140, 260] },
@@ -99,8 +99,8 @@ export const KIT_PERKS: Record<string, KitPerkDef[]> = {
     { id: 'leash_break',      icon: 'X', name: 'Leash Break',      rarity: 'rare',   desc: 'If familiar is hit, it explodes once (5 dmg, 80px AOE).' },
   ],
   blink_kit: [
-    { id: 'arrival_strike',   icon: 'A', name: 'Arrival Strike',   rarity: 'common', desc: 'Blink arrival pushes nearby enemies away 100px.' },
-    { id: 'swap',             icon: 'S', name: 'Swap',             rarity: 'rare',   desc: 'Blink teleports to nearest enemy instead of direction.' },
+    { id: 'phase_mark',      icon: 'M', name: 'Phase Mark',       rarity: 'common', desc: 'Enemies in range during shift take +30% damage for 3s after.' },
+    { id: 'phase_pulse',     icon: 'P', name: 'Phase Pulse',      rarity: 'rare',   desc: 'Exiting phase shift releases a 200px shockwave (4 dmg).' },
   ],
   chain_kit: [
     { id: 'conductor',        icon: 'C', name: 'Conductor',        rarity: 'rare',   desc: 'While enemy is tethered, your bullets ricochet off them once.' },
@@ -151,13 +151,13 @@ export interface ResonanceDef {
 }
 
 export const RESONANCE_POOL: ResonanceDef[] = [
-  { id: 'linked_fuse',      kits: ['flash_trap', 'blink_kit'],    icon: 'L', name: 'Linked Fuse',    desc: 'Blink teleports you to nearest triggered trap.' },
-  { id: 'sympathetic_fire',  kits: ['drone_kit', 'blink_kit'],    icon: 'S', name: 'Sympathetic Fire', desc: 'Drone fires when you fire, not on timer.' },
+  { id: 'linked_fuse',      kits: ['flash_trap', 'blink_kit'],    icon: 'L', name: 'Time Lock',      desc: 'Flash trap stuns last 2x longer during phase shift.' },
+  { id: 'sympathetic_fire',  kits: ['drone_kit', 'blink_kit'],    icon: 'S', name: 'Sympathetic Fire', desc: 'Drone fires 3x faster during phase shift.' },
   { id: 'overcharge_drone',  kits: ['drone_kit', 'anchor_kit'],   icon: 'O', name: 'Overcharge',      desc: 'Drone fires 2x faster after anchor well expires.' },
   { id: 'trap_aggro',        kits: ['flash_trap', 'mirage_kit'],  icon: 'T', name: 'Trap Aggro',      desc: 'Decoy automatically moves toward nearest trap.' },
   { id: 'void_feedback',     kits: ['void_surge', 'rupture_kit'], icon: 'V', name: 'Void Feedback',   desc: 'Rupture recharges void surge instantly.' },
   { id: 'familiar_bond',     kits: ['familiar_kit', 'pack_kit'],  icon: 'F', name: 'Familiar Bond',   desc: 'Familiar buffs your summoned allies (+30% speed).' },
-  { id: 'smoke_blink',       kits: ['smoke_kit', 'blink_kit'],    icon: 'B', name: 'Smoke Step',      desc: 'Blink always lands in a smoke cloud.' },
+  { id: 'smoke_blink',       kits: ['smoke_kit', 'blink_kit'],    icon: 'B', name: 'Phantom Smoke',   desc: 'Phase shift drops a smoke cloud at your feet.' },
   { id: 'turret_familiar',   kits: ['turret_kit', 'familiar_kit'], icon: 'U', name: 'Familiar Link',  desc: 'Turret gains familiar healing aura (1 HP regen/5s to player while turret active).' },
   { id: 'chain_anchor',      kits: ['chain_kit', 'anchor_kit'],   icon: 'C', name: 'Gravity Chain',   desc: 'Tethered enemies are also pulled by anchor wells.' },
   { id: 'surge_charge',      kits: ['void_surge', 'charge_kit'],  icon: 'X', name: 'Surge Charge',    desc: 'Void surge resets charge kit cooldown instantly.' },
