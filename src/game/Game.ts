@@ -784,7 +784,7 @@ export class Game {
   private checkRoomClear() {
     if (this.roomCleared || this.doors.length === 0) return;
     const aliveCount = this.enemies.enemies.filter(e => e.hp > 0 && !e.isAlly).length;
-    if (aliveCount === 0 && this.enemies.enemies.length > 0) {
+    if (aliveCount === 0) {
       this.roomCleared = true;
       for (const d of this.doors) d.locked = false;
       this.hud.showMessage('ROOM CLEARED', 1.5);
