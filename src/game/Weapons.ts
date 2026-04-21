@@ -131,7 +131,7 @@ export class WeaponSystem {
         // No enemy in range -- fire in movement direction as fallback
         swingAngle = player.lastMoveAngle;
       }
-    } else if (def.pattern === 'melee_aoe') {
+    } else if (def.pattern === 'melee_aoe' || def.pattern === 'cone_stream') {
       swingAngle = player.lastMoveAngle;
     } else {
       swingAngle = player.aimAngle;
