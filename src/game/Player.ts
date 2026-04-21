@@ -108,6 +108,13 @@ export class Player {
     if (!map.isBlocked(newX, this.pos.y, this.radius)) this.pos.x = newX;
     if (!map.isBlocked(this.pos.x, newY, this.radius)) this.pos.y = newY;
 
+    // Push out if stuck inside obstacle (knockback, blink, etc.)
+    if (map.isBlocked(this.pos.x, this.pos.y, this.radius)) {
+      const escaped = map.pushOut(this.pos.x, this.pos.y, this.radius);
+      this.pos.x = escaped.x;
+      this.pos.y = escaped.y;
+    }
+
     // World bounds (use room dimensions if available)
     this.pos.x = clamp(this.pos.x, this.radius, (map.roomW ?? WORLD_W) - this.radius);
     this.pos.y = clamp(this.pos.y, this.radius, (map.roomH ?? WORLD_H) - this.radius);

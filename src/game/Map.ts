@@ -188,6 +188,30 @@ export class GameMap {
     return false;
   }
 
+  /** If player is stuck inside an obstacle, push them to the nearest edge */
+  pushOut(x: number, y: number, radius: number): { x: number; y: number } {
+    for (const obs of this.obstacles) {
+      const left = obs.pos.x - obs.w / 2;
+      const right = obs.pos.x + obs.w / 2;
+      const top = obs.pos.y - obs.h / 2;
+      const bottom = obs.pos.y + obs.h / 2;
+      if (x + radius > left && x - radius < right &&
+          y + radius > top && y - radius < bottom) {
+        // Find smallest push distance to escape
+        const pushLeft = left - radius - x;
+        const pushRight = right + radius - x;
+        const pushUp = top - radius - y;
+        const pushDown = bottom + radius - y;
+        const minAbs = Math.min(Math.abs(pushLeft), Math.abs(pushRight), Math.abs(pushUp), Math.abs(pushDown));
+        if (minAbs === Math.abs(pushLeft)) return { x: x + pushLeft, y };
+        if (minAbs === Math.abs(pushRight)) return { x: x + pushRight, y };
+        if (minAbs === Math.abs(pushUp)) return { x, y: y + pushUp };
+        return { x, y: y + pushDown };
+      }
+    }
+    return { x, y };
+  }
+
   /** Check if point is in river */
   isInRiver(x: number, y: number): boolean {
     for (const river of this.rivers) {

@@ -633,8 +633,28 @@ export class Game {
     }
   }
 
-  /** Helper: spawn a single enemy at world pos using planet/biome pools */
+  /** Helper: spawn a single enemy at world pos using planet/biome pools.
+   *  Enforces minimum distance from player spawn to prevent unfair hits. */
   private spawnRoomEnemy(x: number, y: number) {
+    // Push away from player spawn if too close
+    const minDist = 200;
+    const dx = x - this.player.pos.x;
+    const dy = y - this.player.pos.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < minDist && dist > 1) {
+      const push = (minDist - dist) / dist;
+      x += dx * push;
+      y += dy * push;
+    } else if (dist <= 1) {
+      // Exactly on player -- push to a random direction
+      const angle = Math.random() * Math.PI * 2;
+      x = this.player.pos.x + Math.cos(angle) * minDist;
+      y = this.player.pos.y + Math.sin(angle) * minDist;
+    }
+    // Clamp within room
+    x = Math.max(30, Math.min(this.map.roomW - 30, x));
+    y = Math.max(30, Math.min(this.map.roomH - 30, y));
+
     const biome = this.map.getBiome(x, y);
     const biomePool = BIOME_POOLS[biome] || BIOME_POOLS.open;
     const planetPool = PLANET_POOLS[this.planet];
@@ -736,7 +756,7 @@ export class Game {
     this.player.pos.x = this.map.spawnPos.x;
     this.player.pos.y = this.map.spawnPos.y;
     this.player.vel = v2(0, 0);
-    this.player.iFrames = 1.0; // brief invincibility on room entry
+    this.player.iFrames = 2.0; // invincibility on room entry (time to react)
 
     // Spawn enemies from new room
     this.spawnFromRoomZones(nextRoom);
