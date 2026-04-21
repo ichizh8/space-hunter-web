@@ -1,4 +1,4 @@
-import { Application, Container, Graphics, Sprite, Assets, Texture } from 'pixi.js';
+import { Application, Container, Graphics, Sprite, Assets, Texture, Text, TextStyle } from 'pixi.js';
 import { Camera } from './Camera';
 import { GameMap } from './Map';
 import { Player } from './Player';
@@ -121,6 +121,7 @@ export class Game {
   spriteLayer: Container;
   hudLayer: Container;
   biomeGfx: Graphics; // screen-space biome vignette overlay
+  doorLabelLayer: Container;
 
   // Sprite textures
   textures: Record<string, Texture> = {};
@@ -524,11 +525,14 @@ export class Game {
     this.bulletGfx = new Graphics();
     this.hudLayer = new Container();
 
+    this.doorLabelLayer = new Container();
+
     this.worldLayer.addChild(this.mapGfx);
     this.worldLayer.addChild(this.dynamicGfx);
     this.worldLayer.addChild(this.obstacleLayer);
     this.worldLayer.addChild(this.spriteLayer);
     this.worldLayer.addChild(this.entityGfx);
+    this.worldLayer.addChild(this.doorLabelLayer);
     this.worldLayer.addChild(this.bulletGfx);
     app.stage.addChild(this.worldLayer);
     app.stage.addChild(this.hudLayer);
@@ -581,20 +585,45 @@ export class Game {
   /** Load door entities from a room JSON */
   private loadRoomEntities(room: RoomJSON) {
     this.doors = [];
+    // Clear old door labels
+    this.doorLabelLayer.removeChildren();
     if (!room.entities) return;
     const SX = GameMap.ROOM_SCALE_X;
     const SY = GameMap.ROOM_SCALE_Y;
+    const REWARD_LABEL_COLORS: Record<string, number> = {
+      weapon: 0xff8800, perk: 0x4488ff, hp: 0x33ff66,
+      mystery: 0xbb44ff, credits: 0xffcc00,
+    };
     for (const ent of room.entities) {
       if (ent.type === 'door') {
+        const doorPos = v2(ent.pos.x * SX, ent.pos.y * SY);
+        const doorRadius = (ent.radius ?? 45) * Math.max(SX, SY);
+        const label = ent.label ?? ent.rewardTag ?? 'Door';
         this.doors.push({
           id: ent.id,
-          pos: v2(ent.pos.x * SX, ent.pos.y * SY),
-          radius: (ent.radius ?? 45) * Math.max(SX, SY),
+          pos: doorPos,
+          radius: doorRadius,
           rewardTag: ent.rewardTag ?? 'mystery',
           nextPool: ent.nextPool ?? '',
           locked: true,
-          label: ent.label ?? 'Door',
+          label,
         });
+        // Create text label for this door
+        const color = REWARD_LABEL_COLORS[ent.rewardTag ?? 'mystery'] ?? 0xbb44ff;
+        const labelText = new Text({
+          text: label.toUpperCase(),
+          style: new TextStyle({
+            fontFamily: 'PixelOperator, monospace',
+            fontSize: 16,
+            fill: color,
+            align: 'center',
+            letterSpacing: 1,
+          }),
+        });
+        labelText.anchor.set(0.5, 0);
+        labelText.x = doorPos.x;
+        labelText.y = doorPos.y + doorRadius + 8;
+        this.doorLabelLayer.addChild(labelText);
       }
     }
   }
@@ -782,11 +811,38 @@ export class Game {
 
   /** Check if all enemies are dead and unlock doors */
   private checkRoomClear() {
-    if (this.roomCleared || this.doors.length === 0) return;
+    if (this.roomCleared) return;
     const aliveCount = this.enemies.enemies.filter(e => e.hp > 0 && !e.isAlly).length;
     if (aliveCount === 0) {
       this.roomCleared = true;
       for (const d of this.doors) d.locked = false;
+
+      // Rooms with no doors: auto-advance based on room type
+      if (this.doors.length === 0 && this.currentRoom) {
+        const rt = this.currentRoom.roomType;
+        if (rt === 'extraction') {
+          // Extraction room cleared: contract complete
+          this.hud.showMessage('EXTRACTION COMPLETE', 2);
+          this.hud.showHalMessage(halSay(HAL_CONTRACT_DONE), 5);
+          setTimeout(() => this.finishHunt('COMPLETED'), 2000);
+          return;
+        } else if (rt === 'boss') {
+          // Boss room cleared: auto-transition to extraction
+          this.hud.showMessage('BOSS DEFEATED', 2);
+          setTimeout(() => {
+            this.transitionToRoom({ nextPool: `${this.planet}_extraction`, rewardTag: 'mystery' });
+          }, 2000);
+          return;
+        } else {
+          // Any other doorless room: advance to next standard
+          this.hud.showMessage('ROOM CLEARED', 1.5);
+          setTimeout(() => {
+            this.transitionToRoom({ nextPool: `${this.planet}_standard`, rewardTag: 'mystery' });
+          }, 1500);
+          return;
+        }
+      }
+
       this.hud.showMessage('ROOM CLEARED', 1.5);
     }
   }
@@ -1433,7 +1489,8 @@ export class Game {
     this.worldLayer.y = -this.camera.y + shakeY;
 
     // HUD
-    this.hud.draw(this.player, dt, this.totalKills, this.elapsed, this.equippedKits, this.kitCooldowns, this.screenFlash);
+    const enemiesLeft = this.currentRoom ? this.enemies.enemies.filter(e => e.hp > 0 && !e.isAlly).length : -1;
+    this.hud.draw(this.player, dt, this.totalKills, this.elapsed, this.equippedKits, this.kitCooldowns, this.screenFlash, enemiesLeft);
   }
 
   onEnemyKilled(enemy: Enemy) {

@@ -275,6 +275,8 @@ export interface RoomJSON {
   biome: string;
   contractTags: string[];
   difficulty: number;
+  planet?: string;
+  roomType?: string;
   size: { w: number; h: number };
 
   terrain: {

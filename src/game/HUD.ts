@@ -54,7 +54,7 @@ export class HUD {
     this.halStripDuration = duration;
   }
 
-  draw(player: Player, dt: number, kills: number, elapsed: number, kits: string[], kitCooldowns: Record<string, number> = {}, screenFlash = 0) {
+  draw(player: Player, dt: number, kills: number, elapsed: number, kits: string[], kitCooldowns: Record<string, number> = {}, screenFlash = 0, enemiesRemaining = -1) {
     const g = this.gfx;
     g.clear();
     const L = 16;
@@ -120,8 +120,9 @@ export class HUD {
     this.corrText.y = y + corrH + 6;
     y += 44;
 
-    // Kills counter
-    this.killsText.text = `KILLS: ${kills}`;
+    // Kills counter + enemies remaining
+    const enemyInfo = enemiesRemaining >= 0 ? `  [${enemiesRemaining} LEFT]` : '';
+    this.killsText.text = `KILLS: ${kills}${enemyInfo}`;
     this.killsText.x = corrX;
     this.killsText.y = y;
     y += 26;

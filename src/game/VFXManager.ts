@@ -1,7 +1,24 @@
-import { Sprite } from 'pixi.js';
+import { Sprite, Text, TextStyle, Container } from 'pixi.js';
 import { v2len, v2dist, v2fromAngle } from '../lib/math';
 import type { Enemy } from './Enemies';
 import type { Game } from './Game';
+
+// Door label colors by reward type
+const REWARD_COLORS: Record<string, number> = {
+  weapon: 0xff8800,
+  perk: 0x4488ff,
+  hp: 0x33ff66,
+  mystery: 0xbb44ff,
+  credits: 0xffcc00,
+};
+
+const DOOR_LABEL_STYLE = new TextStyle({
+  fontFamily: 'PixelOperator, monospace',
+  fontSize: 14,
+  fill: 0xffffff,
+  align: 'center',
+  letterSpacing: 1,
+});
 
 const CREATURE_SPRITE_MAP: Record<string, string> = {
   'Void Leech': 'void_leech',
@@ -337,19 +354,94 @@ export class VFXManager {
     // Room doors
     for (const door of game.doors) {
       const dx = door.pos.x, dy = door.pos.y, dr = door.radius;
+      const rewardColor = REWARD_COLORS[door.rewardTag] ?? 0xbb44ff;
+      // Dim tint of reward color for fill
+      const dimR = ((rewardColor >> 16) & 0xFF) >> 2;
+      const dimG = ((rewardColor >> 8) & 0xFF) >> 2;
+      const dimB = (rewardColor & 0xFF) >> 2;
+      const dimColor = (dimR << 16) | (dimG << 8) | dimB;
+
       if (door.locked) {
-        // Locked: red ring, dim fill
-        g.circle(dx, dy, dr).fill({ color: 0x441111, alpha: 0.3 });
-        g.circle(dx, dy, dr).stroke({ color: 0xff3333, width: 2, alpha: 0.6 });
+        // Locked: dim ring in reward color
+        g.circle(dx, dy, dr).fill({ color: dimColor, alpha: 0.2 });
+        g.circle(dx, dy, dr).stroke({ color: rewardColor, width: 2, alpha: 0.3 });
         // Lock icon (X)
-        g.moveTo(dx - 8, dy - 8).lineTo(dx + 8, dy + 8).stroke({ color: 0xff3333, width: 2, alpha: 0.8 });
-        g.moveTo(dx + 8, dy - 8).lineTo(dx - 8, dy + 8).stroke({ color: 0xff3333, width: 2, alpha: 0.8 });
+        g.moveTo(dx - 10, dy - 10).lineTo(dx + 10, dy + 10).stroke({ color: 0xff3333, width: 2, alpha: 0.6 });
+        g.moveTo(dx + 10, dy - 10).lineTo(dx - 10, dy + 10).stroke({ color: 0xff3333, width: 2, alpha: 0.6 });
       } else {
-        // Unlocked: green pulsing ring
+        // Unlocked: pulsing ring in reward color
         const pulse = 0.6 + Math.sin(game.elapsed * 4) * 0.3;
-        g.circle(dx, dy, dr).fill({ color: 0x113311, alpha: 0.3 });
-        g.circle(dx, dy, dr).stroke({ color: 0x33ff66, width: 3, alpha: pulse });
-        g.circle(dx, dy, dr * 0.6).stroke({ color: 0x33ff66, width: 1, alpha: pulse * 0.5 });
+        g.circle(dx, dy, dr).fill({ color: dimColor, alpha: 0.3 });
+        g.circle(dx, dy, dr).stroke({ color: rewardColor, width: 3, alpha: pulse });
+        g.circle(dx, dy, dr * 0.6).stroke({ color: rewardColor, width: 1, alpha: pulse * 0.5 });
+      }
+
+      // Reward icon inside door
+      const iconSize = 12;
+      switch (door.rewardTag) {
+        case 'weapon':
+          // Sword icon
+          g.moveTo(dx - iconSize, dy + iconSize).lineTo(dx + iconSize, dy - iconSize)
+            .stroke({ color: rewardColor, width: 2, alpha: 0.9 });
+          g.moveTo(dx - 4, dy - 4).lineTo(dx + 4, dy + 4)
+            .stroke({ color: rewardColor, width: 3, alpha: 0.7 });
+          break;
+        case 'perk':
+          // Star/diamond icon
+          g.moveTo(dx, dy - iconSize).lineTo(dx + 6, dy).lineTo(dx, dy + iconSize)
+            .lineTo(dx - 6, dy).closePath()
+            .fill({ color: rewardColor, alpha: 0.7 });
+          break;
+        case 'hp':
+          // Plus icon
+          g.moveTo(dx - iconSize, dy).lineTo(dx + iconSize, dy)
+            .stroke({ color: rewardColor, width: 3, alpha: 0.9 });
+          g.moveTo(dx, dy - iconSize).lineTo(dx, dy + iconSize)
+            .stroke({ color: rewardColor, width: 3, alpha: 0.9 });
+          break;
+        default:
+          // Mystery: ? shape
+          g.circle(dx, dy - 4, 6).stroke({ color: rewardColor, width: 2, alpha: 0.8 });
+          g.circle(dx, dy + 8, 2).fill({ color: rewardColor, alpha: 0.8 });
+          break;
+      }
+
+      // Label text below the door
+      if (door.label) {
+        // Use door label text objects managed by Game
+        // (Text rendering handled separately via doorLabels)
+      }
+    }
+
+    // Off-screen enemy indicators (red arrows at screen edge pointing toward hidden enemies)
+    if (game.currentRoom && !game.roomCleared) {
+      const cam = game.camera;
+      const margin = 30;
+      const arrowSize = 10;
+      for (const enemy of game.enemies.enemies) {
+        if (enemy.hp <= 0 || enemy.isAlly) continue;
+        // Check if enemy is off-screen
+        const sx = enemy.pos.x - cam.x;
+        const sy = enemy.pos.y - cam.y;
+        const inView = sx > -enemy.radius && sx < cam.viewW + enemy.radius &&
+                       sy > -enemy.radius && sy < cam.viewH + enemy.radius;
+        if (inView) continue;
+        // Clamp to screen edge (in world coords)
+        const clampX = Math.max(cam.x + margin, Math.min(cam.x + cam.viewW - margin, enemy.pos.x));
+        const clampY = Math.max(cam.y + margin, Math.min(cam.y + cam.viewH - margin, enemy.pos.y));
+        // Draw red triangle pointing toward enemy
+        const angle = Math.atan2(enemy.pos.y - clampY, enemy.pos.x - clampX);
+        const tipX = clampX + Math.cos(angle) * arrowSize;
+        const tipY = clampY + Math.sin(angle) * arrowSize;
+        const lx = clampX + Math.cos(angle + 2.5) * arrowSize;
+        const ly = clampY + Math.sin(angle + 2.5) * arrowSize;
+        const rx = clampX + Math.cos(angle - 2.5) * arrowSize;
+        const ry = clampY + Math.sin(angle - 2.5) * arrowSize;
+        const pulse = 0.5 + Math.sin(game.elapsed * 5) * 0.3;
+        g.moveTo(tipX, tipY).lineTo(lx, ly).lineTo(rx, ry).closePath()
+          .fill({ color: 0xff3333, alpha: pulse });
+        // Small dot at clamp point
+        g.circle(clampX, clampY, 3).fill({ color: 0xff3333, alpha: pulse * 0.6 });
       }
     }
 

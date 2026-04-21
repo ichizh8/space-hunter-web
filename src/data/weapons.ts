@@ -44,7 +44,7 @@ export type WeaponPerkEffect =
   | 'bounce_extra' | 'bounce_radius'
   | 'sniper_range'
   | 'chain_slow_boost' | 'chain_autocrit'
-  | 'deflect'
+  | 'deflect' | 'beam_width'
   // Fork effects (level 5 for weapons without named perks at 5)
   | 'flamer_fork' | 'grenade_fork' | 'entropy_fork'
   | 'pulse_fork' | 'sniper_fork' | 'chain_fork';
@@ -103,7 +103,7 @@ export const WEAPON_LEVEL_PERKS: Record<string, Record<number, WeaponPerk>> = {
   entropy_cannon: {
     2: { icon: 'D',  name: 'Overcharge',      desc: '+1 base damage',                   effect: 'damage',        value: 1 },
     3: { icon: 'R',  name: 'Rapid Decay',     desc: 'Rate of fire +20%',                effect: 'fire_rate',     value: -0.016 },
-    4: { icon: 'P',  name: 'Penetrating',     desc: 'Penetrating rounds (pierce 1)',    effect: 'piercing',      value: true },
+    4: { icon: 'W',  name: 'Wide Lens',        desc: 'Beam width x2, easier to hit',     effect: 'beam_width',    value: true },
     5: { icon: 'F',  name: 'Fork',            desc: 'Clean: Stabilized | Void: Resonance', effect: 'entropy_fork', value: true },
   },
   pulse_cannon: {

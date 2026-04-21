@@ -133,7 +133,8 @@ export class BulletSystem {
       if (bullet.tag === 'void_beam' && bullet.lineStart && bullet.lineEnd) {
         for (const enemy of game.enemies.enemies) {
           if (enemy.hp <= 0 || enemy.isAlly || bullet.hitSet.has(enemy.id)) continue;
-          if (!lineSegHitsCircle(bullet.lineStart, bullet.lineEnd, enemy.pos, enemy.radius + 4)) continue;
+          const beamHitW = (enemy.radius + 4) * game.weapons.beamWidthMult;
+          if (!lineSegHitsCircle(bullet.lineStart, bullet.lineEnd, enemy.pos, beamHitW)) continue;
           bullet.hitSet.add(enemy.id);
           let finalDmg = bullet.damage;
           if (enemy.markedTimer > 0) finalDmg = Math.floor(finalDmg * enemy.markedDmgBonus);
@@ -676,18 +677,19 @@ export class BulletSystem {
       }
       if (b.tag === 'void_beam' && b.lineStart && b.lineEnd) {
         const frac = b.life / b.maxLife;
+        const bw = game.weapons.beamWidthMult;
         // Wide purple glow
         g.moveTo(b.lineStart.x, b.lineStart.y).lineTo(b.lineEnd.x, b.lineEnd.y)
-          .stroke({ color: 0x6600cc, width: 14, alpha: frac * 0.12 });
+          .stroke({ color: 0x6600cc, width: 14 * bw, alpha: frac * 0.12 });
         // Mid beam
         g.moveTo(b.lineStart.x, b.lineStart.y).lineTo(b.lineEnd.x, b.lineEnd.y)
-          .stroke({ color: 0xaa44ff, width: 5, alpha: frac * 0.7 });
+          .stroke({ color: 0xaa44ff, width: 5 * bw, alpha: frac * 0.7 });
         // Hot core
         g.moveTo(b.lineStart.x, b.lineStart.y).lineTo(b.lineEnd.x, b.lineEnd.y)
-          .stroke({ color: 0xdd88ff, width: 2, alpha: frac * 0.95 });
+          .stroke({ color: 0xdd88ff, width: 2 * bw, alpha: frac * 0.95 });
         // White center flash
         g.moveTo(b.lineStart.x, b.lineStart.y).lineTo(b.lineEnd.x, b.lineEnd.y)
-          .stroke({ color: 0xffffff, width: 0.8, alpha: frac * 0.6 });
+          .stroke({ color: 0xffffff, width: 0.8 * bw, alpha: frac * 0.6 });
         continue;
       }
       if (b.tag === 'plasma_slash' && b.lineStart && b.lineEnd && b.aimAngle !== undefined) {

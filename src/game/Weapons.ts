@@ -47,6 +47,7 @@ export class WeaponSystem {
   missileTrackingMult = 1.0; // dart tracking_plus: stronger homing
   missileAoeOnHit = false;   // dart payload: missile explodes on impact
   parasiteDuration = 4;      // dart deep_parasite: 4s base, 6s with perk
+  beamWidthMult = 1.0;       // entropy_cannon wide_lens: doubles beam hit radius
 
   // Mutation flags
   slowFieldOnLand = false;

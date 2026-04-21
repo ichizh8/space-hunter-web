@@ -214,6 +214,8 @@ export class ProgressionManager {
           game.weapons.fireRateBonus = (game.weapons.fireRateBonus ?? 0) + card.perkValue;
         } else if (card.perkEffect === 'piercing') {
           game.weapons.piercingCount = (game.weapons.piercingCount ?? 0) + 1;
+        } else if (card.perkEffect === 'beam_width') {
+          game.weapons.beamWidthMult = 2.0;
         } else if (card.perkEffect === 'fire_rate_mag') {
           game.weapons.fireRateBonus = (game.weapons.fireRateBonus ?? 0) - 0.18;
           game.player.magSize += 6;
