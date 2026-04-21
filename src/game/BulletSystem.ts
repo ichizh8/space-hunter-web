@@ -129,6 +129,33 @@ export class BulletSystem {
         continue;
       }
 
+      // Void beam: piercing line-hit (damages ALL enemies on the line)
+      if (bullet.tag === 'void_beam' && bullet.lineStart && bullet.lineEnd) {
+        for (const enemy of game.enemies.enemies) {
+          if (enemy.hp <= 0 || enemy.isAlly || bullet.hitSet.has(enemy.id)) continue;
+          if (!lineSegHitsCircle(bullet.lineStart, bullet.lineEnd, enemy.pos, enemy.radius + 4)) continue;
+          bullet.hitSet.add(enemy.id);
+          let finalDmg = bullet.damage;
+          if (enemy.markedTimer > 0) finalDmg = Math.floor(finalDmg * enemy.markedDmgBonus);
+          if (enemy.affixes.includes('armored')) finalDmg = Math.max(1, Math.floor(finalDmg * 0.5));
+          if (enemy.affixes.includes('shielded') && enemy.shieldHp > 0) {
+            if (enemy.shieldHp >= finalDmg) { enemy.shieldHp -= finalDmg; finalDmg = 0; }
+            else { finalDmg -= enemy.shieldHp; enemy.shieldHp = 0; }
+          }
+          // Entropy cannon corruption scaling
+          if (game.player.weaponId === 'entropy_cannon') {
+            const scaleMult = game.weapons.corruptionScaling ? (game.hasMod('res_scaling') ? 4 : 3) : 1;
+            const enemyCorr = game.enemyCorruption.get(enemy.id) ?? 0;
+            finalDmg *= (1 + scaleMult * game.player.corruption / 30) * (1 + enemyCorr * 0.02);
+          }
+          enemy.hp -= finalDmg;
+          enemy.hitFlash = 0.08;
+          enemy.isAggroed = true;
+          if (enemy.hp <= 0) game.onEnemyKilled(enemy);
+        }
+        continue;
+      }
+
       for (const enemy of game.enemies.enemies) {
         if (enemy.hp <= 0 || enemy.isAlly) continue;
         // Plasma Sword line-slash: line-segment vs circle, bypass normal circle checkHit
@@ -645,6 +672,22 @@ export class BulletSystem {
         // White core
         g.moveTo(b.lineStart.x, b.lineStart.y).lineTo(b.lineEnd.x, b.lineEnd.y)
           .stroke({ color: 0xffffff, width: 1, alpha: frac });
+        continue;
+      }
+      if (b.tag === 'void_beam' && b.lineStart && b.lineEnd) {
+        const frac = b.life / b.maxLife;
+        // Wide purple glow
+        g.moveTo(b.lineStart.x, b.lineStart.y).lineTo(b.lineEnd.x, b.lineEnd.y)
+          .stroke({ color: 0x6600cc, width: 14, alpha: frac * 0.12 });
+        // Mid beam
+        g.moveTo(b.lineStart.x, b.lineStart.y).lineTo(b.lineEnd.x, b.lineEnd.y)
+          .stroke({ color: 0xaa44ff, width: 5, alpha: frac * 0.7 });
+        // Hot core
+        g.moveTo(b.lineStart.x, b.lineStart.y).lineTo(b.lineEnd.x, b.lineEnd.y)
+          .stroke({ color: 0xdd88ff, width: 2, alpha: frac * 0.95 });
+        // White center flash
+        g.moveTo(b.lineStart.x, b.lineStart.y).lineTo(b.lineEnd.x, b.lineEnd.y)
+          .stroke({ color: 0xffffff, width: 0.8, alpha: frac * 0.6 });
         continue;
       }
       if (b.tag === 'plasma_slash' && b.lineStart && b.lineEnd && b.aimAngle !== undefined) {

@@ -189,12 +189,20 @@ export class WeaponSystem {
       }
 
       case 'beam_stream': {
-        const beamLife = range / Math.max(speed, 1);
-        const beamCount = Math.random() < 0.5 ? 1 : 2;
-        return Array.from({ length: beamCount }, () => {
-          const a = angle + randRange(-0.05, 0.05);
-          return makeBullet(a, { life: beamLife, maxLife: beamLife });
-        });
+        // Continuous beam ray (like laser but sustained purple beam)
+        const beamLife = 0.1;
+        const beamRange = range * 1.2;
+        const a = angle + randRange(-0.03, 0.03);
+        return [makeBullet(a, {
+          vel: v2(0, 0),
+          life: beamLife,
+          maxLife: beamLife,
+          radius: 2,
+          lineStart: v2(pos.x, pos.y),
+          lineEnd: v2(pos.x + Math.cos(a) * beamRange, pos.y + Math.sin(a) * beamRange),
+          tag: 'void_beam',
+          piercing: true,
+        })];
       }
 
       case 'laser': {

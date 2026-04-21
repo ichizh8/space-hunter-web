@@ -655,6 +655,15 @@ export class Game {
     x = Math.max(30, Math.min(this.map.roomW - 30, x));
     y = Math.max(30, Math.min(this.map.roomH - 30, y));
 
+    // Push out of obstacles (retry up to 5 times)
+    for (let attempt = 0; attempt < 5 && this.map.isBlocked(x, y, 15); attempt++) {
+      const escaped = this.map.pushOut(x, y, 15);
+      x = escaped.x;
+      y = escaped.y;
+    }
+    // If still blocked, skip this enemy
+    if (this.map.isBlocked(x, y, 15)) return;
+
     const biome = this.map.getBiome(x, y);
     const biomePool = BIOME_POOLS[biome] || BIOME_POOLS.open;
     const planetPool = PLANET_POOLS[this.planet];
