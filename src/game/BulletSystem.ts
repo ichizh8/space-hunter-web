@@ -708,6 +708,10 @@ export class BulletSystem {
       if (b.life <= 0 && b.tag === 'sniper_trail' && b.hitSet.size === 0 && game.weapons.killstreak > 0) {
         game.weapons.killstreak = 0;
       }
+      // Lingering Flames: expired flame particles leave small fire patches
+      if (b.life <= 0 && b.tag === 'flame_particle' && game.weapons.lingerFlames && Math.random() < 0.35) {
+        game.smokeZones.push({ x: b.pos.x, y: b.pos.y, radius: 18, life: 1.0, maxLife: 1.0, toxic: true } as typeof game.smokeZones[number]);
+      }
     }
     game.weapons.bullets = game.weapons.bullets.filter(b => b.life > 0);
 
@@ -734,6 +738,27 @@ export class BulletSystem {
       const alpha = (p.life / p.maxLife) * 0.75;
       g.circle(p.x, p.y, p.radius * 2).fill({ color: p.color, alpha: alpha * 0.25 });
       g.circle(p.x, p.y, p.radius).fill({ color: p.color, alpha: alpha });
+    }
+
+    // Draw smoke/fire zones
+    for (const sz of game.smokeZones) {
+      if (!game.camera.isVisible(sz.x, sz.y, sz.radius)) continue;
+      const alpha = Math.min(sz.life / sz.maxLife, 1) * 0.3;
+      if (sz.toxic) {
+        // Fire patches: orange-red glow
+        g.circle(sz.x, sz.y, sz.radius).fill({ color: 0xff4400, alpha: alpha * 0.5 });
+        g.circle(sz.x, sz.y, sz.radius * 0.6).fill({ color: 0xff6622, alpha: alpha * 0.7 });
+      } else if (sz.corruptionField) {
+        // Purple corruption zone
+        g.circle(sz.x, sz.y, sz.radius).fill({ color: 0x6600aa, alpha: alpha * 0.4 });
+        g.circle(sz.x, sz.y, sz.radius).stroke({ color: 0x8833cc, width: 1, alpha: alpha * 0.6 });
+      } else if (sz.corrupting) {
+        // Corruption trail (sniper void)
+        g.circle(sz.x, sz.y, sz.radius).fill({ color: 0x4400aa, alpha: alpha * 0.3 });
+      } else {
+        // Smoke: grey-green
+        g.circle(sz.x, sz.y, sz.radius).fill({ color: 0x556655, alpha: alpha * 0.35 });
+      }
     }
 
     for (const b of game.weapons.bullets) {
@@ -796,6 +821,28 @@ export class BulletSystem {
         g.moveTo(b.lineStart.x, b.lineStart.y)
           .lineTo(b.lineEnd.x, b.lineEnd.y)
           .stroke({ color: 0xffffff, width: 2, alpha: frac });
+        continue;
+      }
+      if (b.tag === 'flame_particle') {
+        const lifeFrac = b.life / b.maxLife; // 1=fresh, 0=dying
+        // Grow from base radius to 2.5x as particle dies
+        const growR = b.radius * (1 + (1 - lifeFrac) * 1.5);
+        // Color shift: white core -> orange -> dark red as it dies
+        if (lifeFrac > 0.7) {
+          // Fresh: bright white-orange core
+          g.circle(b.pos.x, b.pos.y, growR * 1.5).fill({ color: 0xff6622, alpha: 0.2 * lifeFrac });
+          g.circle(b.pos.x, b.pos.y, growR).fill({ color: 0xff8833, alpha: 0.7 * lifeFrac });
+          g.circle(b.pos.x, b.pos.y, growR * 0.5).fill({ color: 0xffcc66, alpha: 0.9 * lifeFrac });
+        } else if (lifeFrac > 0.3) {
+          // Mid: orange glow
+          g.circle(b.pos.x, b.pos.y, growR * 1.3).fill({ color: 0x882200, alpha: 0.15 * lifeFrac });
+          g.circle(b.pos.x, b.pos.y, growR).fill({ color: 0xff5500, alpha: 0.6 * lifeFrac });
+          g.circle(b.pos.x, b.pos.y, growR * 0.4).fill({ color: 0xff8844, alpha: 0.7 * lifeFrac });
+        } else {
+          // Dying: dark red embers, large and fading
+          g.circle(b.pos.x, b.pos.y, growR * 1.2).fill({ color: 0x441100, alpha: 0.1 * lifeFrac });
+          g.circle(b.pos.x, b.pos.y, growR).fill({ color: 0x992200, alpha: 0.4 * lifeFrac });
+        }
         continue;
       }
       if (b.tag === 'sniper_trail') {

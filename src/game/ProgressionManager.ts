@@ -266,6 +266,8 @@ export class ProgressionManager {
           game.weapons.killstreak = 0; // flag, tracking done in BulletSystem
         } else if (card.perkEffect === 'spin_up') {
           game.weapons.spinUp = true;
+        } else if (card.perkEffect === 'linger_flames') {
+          game.weapons.lingerFlames = true;
         }
         // Boolean perks stored as flags
         game.activeModifiers.push(card.id);

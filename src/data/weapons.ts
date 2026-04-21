@@ -46,7 +46,7 @@ export type WeaponPerkEffect =
   | 'chain_slow_boost' | 'chain_autocrit'
   | 'deflect' | 'beam_width'
   | 'laser_range' | 'laser_mark' | 'laser_pierce'
-  | 'lance_trail' | 'backblast' | 'proximity_fuse' | 'siphon_link'
+  | 'lance_trail' | 'backblast' | 'proximity_fuse' | 'siphon_link' | 'linger_flames'
   | 'shatter_bounce' | 'killstreak' | 'spin_up'
   // Fork effects (level 5 for weapons without named perks at 5)
   | 'sidearm_fork' | 'flamer_fork' | 'grenade_fork' | 'entropy_fork'
@@ -94,7 +94,7 @@ export const WEAPON_LEVEL_PERKS: Record<string, Record<number, WeaponPerk>> = {
   flamethrower: {
     2: { icon: 'F',  name: 'Backblast',      desc: 'Enemies that die while burning explode (2 dmg, 60px)', effect: 'backblast', value: true },
     3: { icon: 'N',  name: 'Napalm',         desc: 'Burn upgrade: 3 dmg/s (base 2), spreads on kill', effect: 'burning', value: true },
-    4: { icon: 'P',  name: 'Pressurized',    desc: 'Fire rate +30%',                    effect: 'fire_rate',     value: -0.036 },
+    4: { icon: 'P',  name: 'Lingering Flames', desc: 'Flames last 50% longer, leave fire patches (1s, 1 dmg/s)', effect: 'linger_flames', value: true },
     5: { icon: 'T',  name: 'Fork',           desc: 'Clean: Cryo Flamer | Void: Corruption Spray', effect: 'flamer_fork', value: true },
   },
   grenade_launcher: {

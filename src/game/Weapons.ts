@@ -66,6 +66,7 @@ export class WeaponSystem {
   spinUp = false;                // Spin Up: chain rifle fire rate ramps
   spinUpTimer = 0;               // how long chain rifle has been firing continuously
   shatterBounceQueue: Array<{ x: number; y: number }> = []; // positions where shatter bounces occurred
+  lingerFlames = false;          // Lingering Flames: flame particles last longer, leave fire patches
 
   // Mutation flags
   slowFieldOnLand = false;
@@ -219,20 +220,20 @@ export class WeaponSystem {
         return [makeBullet(angle, { homing: true, life: 3.0, maxLife: 3.0 })];
 
       case 'cone_stream': {
-        const baseLife = range / Math.max(speed, 1);
         const count = Math.random() < 0.5 ? 4 : 5;
+        const lifeMult = this.lingerFlames ? 1.5 : 1.0;
         return Array.from({ length: count }, () => {
           const a = angle + randRange(-0.35, 0.35);
           const spdMult = 1 + randRange(-0.2, 0.2);
-          const lifeMult = 1 + randRange(-0.15, 0.15);
-          const particleRad = 6 + Math.random() * 6; // 6–12
           const particleSpd = Math.max(speed * spdMult, 1);
-          const particleLife = (range * lifeMult) / particleSpd;
+          const particleLife = (range * (1 + randRange(-0.15, 0.15)) * lifeMult) / particleSpd;
+          const particleRad = 4 + Math.random() * 4; // 4-8, will grow over lifetime
           return makeBullet(a, {
             vel: v2fromAngle(a, particleSpd),
             radius: particleRad,
             life: particleLife,
             maxLife: particleLife,
+            tag: 'flame_particle',
           });
         });
       }
@@ -302,6 +303,15 @@ export class WeaponSystem {
         const trackW = Math.min(0.95, 0.2 * this.missileTrackingMult * planetTrack);
         const blend = v2norm(v2add(v2mul(currentDir, 1 - trackW), v2mul(toTarget, trackW)));
         b.vel = v2mul(blend, speed);
+      }
+
+      // Flame particles: decelerate over lifetime, expand radius
+      if (b.tag === 'flame_particle') {
+        const lifeFrac = b.life / b.maxLife; // 1 = fresh, 0 = dying
+        // Decelerate: slow to 30% of initial speed by end of life
+        const decel = 0.3 + 0.7 * lifeFrac;
+        b.vel.x *= Math.pow(decel, dt * 4);
+        b.vel.y *= Math.pow(decel, dt * 4);
       }
 
       b.pos = v2add(b.pos, v2mul(b.vel, dt));
