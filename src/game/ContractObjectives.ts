@@ -37,6 +37,7 @@ export class ContractObjectives {
         if (iz.timer <= 0) { game.instabilityZones.splice(i, 1); continue; }
         if (v2dist(game.player.pos, { x: iz.x, y: iz.y }) < iz.radius) {
           game.player.hp -= 1.5 * dt;
+          game.player.totalDamageTaken += 1.5 * dt;
           game.player.corruption = Math.min(100, game.player.corruption + 3 * dt);
         }
       }
@@ -200,6 +201,7 @@ export class ContractObjectives {
           if (iz.timer <= 0) { game.instabilityZones.splice(i, 1); continue; }
           if (v2dist(game.player.pos, { x: iz.x, y: iz.y }) < iz.radius) {
             game.player.hp -= 1 * dt;
+            game.player.totalDamageTaken += 1 * dt;
             game.player.corruption = Math.min(100, game.player.corruption + 2 * dt);
             if (game.player.hp <= 0 && !game.dead) {
               game.dead = true;

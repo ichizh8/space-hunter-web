@@ -266,7 +266,6 @@ export class Game {
   eliteKills = 0;
   apexKills = 0;
   damageDealt = 0;
-  damageTaken = 0;
   peakCorruption = 0;
   ingredients: Array<{ id: string; name: string }> = [];
   paused = false;
@@ -609,6 +608,7 @@ export class Game {
     } else {
       this.enemies.spawnWave(30, this.player.pos, this.map);
     }
+    this.player.iFrames = 2.0; // invincibility at hunt start, same as room entry (time to react)
     this.hud.showMessage('HUNT STARTED', 2);
     setTimeout(() => this.hud.showHalMessage(halSay(HAL_HUNT_START), 5), 2500);
 
@@ -726,8 +726,11 @@ export class Game {
   /** Helper: spawn a single enemy at world pos using planet/biome pools.
    *  Enforces minimum distance from player spawn to prevent unfair hits. */
   private spawnRoomEnemy(x: number, y: number) {
-    // Push away from player spawn if too close
-    const minDist = 200;
+    // Push away from player spawn if too close.
+    // 320 > detection radius of most melee creatures (250-330), so initial
+    // spawns don't insta-aggro; fastest swarmers (~148 speed) need ~2.2s to
+    // reach the player, matching the 2s entry grace.
+    const minDist = 320;
     const dx = x - this.player.pos.x;
     const dy = y - this.player.pos.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
@@ -2057,6 +2060,7 @@ export class Game {
         this.player.pos.y -= ny * pushStr * dt;
         if (dist > this.hollowArenaRadius) {
           this.player.hp -= 3 * dt;
+          this.player.totalDamageTaken += 3 * dt;
           this.player.corruption = Math.min(100, this.player.corruption + 5 * dt);
         }
       }
@@ -2548,8 +2552,8 @@ export class Game {
       eliteKills: this.eliteKills,
       apexKills: this.apexKills,
       peakCorruption: this.peakCorruption,
-      damageDealt: this.damageDealt,
-      damageTaken: this.damageTaken,
+      damageDealt: Math.round(this.damageDealt),
+      damageTaken: Math.round(this.player.totalDamageTaken),
       ingredients: this.ingredients,
     });
   }

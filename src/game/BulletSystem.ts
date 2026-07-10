@@ -138,6 +138,7 @@ export class BulletSystem {
                 if (nearby.hp <= 0 || nearby.isAlly || nearby === hitEnemy) continue;
                 if (v2dist(hitEnemy.pos, nearby.pos) <= 80) {
                   nearby.hp -= 5;
+                  game.damageDealt += 5;
                   nearby.hitFlash = 0.15;
                   if (nearby.hp <= 0) game.onEnemyKilled(nearby);
                   // seed_spread mastery: detonation plants 1 seed on nearby
@@ -193,6 +194,7 @@ export class BulletSystem {
             finalDmg *= (1 + scaleMult * game.player.corruption / 30) * (1 + enemyCorr * 0.02);
           }
           enemy.hp -= finalDmg;
+          game.damageDealt += finalDmg;
           enemy.hitFlash = 0.08;
           enemy.isAggroed = true;
           // Siphon Link: beam on target gives player +2 corruption/s
@@ -615,6 +617,7 @@ export class BulletSystem {
       if (enemy.burnTimer > 0) {
         enemy.burnTimer -= dt;
         enemy.hp -= burnDmgPerSec * dt;
+        game.damageDealt += burnDmgPerSec * dt;
         enemy.hitFlash = Math.max(enemy.hitFlash, 0.05);
         if (enemy.hp <= 0) game.onEnemyKilled(enemy);
       }
@@ -644,6 +647,7 @@ export class BulletSystem {
         if (enemy.hp <= 0 || enemy.isAlly) continue;
         if (v2dist({ x: sb.x, y: sb.y }, enemy.pos) <= 20) {
           enemy.hp -= 1;
+          game.damageDealt += 1;
           enemy.hitFlash = 0.08;
           if (enemy.hp <= 0) game.onEnemyKilled(enemy);
         }
