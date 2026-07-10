@@ -11,6 +11,7 @@ import { BulletSystem } from './BulletSystem';
 import { ContractObjectives } from './ContractObjectives';
 import { KitAbilitySystem } from './KitAbilitySystem';
 import { ProgressionManager } from './ProgressionManager';
+import { DamageFloaters } from './DamageFloaters';
 import { VFXManager, DIR_NAMES, SPRITES_WITH_DIRS } from './VFXManager';
 import { type Vec2, v2dist, v2, v2sub, v2norm, v2mul, v2len, v2fromAngle, randRange, lineSegHitsCircle, pick } from '../lib/math';
 import { pickNextRoom } from '../data/rooms/roomPool';
@@ -266,7 +267,6 @@ export class Game {
   eliteKills = 0;
   apexKills = 0;
   damageDealt = 0;
-  damageTaken = 0;
   peakCorruption = 0;
   ingredients: Array<{ id: string; name: string }> = [];
   paused = false;
@@ -399,6 +399,11 @@ export class Game {
 
   // Drop capsules
   dropSystem = new DropSystem();
+
+  // Damage numbers
+  floaters = new DamageFloaters();
+  // Kill hit-stop: world freezes for a few frames on kill (juice)
+  hitStopTimer = 0;
 
   // Spawn management
   spawnManager!: SpawnManager;
@@ -580,6 +585,7 @@ export class Game {
     this.worldLayer.addChild(this.entityGfx);
     this.worldLayer.addChild(this.doorLabelLayer);
     this.worldLayer.addChild(this.bulletGfx);
+    this.worldLayer.addChild(this.floaters.container);
     app.stage.addChild(this.worldLayer);
     app.stage.addChild(this.hudLayer);
 
@@ -609,6 +615,7 @@ export class Game {
     } else {
       this.enemies.spawnWave(30, this.player.pos, this.map);
     }
+    this.player.iFrames = 2.0; // invincibility at hunt start, same as room entry (time to react)
     this.hud.showMessage('HUNT STARTED', 2);
     setTimeout(() => this.hud.showHalMessage(halSay(HAL_HUNT_START), 5), 2500);
 
@@ -726,8 +733,11 @@ export class Game {
   /** Helper: spawn a single enemy at world pos using planet/biome pools.
    *  Enforces minimum distance from player spawn to prevent unfair hits. */
   private spawnRoomEnemy(x: number, y: number) {
-    // Push away from player spawn if too close
-    const minDist = 200;
+    // Push away from player spawn if too close.
+    // 320 > detection radius of most melee creatures (250-330), so initial
+    // spawns don't insta-aggro; fastest swarmers (~148 speed) need ~2.2s to
+    // reach the player, matching the 2s entry grace.
+    const minDist = 320;
     const dx = x - this.player.pos.x;
     const dy = y - this.player.pos.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
@@ -792,6 +802,13 @@ export class Game {
       }
     }
 
+    // Boss Hunt: the door graphs route ... -> elite -> extraction and never
+    // visit the boss room. Intercept the extraction hop and insert the boss
+    // room first; after the boss dies, checkRoomClear auto-routes to extraction.
+    if (this.contractType === 'boss_hunt' && nextType === 'extraction' && !this.apexSpawned) {
+      nextType = 'boss';
+    }
+
     // Pick the next room template
     let nextRoom: RoomJSON | null = null;
     try {
@@ -807,6 +824,7 @@ export class Game {
     }
 
     // Clear current state
+    this.floaters.clear();
     this.enemies.enemies = [];
     this.enemies.mines = [];
     this.enemies.enemyBullets = [];
@@ -860,6 +878,12 @@ export class Game {
     // Spawn enemies from new room
     this.spawnFromRoomZones(nextRoom);
 
+    // Boss Hunt: the apex IS the boss room encounter (spawnFromRoomZones only
+    // fills generic mobs; room mode never reaches SpawnManager's apex timer)
+    if (this.contractType === 'boss_hunt' && nextRoom.roomType === 'boss' && !this.apexSpawned) {
+      this.spawnManager.spawnApex(this);
+    }
+
     // Lock doors
     for (const d of this.doors) d.locked = true;
 
@@ -889,7 +913,12 @@ export class Game {
           return;
         } else if (rt === 'boss') {
           // Boss room cleared: auto-transition to extraction
-          this.hud.showMessage('BOSS DEFEATED', 2);
+          if (this.contractType === 'boss_hunt' && this.apexSpawned) {
+            this.apexKills++;
+            this.hud.showMessage('APEX ELIMINATED', 2.5);
+          } else {
+            this.hud.showMessage('BOSS DEFEATED', 2);
+          }
           setTimeout(() => {
             this.transitionToRoom({ nextPool: `${this.planet}_extraction`, rewardTag: 'mystery' });
           }, 2000);
@@ -1146,6 +1175,12 @@ export class Game {
 
   update(dt: number) {
     if (this.dead || this.complete || this.paused) return;
+    // Kill hit-stop: freeze the world for a couple frames (floaters keep animating)
+    if (this.hitStopTimer > 0) {
+      this.hitStopTimer -= dt;
+      this.floaters.update(dt, this.enemies.enemies);
+      return;
+    }
     this.elapsed += dt;
 
     // Par time warning at 80%
@@ -1584,6 +1619,7 @@ export class Game {
     this.updateSwarmFragments(dt);
 
     this.kitSystem.update(dt, this);
+    this.floaters.update(dt, this.enemies.enemies);
 
     this.contractObjectives.update(dt, this);
 
@@ -1873,6 +1909,27 @@ export class Game {
   }
 
   onEnemyKilled(enemy: Enemy) {
+    // Death juice: color burst + ring + brief hit-stop (bigger for elites)
+    if (!enemy.isAlly) {
+      const count = this.particles.length > 500 ? 8 : Math.min(26, 10 + Math.floor(enemy.radius * 0.6));
+      for (let i = 0; i < count; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const s = 50 + Math.random() * 130;
+        this.particles.push({
+          x: enemy.pos.x, y: enemy.pos.y,
+          vx: Math.cos(a) * s, vy: Math.sin(a) * s,
+          life: 0.35 + Math.random() * 0.3, maxLife: 0.65,
+          radius: 2 + Math.random() * 2.5,
+          color: Math.random() < 0.25 ? 0xffffff : enemy.color,
+        });
+      }
+      this.explosions.push({ x: enemy.pos.x, y: enemy.pos.y, radius: 0, maxRadius: enemy.radius * 2.2, life: 0.22, maxLife: 0.22 });
+      this.hitStopTimer = Math.max(this.hitStopTimer, enemy.isElite ? 0.09 : 0.03);
+      if (enemy.isElite) {
+        this.shakeTimer = Math.max(this.shakeTimer, 0.2);
+        this.shakeAmt = Math.max(this.shakeAmt, 5);
+      }
+    }
     // Backblast: burning enemies explode on death (2 dmg, 60px)
     if (this.weapons.backblast && enemy.burnTimer > 0) {
       for (const nearby of this.enemies.enemies) {
@@ -2057,6 +2114,7 @@ export class Game {
         this.player.pos.y -= ny * pushStr * dt;
         if (dist > this.hollowArenaRadius) {
           this.player.hp -= 3 * dt;
+          this.player.totalDamageTaken += 3 * dt;
           this.player.corruption = Math.min(100, this.player.corruption + 5 * dt);
         }
       }
@@ -2548,8 +2606,8 @@ export class Game {
       eliteKills: this.eliteKills,
       apexKills: this.apexKills,
       peakCorruption: this.peakCorruption,
-      damageDealt: this.damageDealt,
-      damageTaken: this.damageTaken,
+      damageDealt: Math.round(this.damageDealt),
+      damageTaken: Math.round(this.player.totalDamageTaken),
       ingredients: this.ingredients,
     });
   }

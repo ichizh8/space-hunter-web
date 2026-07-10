@@ -79,6 +79,7 @@ export function GameCanvas() {
         roundPixels: true,
         resolution: window.devicePixelRatio || 1,
         autoDensity: true,
+        preference: 'webgl', // WKWebView has no WebGPU; keep web/iOS renderers identical
       });
 
       if (destroyed) { app.destroy(true); return; }

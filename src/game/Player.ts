@@ -157,6 +157,8 @@ export class Player {
   invincibleTimer = 0;
   /** Shield hits remaining from familiar SHIELD buff (absorbs N hits) */
   shieldHits = 0;
+  /** Running total of damage that actually landed (for hunt results) */
+  totalDamageTaken = 0;
 
   takeDamage(amount: number): boolean {
     if (this.iFrames > 0) return false;
@@ -177,6 +179,7 @@ export class Player {
       return false;
     }
     this.hp -= amount;
+    this.totalDamageTaken += amount;
     this.iFrames = 0.3;
     this.hitFlash = 0.15;
     return this.hp <= 0;

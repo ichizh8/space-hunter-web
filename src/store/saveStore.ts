@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { REP_THRESHOLDS } from '../data/recipes';
 import { INGREDIENTS } from '../data/ingredients';
+import { inScopeWeapon, inScopeKit, inScopePlanet } from '../data/releaseScope';
 
 export interface SaveState {
   totalCredits: number;
@@ -99,6 +100,7 @@ export const useSaveStore = create<SaveState & SaveActions>()(
 
       unlockWeapon: (id, cost) => {
         const s = get();
+        if (!inScopeWeapon(id)) return false;
         if (s.unlockedWeapons.includes(id) || s.totalCredits < cost) return false;
         set({
           totalCredits: s.totalCredits - cost,
@@ -109,6 +111,7 @@ export const useSaveStore = create<SaveState & SaveActions>()(
 
       unlockKit: (id, cost) => {
         const s = get();
+        if (!inScopeKit(id)) return;
         if (s.totalCredits < cost) return;
         set({
           totalCredits: s.totalCredits - cost,
@@ -127,6 +130,7 @@ export const useSaveStore = create<SaveState & SaveActions>()(
       },
 
       assignKit: (kitId, slot) => {
+        if (!inScopeKit(kitId)) return;
         const s = get();
         const maxSlots = 2 + (s.shipUpgrades.kit_slots || 0);
         const eq = [...s.equippedKits];
@@ -196,6 +200,7 @@ export const useSaveStore = create<SaveState & SaveActions>()(
       })),
 
       getPlanetUnlocked: (planet) => {
+        if (!inScopePlanet(planet)) return false;
         const { planetClearance } = get();
         if (planet === 'kepler') return true;
         if (planet === 'tidal') return (planetClearance.kepler ?? 0) >= 10;
@@ -205,22 +210,26 @@ export const useSaveStore = create<SaveState & SaveActions>()(
         return false;
       },
 
-      getAvailableWeapons: () => get().unlockedWeapons,
+      getAvailableWeapons: () => get().unlockedWeapons.filter(inScopeWeapon),
 
       markIntroSeen: () => set({ introSeen: true }),
 
       devGiveResources: () => set(s => {
-        const ALL_WEAPONS = ['sidearm', 'scatter', 'lance', 'baton', 'dart', 'flamethrower', 'grenade_launcher', 'entropy_cannon', 'pulse_cannon', 'sniper_carbine', 'void_swarm'];
-        const ALL_KITS = ['stim_pack', 'flash_trap', 'smoke_kit', 'blink_kit', 'charge_kit', 'chain_kit', 'turret_kit', 'familiar_kit', 'mirage_kit', 'anchor_kit', 'drone_kit', 'pack_kit', 'void_surge', 'rupture_kit'];
+        const ALL_WEAPONS = ['sidearm', 'scatter', 'lance', 'baton', 'dart', 'flamethrower', 'grenade_launcher', 'entropy_cannon', 'pulse_cannon', 'sniper_carbine', 'void_swarm'].filter(inScopeWeapon);
+        const ALL_KITS = ['stim_pack', 'flash_trap', 'smoke_kit', 'blink_kit', 'charge_kit', 'chain_kit', 'turret_kit', 'familiar_kit', 'mirage_kit', 'anchor_kit', 'drone_kit', 'pack_kit', 'void_surge', 'rupture_kit'].filter(inScopeKit);
         const kitTiers = { ...s.kitTiers };
         for (const k of ALL_KITS) {
           if (!kitTiers[k]) kitTiers[k] = 1;
         }
+        const clearAll = { kepler: 15, tidal: 15, void_reach: 15, furnace: 15, hollow: 0 };
+        const planetClearance = Object.fromEntries(
+          Object.entries(clearAll).map(([p, v]) => [p, inScopePlanet(p) ? v : (s.planetClearance[p] ?? 0)])
+        ) as Record<string, number>;
         return {
           totalCredits: s.totalCredits + 5000,
           pantry: { rift_dust: 99, void_crystal: 99, cave_moss: 99, river_silt: 99, elite_core: 99 },
           reputation: 1200,
-          planetClearance: { kepler: 15, tidal: 15, void_reach: 15, furnace: 15, hollow: 0 },
+          planetClearance,
           ingredientInventory: Object.fromEntries(Object.keys(INGREDIENTS).map(id => [id, 99])),
           unlockedWeapons: ALL_WEAPONS,
           unlockedKits: ALL_KITS,
@@ -239,7 +248,7 @@ export const useSaveStore = create<SaveState & SaveActions>()(
     }),
     {
       name: 'space_hunter_save',
-      version: 2,
+      version: 3,
       migrate: (persistedState: unknown, version: number) => {
         const state = persistedState as Record<string, unknown>;
         if (version < 2) {
@@ -248,6 +257,16 @@ export const useSaveStore = create<SaveState & SaveActions>()(
             state.reputation = Object.values(oldRep as Record<string, number>)
               .reduce((a: number, b: number) => a + b, 0);
           }
+        }
+        // v3: Lite scope. Sanitize EQUIPPED kits only -- unlocked lists stay
+        // intact in the save (parked, not deleted; filtered at read time).
+        if (version < 3 && Array.isArray(state.equippedKits)) {
+          const eq = (state.equippedKits as string[]).map(k => (k && !inScopeKit(k) ? '' : k));
+          if (!eq.some(k => k === 'stim_pack' || k === 'flash_trap')) {
+            if (!eq[0]) eq[0] = 'stim_pack';
+            else if (eq.length > 1 && !eq[1]) eq[1] = 'flash_trap';
+          }
+          state.equippedKits = eq;
         }
         return state;
       },

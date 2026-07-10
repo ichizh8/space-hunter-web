@@ -1,4 +1,5 @@
 import { type PlanetId, type Planet, PLANETS, getUnlockedPlanets } from './planets';
+import { scopedContractTypes } from './releaseScope';
 
 export interface ContractTypeDef {
   label: string;
@@ -189,10 +190,11 @@ export function generateContractsForPlanet(
   clearance: number
 ): Contract[] {
   const difficulty = getPlanetDifficulty(planet, clearance);
+  const scoped = scopedContractTypes(planet.id, planet.allowedContractTypes);
   const used = new Set<string>();
   return Array.from({ length: count }, () => {
-    const pool = planet.allowedContractTypes.filter(t => !used.has(t));
-    const available = pool.length > 0 ? pool : planet.allowedContractTypes;
+    const pool = scoped.filter(t => !used.has(t));
+    const available = pool.length > 0 ? pool : scoped;
     const type = available[Math.floor(Math.random() * available.length)];
     used.add(type);
     return buildContract(type, planet, difficulty);

@@ -16,6 +16,7 @@ import broodMotherNest from '../../data/rooms/hunt/elite/brood_mother_nest.json'
 import { registerAction } from '../../game/rooms/ActionRegistry';
 import { useGameStore } from '../../store/gameStore';
 import type { RoomModifierDef } from '../../data/modifiers';
+import { RELEASE_SCOPE } from '../../data/releaseScope';
 
 // Index of rooms keyed by their `id` so doors can link via `nextPool`.
 const ROOM_INDEX: Record<string, RoomJSON> = {
@@ -74,6 +75,10 @@ interface RunState {
 }
 
 export default function RunDemoPage() {
+  // Lite release: dev tooling routes are not part of the shipped game
+  if (RELEASE_SCOPE) {
+    return <main style={{ padding: 40, textAlign: 'center' }}>Not available in this build.</main>;
+  }
   const containerRef = useRef<HTMLDivElement>(null);
   const runtimeRef = useRef<RoomRuntimeHandle | null>(null);
 

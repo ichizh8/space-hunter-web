@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useSaveStore } from '../store/saveStore';
 import { KITCHEN_RECIPES, canCook, type KitchenRecipe } from '../data/recipes';
 import { INGREDIENTS } from '../data/ingredients';
+import { inScopePlanet } from '../data/releaseScope';
 import { CookingMinigame } from './CookingMinigame';
 
 const TIER_TO_STATION: Record<string, string> = {
@@ -134,7 +135,11 @@ export function KitchenScreen() {
           STATIONS
         </div>
         <div className="flex gap-2">
-          {STATION_ORDER.map(id => {
+          {STATION_ORDER.filter(id => {
+            // Lite: hide stations whose clearance planet is parked
+            const req = STATION_CLEARANCE[id];
+            return !req || inScopePlanet(req.planet);
+          }).map(id => {
             const unlocked = (stations[id] ?? 0) >= 1;
             const cost = STATION_COST[id];
             const clearReq = STATION_CLEARANCE[id];

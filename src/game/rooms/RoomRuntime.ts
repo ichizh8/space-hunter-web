@@ -106,6 +106,7 @@ export async function createRoomRuntime(
     roundPixels: true,
     resolution: 1,  // simple: buffer = CSS, click math stays trivial
     autoDensity: false,
+    preference: 'webgl',
   });
 
   container.appendChild(app.canvas);

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { RELEASE_SCOPE } from '../../data/releaseScope';
 
 export const metadata: Metadata = {
   title: 'HAL — A Colleague\'s Notes | Space Hunter',
@@ -6,6 +7,10 @@ export const metadata: Metadata = {
 };
 
 export default function LorePage() {
+  // Lite release: dev tooling routes are not part of the shipped game
+  if (RELEASE_SCOPE) {
+    return <main style={{ padding: 40, textAlign: 'center' }}>Not available in this build.</main>;
+  }
   return (
     <main className="min-h-screen bg-[#050508] text-[#cc8866] font-mono overflow-x-hidden">
 

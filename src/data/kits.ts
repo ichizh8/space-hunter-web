@@ -1,3 +1,5 @@
+import { SCOPE_SKIP_KIT_PREREQS } from './releaseScope';
+
 export interface KitDef {
   id: string;
   name: string;
@@ -62,6 +64,9 @@ export const KIT_TREE_SECTIONS: Record<string, string[]> = {
 export const KIT_SLOT_COSTS = [300, 600];
 
 export function checkKitPrereqs(kitId: string, kitTiers: Record<string, number>, unlockedKits: string[]): boolean {
+  // Lite release: only 4 kits in scope, the prerequisite tree is dropped
+  // (turret_kit's only prereq, charge_kit, is parked -- see releaseScope.ts)
+  if (SCOPE_SKIP_KIT_PREREQS) return true;
   const prereqs = KIT_PREREQUISITES[kitId] || [];
   for (const p of prereqs) {
     if (!unlockedKits.includes(p.kit)) return false;
@@ -71,6 +76,7 @@ export function checkKitPrereqs(kitId: string, kitTiers: Record<string, number>,
 }
 
 export function getPrereqText(kitId: string): string {
+  if (SCOPE_SKIP_KIT_PREREQS) return '';
   const prereqs = KIT_PREREQUISITES[kitId] || [];
   if (prereqs.length === 0) return '';
   return 'Requires: ' + prereqs.map(p => `${KIT_DEFS[p.kit]?.name || p.kit} T${p.tier}`).join(', ');
