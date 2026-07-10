@@ -191,7 +191,7 @@ export class BulletSystem {
           if (game.player.weaponId === 'entropy_cannon') {
             const scaleMult = game.weapons.corruptionScaling ? (game.hasMod('res_scaling') ? 4 : 3) : 1;
             const enemyCorr = game.enemyCorruption.get(enemy.id) ?? 0;
-            finalDmg *= (1 + scaleMult * game.player.corruption / 30) * (1 + enemyCorr * 0.02);
+            finalDmg *= Math.min(5, 1 + scaleMult * game.player.corruption / 30) * (1 + enemyCorr * 0.02); // capped at x5
           }
           enemy.hp -= finalDmg;
           game.damageDealt += finalDmg;
@@ -254,7 +254,7 @@ export class BulletSystem {
             // res_scaling: x4 multiplier instead of x3; base: x1 (no scaling without mutation)
             const scaleMult = game.weapons.corruptionScaling ? (game.hasMod('res_scaling') ? 4 : 3) : 1;
             const enemyCorr = game.enemyCorruption.get(enemy.id) ?? 0;
-            finalDmg *= (1 + scaleMult * game.player.corruption / 30) * (1 + enemyCorr * 0.02);
+            finalDmg *= Math.min(5, 1 + scaleMult * game.player.corruption / 30) * (1 + enemyCorr * 0.02); // capped at x5
             // stable_crit: every 5th shot deals 2x damage
             if (game.hasMod('stable_crit') && game.entropyShotCount % 5 === 0 && game.entropyShotCount > 0) {
               finalDmg *= 2;

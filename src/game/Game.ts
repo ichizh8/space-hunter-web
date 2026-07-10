@@ -11,6 +11,7 @@ import { BulletSystem } from './BulletSystem';
 import { ContractObjectives } from './ContractObjectives';
 import { KitAbilitySystem } from './KitAbilitySystem';
 import { ProgressionManager } from './ProgressionManager';
+import { DamageFloaters } from './DamageFloaters';
 import { VFXManager, DIR_NAMES, SPRITES_WITH_DIRS } from './VFXManager';
 import { type Vec2, v2dist, v2, v2sub, v2norm, v2mul, v2len, v2fromAngle, randRange, lineSegHitsCircle, pick } from '../lib/math';
 import { pickNextRoom } from '../data/rooms/roomPool';
@@ -399,6 +400,11 @@ export class Game {
   // Drop capsules
   dropSystem = new DropSystem();
 
+  // Damage numbers
+  floaters = new DamageFloaters();
+  // Kill hit-stop: world freezes for a few frames on kill (juice)
+  hitStopTimer = 0;
+
   // Spawn management
   spawnManager!: SpawnManager;
   bulletSystem!: BulletSystem;
@@ -579,6 +585,7 @@ export class Game {
     this.worldLayer.addChild(this.entityGfx);
     this.worldLayer.addChild(this.doorLabelLayer);
     this.worldLayer.addChild(this.bulletGfx);
+    this.worldLayer.addChild(this.floaters.container);
     app.stage.addChild(this.worldLayer);
     app.stage.addChild(this.hudLayer);
 
@@ -810,6 +817,7 @@ export class Game {
     }
 
     // Clear current state
+    this.floaters.clear();
     this.enemies.enemies = [];
     this.enemies.mines = [];
     this.enemies.enemyBullets = [];
@@ -1149,6 +1157,12 @@ export class Game {
 
   update(dt: number) {
     if (this.dead || this.complete || this.paused) return;
+    // Kill hit-stop: freeze the world for a couple frames (floaters keep animating)
+    if (this.hitStopTimer > 0) {
+      this.hitStopTimer -= dt;
+      this.floaters.update(dt, this.enemies.enemies);
+      return;
+    }
     this.elapsed += dt;
 
     // Par time warning at 80%
@@ -1587,6 +1601,7 @@ export class Game {
     this.updateSwarmFragments(dt);
 
     this.kitSystem.update(dt, this);
+    this.floaters.update(dt, this.enemies.enemies);
 
     this.contractObjectives.update(dt, this);
 
@@ -1876,6 +1891,27 @@ export class Game {
   }
 
   onEnemyKilled(enemy: Enemy) {
+    // Death juice: color burst + ring + brief hit-stop (bigger for elites)
+    if (!enemy.isAlly) {
+      const count = this.particles.length > 500 ? 8 : Math.min(26, 10 + Math.floor(enemy.radius * 0.6));
+      for (let i = 0; i < count; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const s = 50 + Math.random() * 130;
+        this.particles.push({
+          x: enemy.pos.x, y: enemy.pos.y,
+          vx: Math.cos(a) * s, vy: Math.sin(a) * s,
+          life: 0.35 + Math.random() * 0.3, maxLife: 0.65,
+          radius: 2 + Math.random() * 2.5,
+          color: Math.random() < 0.25 ? 0xffffff : enemy.color,
+        });
+      }
+      this.explosions.push({ x: enemy.pos.x, y: enemy.pos.y, radius: 0, maxRadius: enemy.radius * 2.2, life: 0.22, maxLife: 0.22 });
+      this.hitStopTimer = Math.max(this.hitStopTimer, enemy.isElite ? 0.09 : 0.03);
+      if (enemy.isElite) {
+        this.shakeTimer = Math.max(this.shakeTimer, 0.2);
+        this.shakeAmt = Math.max(this.shakeAmt, 5);
+      }
+    }
     // Backblast: burning enemies explode on death (2 dmg, 60px)
     if (this.weapons.backblast && enemy.burnTimer > 0) {
       for (const nearby of this.enemies.enemies) {
