@@ -5,7 +5,10 @@ import { useGameStore } from '../store/gameStore';
 import { useSaveStore } from '../store/saveStore';
 import { generateContractsForPlanet, type Contract } from '../data/contracts';
 import { PLANETS, PLANET_ORDER, type PlanetId } from '../data/planets';
+import { inScopePlanet } from '../data/releaseScope';
 import { halSay, HAL_CONTRACT_TYPES } from '../data/hal';
+
+const VISIBLE_PLANETS = PLANET_ORDER.filter(inScopePlanet);
 
 function toHex(n: number) {
   return '#' + n.toString(16).padStart(6, '0');
@@ -16,7 +19,7 @@ function initBoard(
   getPlanetUnlocked: (id: string) => boolean,
 ): Record<PlanetId, Contract[]> {
   const board: Partial<Record<PlanetId, Contract[]>> = {};
-  for (const id of PLANET_ORDER) {
+  for (const id of VISIBLE_PLANETS) {
     const clearance = planetClearance[id] ?? 0;
     board[id] = getPlanetUnlocked(id)
       ? generateContractsForPlanet(PLANETS[id], 2, clearance)
@@ -64,9 +67,9 @@ export function ContractBoard() {
         <div className="h-[1px] bg-[var(--color-hal-dim)] mt-3" style={{ opacity: 0.4 }} />
       </div>
 
-      {/* Planet tabs */}
-      <div className="flex gap-2 px-4 pt-3 pb-1 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
-        {PLANET_ORDER.map(id => {
+      {/* Planet tabs (hidden when only one planet is in scope) */}
+      {VISIBLE_PLANETS.length > 1 && <div className="flex gap-2 px-4 pt-3 pb-1 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+        {VISIBLE_PLANETS.map(id => {
           const p = PLANETS[id];
           const isActive = id === activePlanet;
           const isUnlocked = unlocked(id);
@@ -91,7 +94,7 @@ export function ContractBoard() {
             </button>
           );
         })}
-      </div>
+      </div>}
 
       {/* HAL quip */}
       {contracts[0] && unlocked(activePlanet) && (

@@ -17,6 +17,7 @@ import {
   SURFACE_TYPES,
 } from '../../editor/editorStore';
 import { CREATURE_NAMES } from '../../data/creatures';
+import { RELEASE_SCOPE } from '../../data/releaseScope';
 
 const EditorCanvas = dynamic(
   () => import('../../editor/EditorCanvas').then((m) => m.EditorCanvas),
@@ -908,6 +909,10 @@ function WaveTimeline() {
 
 // ---- Main Page --------------------------------------------------------------
 export default function EditorPage() {
+  // Lite release: dev tooling routes are not part of the shipped game
+  if (RELEASE_SCOPE) {
+    return <main style={{ padding: 40, textAlign: 'center' }}>Not available in this build.</main>;
+  }
   const store       = useEditorStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
 

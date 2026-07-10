@@ -802,6 +802,13 @@ export class Game {
       }
     }
 
+    // Boss Hunt: the door graphs route ... -> elite -> extraction and never
+    // visit the boss room. Intercept the extraction hop and insert the boss
+    // room first; after the boss dies, checkRoomClear auto-routes to extraction.
+    if (this.contractType === 'boss_hunt' && nextType === 'extraction' && !this.apexSpawned) {
+      nextType = 'boss';
+    }
+
     // Pick the next room template
     let nextRoom: RoomJSON | null = null;
     try {
@@ -871,6 +878,12 @@ export class Game {
     // Spawn enemies from new room
     this.spawnFromRoomZones(nextRoom);
 
+    // Boss Hunt: the apex IS the boss room encounter (spawnFromRoomZones only
+    // fills generic mobs; room mode never reaches SpawnManager's apex timer)
+    if (this.contractType === 'boss_hunt' && nextRoom.roomType === 'boss' && !this.apexSpawned) {
+      this.spawnManager.spawnApex(this);
+    }
+
     // Lock doors
     for (const d of this.doors) d.locked = true;
 
@@ -900,7 +913,12 @@ export class Game {
           return;
         } else if (rt === 'boss') {
           // Boss room cleared: auto-transition to extraction
-          this.hud.showMessage('BOSS DEFEATED', 2);
+          if (this.contractType === 'boss_hunt' && this.apexSpawned) {
+            this.apexKills++;
+            this.hud.showMessage('APEX ELIMINATED', 2.5);
+          } else {
+            this.hud.showMessage('BOSS DEFEATED', 2);
+          }
           setTimeout(() => {
             this.transitionToRoom({ nextPool: `${this.planet}_extraction`, rewardTag: 'mystery' });
           }, 2000);

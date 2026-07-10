@@ -5,6 +5,7 @@ import { useSaveStore } from '../store/saveStore';
 import { REP_THRESHOLDS } from '../data/recipes';
 import { INGREDIENTS_BY_PLANET } from '../data/ingredients';
 import { KIT_DEFS, KIT_TREE_SECTIONS, KIT_SLOT_COSTS, checkKitPrereqs, getPrereqText } from '../data/kits';
+import { RELEASE_SCOPE, inScopeWeapon, inScopeKit, inScopePlanet } from '../data/releaseScope';
 import { KitchenScreen } from './KitchenScreen';
 import {
   halSay, HAL_GREETINGS, HAL_FIRST_VISIT, HAL_PRE_CONTRACT,
@@ -192,7 +193,7 @@ export function ShipTab({ save, huntResult, onContracts }: {
 
       <SectionHeader text="INGREDIENTS" color="var(--color-accent-orange)" />
       <div className="flex gap-3 justify-center py-2">
-        {Object.entries(INGREDIENTS_BY_PLANET).map(([planet, groups]) => {
+        {Object.entries(INGREDIENTS_BY_PLANET).filter(([planet]) => inScopePlanet(planet)).map(([planet, groups]) => {
           const allIds = [...groups.common, ...groups.rare, ...groups.boss];
           const total = allIds.reduce((sum, id) => sum + (save.ingredientInventory[id] ?? 0), 0);
           const color = PLANET_COLORS[planet] ?? '#fff';
@@ -285,7 +286,7 @@ export function UpgradesTab({ save }: { save: ReturnType<typeof useSaveStore.get
       })}
 
       <SectionHeader text="WEAPONS" color="var(--color-accent-orange)" />
-      {WEAPON_UNLOCK_DEFS.map(def => {
+      {WEAPON_UNLOCK_DEFS.filter(def => inScopeWeapon(def.id)).map(def => {
         const owned = save.unlockedWeapons.includes(def.id);
         const playerRepTier = save.getRepTier();
         const repLocked = def.repTier > 0 && playerRepTier < def.repTier;
@@ -316,7 +317,9 @@ export function KitsTab({ save }: { save: ReturnType<typeof useSaveStore.getStat
   const assignKit = useSaveStore(s => s.assignKit);
   const buyUpgrade = useSaveStore(s => s.buyUpgrade);
 
-  const maxSlots = 2 + (save.shipUpgrades.kit_slots || 0);
+  // Lite: 4 kits in scope, cap at 3 slots (one +1 purchase) so a slot still costs a choice
+  const slotCap = RELEASE_SCOPE ? 3 : 4;
+  const maxSlots = Math.min(slotCap, 2 + (save.shipUpgrades.kit_slots || 0));
   const slotColors = ['var(--color-accent-green)', 'var(--color-accent-cyan)', 'var(--color-accent-purple)', 'var(--color-accent-gold)'];
 
   return (
@@ -335,21 +338,24 @@ export function KitsTab({ save }: { save: ReturnType<typeof useSaveStore.getStat
           );
         })}
       </div>
-      {maxSlots < 4 && (
+      {maxSlots < slotCap && (
         <div className="flex justify-center mt-1">
           <button className="pixel-btn text-sm py-2 px-4"
             style={{ borderColor: 'var(--color-accent-gold)', color: 'var(--color-accent-gold)' }}
             disabled={save.totalCredits < KIT_SLOT_COSTS[save.shipUpgrades.kit_slots || 0]}
-            onClick={() => buyUpgrade('kit_slots', KIT_SLOT_COSTS[save.shipUpgrades.kit_slots || 0], 2)}>
+            onClick={() => buyUpgrade('kit_slots', KIT_SLOT_COSTS[save.shipUpgrades.kit_slots || 0], RELEASE_SCOPE ? 1 : 2)}>
             +1 Kit Slot ({KIT_SLOT_COSTS[save.shipUpgrades.kit_slots || 0]}cr)
           </button>
         </div>
       )}
       <div className="h-[1px] bg-[var(--color-border)]" />
 
-      {Object.entries(KIT_TREE_SECTIONS).map(([section, kitIds]) => (
+      {Object.entries(KIT_TREE_SECTIONS)
+        .map(([section, kitIds]) => [section, kitIds.filter(inScopeKit)] as const)
+        .filter(([, kitIds]) => kitIds.length > 0)
+        .map(([section, kitIds]) => (
         <div key={section}>
-          <p className="text-center text-xs text-[var(--color-text-secondary)] mt-2 mb-1">--- {section} ---</p>
+          {!RELEASE_SCOPE && <p className="text-center text-xs text-[var(--color-text-secondary)] mt-2 mb-1">--- {section} ---</p>}
           {kitIds.map(id => {
             const def = KIT_DEFS[id];
             const owned = save.unlockedKits.includes(id);

@@ -500,6 +500,7 @@ export function EditorCanvas() {
         backgroundColor: COL_BG,
         antialias: false,
         roundPixels: true,
+        preference: 'webgl',
         resolution: window.devicePixelRatio || 1,
         autoDensity: true,
       });

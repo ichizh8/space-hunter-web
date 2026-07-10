@@ -3,10 +3,15 @@
 import { useEffect, useRef, useState } from 'react';
 import type { RoomJSON } from '../../editor/editorStore';
 import type { RoomRuntimeHandle } from '../../game/rooms/RoomRuntime';
+import { RELEASE_SCOPE } from '../../data/releaseScope';
 
 const PREVIEW_SLOT = 'roomPreview';
 
 export default function PlayRoomPage() {
+  // Lite release: dev tooling routes are not part of the shipped game
+  if (RELEASE_SCOPE) {
+    return <main style={{ padding: 40, textAlign: 'center' }}>Not available in this build.</main>;
+  }
   const containerRef = useRef<HTMLDivElement>(null);
   const runtimeRef = useRef<RoomRuntimeHandle | null>(null);
   const [prompt, setPrompt] = useState<string | null>(null);

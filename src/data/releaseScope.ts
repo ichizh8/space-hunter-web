@@ -27,3 +27,19 @@ export function inScopePlanet(id: string): boolean {
 
 /** Lite mode drops the kit tree prerequisites: 4 kits need no gating. */
 export const SCOPE_SKIP_KIT_PREREQS = RELEASE_SCOPE;
+
+/**
+ * Lite contract-type override per planet. Kepler's full-game data allows only
+ * hunt + extraction_run; Lite promises hunt + boss_hunt, so we override here
+ * instead of editing the parked full-game data in planets.ts.
+ */
+export const SCOPE_PLANET_CONTRACTS: Record<string, string[]> = {
+  kepler: ['hunt', 'boss_hunt'],
+};
+
+/** Contract types a planet may generate under the current scope. */
+export function scopedContractTypes(planetId: string, allowed: string[]): string[] {
+  if (!RELEASE_SCOPE) return allowed;
+  const scoped = SCOPE_PLANET_CONTRACTS[planetId] ?? allowed.filter(t => SCOPE_CONTRACT_TYPES.includes(t));
+  return scoped.length > 0 ? scoped : ['hunt'];
+}
