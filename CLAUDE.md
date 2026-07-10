@@ -56,20 +56,24 @@ All modules live in `src/game/`. The pattern: each module exports functions that
 ### Remaining Gaps
 - Room system polish/balance pass (stability fixes landed for doors, spawns, transitions; needs a clean full-loop QA)
 - Biome vignettes (need PixiJS v8 compatible approach)
-- Mastery perk effects (88 perks), resonance combos (10)
-- Damage floaters, minimap
-- Stale PR #1 (pack enemies) superseded by later main commits -- close it
+- Minimap
+- Note: mastery perks ARE wired to runtime (89 ids defined, 90 hasMod checks in src/game) -- earlier "not implemented" note was stale. Resonance combos also wired.
 
 ## Roadmap (decided July 2026)
 
 Strategy: the web version is the iteration polygon; prove retention/virality on web first, then wrap for iOS. iOS is a distribution channel, not a separate product.
 
-1. **Phase 0 -- stabilize**: finish room-system pivot polish, full clean loop pass
-2. **Phase 1 -- addiction core on web**: Daily Contract (shared seed, emoji share card, friend-group leaderboard codes); scripted-generous first session (first capsules hardcoded rich, power spike < 3 min); hunter record board (every completed quest gives small permanent global bonus, Halls of Torment style); every failed run still feeds meta
-3. **Phase 2 -- web distribution**: submit to CrazyGames (+50% rev share for 2-month exclusive) and/or Poki; Discord playtest community
-4. **Phase 3 -- iOS wrap**: Capacitor 8, game bundled in binary (guideline 4.7 does not apply then; 4.2 cleared via native polish). Constraints: 60fps cap in WKWebView (no 120Hz), pin PixiJS to `preference: 'webgl'`, SFX via native audio plugin (Web Audio latency 500-1000ms in webview), mirror saves to native storage (iOS can evict webview IndexedDB), haptics + Game Center (@capacitor/haptics, @openforge/capacitor-game-connect)
-5. **Phase 4 -- App Store release**: launch free, no IAP initially; push permission only after first boss kill; monetize (RevenueCat) after retention is proven (genre benchmarks: D1 26%+, D7 10%+)
-6. **Phase 5 -- virality push**: clip-able broken builds (3-second readability), one memeable absurd thing, streamer seeding, weekly contract rotation (DESIGN-WEEKLY-CONTRACT.md)
+Audit verdict (July 2026): systems-rich but feel-poor -- fun floor comes FIRST, virality mechanics second. A viral clip needs visible carnage before any Daily Contract matters.
+
+1. **Phase 0 -- stabilize + fun floor** (in progress): room polish; starter DPS fix (sidearm 2dmg/1.6s -> 3dmg/1.2s); Void Beam corruption scaling capped x5; damage floaters (DamageFloaters.ts, HP-delta scan -- single integration point); death juice (color burst + ring + hit-stop 30ms/90ms elite + shake)
+2. **Phase 0.5 -- Battle Cooking MVP** (identity pivot, approved): enemies already drop per-creature ingredients; 5 field recipes = 2 ingredients -> one-tap in-combat buff via HUD chip, no menu, no pause. Design-gated: new module src/game/FieldCooking.ts, coupling Medium. This is the game's memeable differentiator ("shooter where you cook your enemies")
+3. **Phase 1 -- addiction core on web**: Daily Contract (shared seed, emoji share card, friend-group leaderboard codes); scripted-generous first session (first capsules hardcoded rich, power spike < 3 min); hunter record board (every completed quest gives small permanent global bonus, Halls of Torment style); every failed run still feeds meta
+   Later in phase: hub % upgrades get mechanic-bearing L5 capstones (flat % is the genre's most-complained pattern); 2 priority-target enemy types (exploder, shielder); repeatable late-run upgrade picks (current fallback '+1 damage' commons = despair grind)
+4. **Phase 2 -- web distribution**: submit to CrazyGames (+50% rev share for 2-month exclusive) and/or Poki; Discord playtest community
+   Scope cuts for release: contract types 5 -> 3 (keep Hunt, Boss Hunt, Extraction; park Payload Escort + Void Breach); planet movement physics (inertia) deprioritized -- frustration risk on mobile touch, keep planets as enemy/visual variety
+5. **Phase 3 -- iOS wrap**: Capacitor 8, game bundled in binary (guideline 4.7 does not apply then; 4.2 cleared via native polish). Constraints: 60fps cap in WKWebView (no 120Hz), pin PixiJS to `preference: 'webgl'`, SFX via native audio plugin (Web Audio latency 500-1000ms in webview), mirror saves to native storage (iOS can evict webview IndexedDB), haptics + Game Center (@capacitor/haptics, @openforge/capacitor-game-connect)
+6. **Phase 4 -- App Store release**: launch free, no IAP initially; push permission only after first boss kill; monetize (RevenueCat) after retention is proven (genre benchmarks: D1 26%+, D7 10%+)
+7. **Phase 5 -- virality push**: clip-able broken builds (3-second readability), one memeable absurd thing, streamer seeding, weekly contract rotation (DESIGN-WEEKLY-CONTRACT.md)
 
 Design principles adopted: cross-referencing perk synergies over stat percentages (Luck Be a Landlord / Balatro depth engine); mechanic-bearing meta unlocks over flat % (DRG:Survivor's mistake); stacking post-win Danger levels per contract (Ascension matrix); never revoke the power fantasy with a grind wall (Survivor.io's week-2 churn); keep outcome uncertainty visible at commitment moments (Balatro near-miss).
 
